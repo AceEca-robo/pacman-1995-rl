@@ -1,0 +1,5 @@
+# dqn0 setup, longer: 20M steps, epsilon decays over 3M.
+base: dqn.yaml
+total_steps: 20000000
+epsilon_steps: 3000000
+checkpoint_buffer: false
