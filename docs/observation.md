@@ -82,6 +82,12 @@ Per step, sum of coefficient * count over events (`reward` in
 | `bonus_eaten` | the bonus vanished with pacman on its cell | 0 |
 | `step` | every step | -0.02 |
 
+Optional shaping (`shaping` in the config, off by default) adds
+`gamma * Phi(s') - Phi(s)` with `Phi = k_dist * (D_max - d)`, d the BFS
+distance from pacman to the nearest food (gate not passable), D_max = 86
+(the largest such distance over all 16 mazes); Phi = 0 without food and in
+terminal states. It is reported separately in `info["shaping"]`.
+
 The game's own score stays in `info["score"]`; it gives ghosts
 100 * 2^k within one super period, superfood 0 points and a level
 completion bonus of 5000 minus 5 per tick.

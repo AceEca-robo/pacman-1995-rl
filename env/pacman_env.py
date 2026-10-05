@@ -48,6 +48,62 @@ EVENTS = ("eaten_dot", "eaten_energizer", "ghost_eaten", "level_up", "death",
           "bonus_eaten", "step")
 
 
+PAC_START = (16, 17)    # PACX, PACY in game/pac.h
+_D_MAX = None
+
+
+def _passable_neighbours(cells):
+    """Neighbour lists (flat indices) of cells pacman can enter: not a wall
+    ('#') and not the ghost house gate ('-')."""
+    free = [c not in "#-" for c in cells]
+    nbrs = [[] for _ in cells]
+    for c in range(len(cells)):
+        if not free[c]:
+            continue
+        y, x = divmod(c, WIDTH)
+        for nx, ny in ((x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)):
+            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and free[ny * WIDTH + nx]:
+                nbrs[c].append(ny * WIDTH + nx)
+    return nbrs
+
+
+def _bfs_dist(nbrs, start):
+    dist = {start: 0}
+    q = deque([start])
+    while q:
+        c = q.popleft()
+        for nb in nbrs[c]:
+            if nb not in dist:
+                dist[nb] = dist[c] + 1
+                q.append(nb)
+    return dist
+
+
+def maze_layouts():
+    """The LEVELS boards from game/board.h as lists of 23 strings over '#', ' ',
+    '-' (food removed: only walls and the gate matter here)."""
+    import re
+    with open(os.path.join(ROOT, "game", "board.h"), encoding="latin-1") as f:
+        rows = re.findall(r'\{"([^"]{%d})"\}' % WIDTH, f.read())
+    assert len(rows) == LEVELS * HEIGHT, len(rows)
+    table = str.maketrans({"O": "#", "_": "-", ".": " ", "o": " "})
+    return [[r.translate(table) for r in rows[i:i + HEIGHT]] for i in range(0, len(rows), HEIGHT)]
+
+
+def d_max():
+    """Largest BFS distance between two cells pacman can reach from its start,
+    over all boards. Computed once per process (~2 s)."""
+    global _D_MAX
+    if _D_MAX is None:
+        best = 0
+        for board in maze_layouts():
+            nbrs = _passable_neighbours("".join(board))
+            component = _bfs_dist(nbrs, PAC_START[1] * WIDTH + PAC_START[0])
+            best = max(best, max(max(_bfs_dist(nbrs, c).values()) for c in component))
+        _D_MAX = best
+    return _D_MAX
+
+
 def load_env_config(config):
     """Full env config: configs/env_default.yaml updated by config (a path,
     a dict of overrides or None)."""
@@ -112,6 +168,7 @@ class PacmanEnv(gym.Env):
         self._shaping = shaping.get("enabled", False)
         self._k_dist, self._shaping_gamma = shaping.get("k_dist", 0.0), shaping.get("gamma", 0.99)
         self._neighbours = {}  # maze layout -> passable neighbour lists
+        self._d_max = d_max() if self._shaping else None
         self.observation_space = spaces.Dict({
             "grid": spaces.Box(0.0, 1.0, (len(CHANNELS), HEIGHT, WIDTH), np.float32),
             # lives can exceed 3 through bonus lives, clipped at MAX_LIVES
@@ -213,13 +270,9 @@ class PacmanEnv(gym.Env):
         events = self._events(prev, st)
         coef = self.cfg["reward"]
         reward = sum(coef[k] * n for k, n in events.items())
-        shaping = 0.0
-        if self._shaping:
-            phi = self._potential(st)
-            shaping = self._shaping_gamma * phi - self._phi
-            self._phi = phi
-            reward += shaping
         terminated = bool(st["done"])
+        shaping = self._shape(st, terminated) if self._shaping else 0.0
+        reward += shaping
         limit = self.cfg["max_episode_steps"]
         truncated = not terminated and limit is not None and self._steps >= limit
         info = self._info(st)
@@ -232,14 +285,22 @@ class PacmanEnv(gym.Env):
 
     # --- state -> reward / obs -------------------------------------------
 
+    def _shape(self, st, terminated):
+        """gamma * Phi(s') - Phi(s), with Phi(terminal) = 0 (Ng et al. 1999)."""
+        phi = 0.0 if terminated else self._potential(st)
+        f = self._shaping_gamma * phi - self._phi
+        self._phi = phi
+        return f
+
     def _potential(self, st):
-        """Phi(s) = -k_dist * BFS steps from pacman to the nearest dot or
-        energizer (walls and the gate are not passable); 0 without food."""
+        """Phi(s) = k_dist * (D_max - d), d = BFS steps from pacman to the
+        nearest dot or energizer (walls and the gate are not passable);
+        0 without food. Phi >= 0, so standing still costs (gamma - 1) * Phi."""
         cells = "".join(st["grid"])
         layout = cells.replace(".", " ").replace("o", " ")
         nbrs = self._neighbours.get(layout)
         if nbrs is None:
-            nbrs = self._neighbours[layout] = self._passable_neighbours(cells)
+            nbrs = self._neighbours[layout] = _passable_neighbours(cells)
         p = st["pacman"]
         start = p["y"] * WIDTH + p["x"]
         seen = {start}
@@ -247,25 +308,12 @@ class PacmanEnv(gym.Env):
         while q:
             c, d = q.popleft()
             if cells[c] in ".o":
-                return -self._k_dist * d
+                return self._k_dist * (self._d_max - d)
             for nb in nbrs[c]:
                 if nb not in seen:
                     seen.add(nb)
                     q.append((nb, d + 1))
         return 0.0
-
-    @staticmethod
-    def _passable_neighbours(cells):
-        free = [c not in "#-" for c in cells]
-        nbrs = [[] for _ in cells]
-        for c in range(len(cells)):
-            if not free[c]:
-                continue
-            y, x = divmod(c, WIDTH)
-            for nx, ny in ((x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)):
-                if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and free[ny * WIDTH + nx]:
-                    nbrs[c].append(ny * WIDTH + nx)
-        return nbrs
 
     @staticmethod
     def _events(prev, st):

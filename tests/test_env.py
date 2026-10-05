@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
 
-from env.pacman_env import CH, CHANNELS, HEIGHT, ROOT, WIDTH, PacmanEnv
+from env.pacman_env import CH, CHANNELS, HEIGHT, ROOT, WIDTH, PacmanEnv, d_max, maze_layouts
 
 pytestmark = pytest.mark.skipif(
     not os.path.exists(os.path.join(ROOT, "game", "pacman")),
@@ -199,9 +199,11 @@ def shaped_run(gamma, seed, agent=None, steps=3000):
 
 
 def test_shaping_telescopes():
-    # seed 42: the heuristic dies three times and clears levels (Phi = 0 steps)
+    # seed 42: the heuristic dies three times, clears levels (Phi = 0 without
+    # food) and the game ends (Phi(terminal) = 0)
     f, phi = shaped_run(1.0, 42)
-    assert (phi == 0).any() and (phi < -1).any()
+    assert (phi == 0).any() and (phi > 1).any()
+    assert phi[-1] == 0.0  # terminal
     assert f.sum() == pytest.approx(phi[-1] - phi[0])
     g = 0.99
     f, phi = shaped_run(g, 42)
@@ -209,9 +211,15 @@ def test_shaping_telescopes():
     assert (disc * f).sum() == pytest.approx(g ** len(f) * phi[-1] - phi[0])
 
 
-def test_potential_bfs():
+def bare_env(k=0.5, gamma=0.99):
+    """PacmanEnv with only the shaping state, no game process."""
     e = PacmanEnv.__new__(PacmanEnv)
-    e._k_dist, e._neighbours = 0.5, {}
+    e._k_dist, e._shaping_gamma, e._neighbours, e._d_max = k, gamma, {}, d_max()
+    return e
+
+
+def test_potential_bfs():
+    e = bare_env()
     rows = ["#" * WIDTH] * HEIGHT
     rows[1] = "#" + " " * (WIDTH - 2) + "#"
     rows[2] = "#" * 5 + "-" + "#" * (WIDTH - 6)
@@ -219,7 +227,35 @@ def test_potential_bfs():
     st = {"grid": rows, "pacman": {"x": 1, "y": 1}}
     assert e._potential(st) == 0.0  # the only dot is behind the gate
     rows[1] = rows[1][:10] + "o" + rows[1][11:]
-    assert e._potential(st) == -0.5 * 9
+    assert e._potential(st) == 0.5 * (d_max() - 9)
+
+
+def test_standing_still_far_from_food_is_negative():
+    """With Phi >= 0 and gamma < 1, a step without moving costs
+    (gamma - 1) * Phi <= 0 on top of the step penalty, at any distance."""
+    from env.pacman_env import load_env_config
+    step_penalty = load_env_config(None)["reward"]["step"]
+    e = bare_env(k=0.1)
+    rows = ["#" * WIDTH] * HEIGHT
+    rows[1] = "#" + " " * (WIDTH - 3) + ".#"
+    for x in (1, 10, 20, 30):  # 30 .. 1 cells from the dot
+        st = {"grid": rows, "pacman": {"x": x, "y": 1}}
+        e._phi = e._potential(st)
+        total = e._shape(st, terminated=False) + step_penalty
+        assert total < step_penalty / 2 < 0
+    # the old Phi = -k * d paid for standing far away: (1 - gamma) * k * d
+    assert (1 - 0.99) * 0.1 * 30 + step_penalty > 0
+
+
+def test_maze_layouts_match_the_game():
+    e = PacmanEnv()
+    try:
+        e.reset(seed=0)
+        cells = [r.replace(".", " ").replace("o", " ") for r in e._state["grid"]]
+    finally:
+        e.close()
+    assert cells == maze_layouts()[0]
+    assert 40 < d_max() < WIDTH * HEIGHT
 
 
 def test_four_actions():

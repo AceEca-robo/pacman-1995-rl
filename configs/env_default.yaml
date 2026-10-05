@@ -11,9 +11,12 @@ reward:
   step: -0.02
 
 # Potential-based shaping (Ng et al. 1999), added to the reward:
-# r += gamma * Phi(s') - Phi(s), Phi(s) = -k_dist * BFS distance from pacman
-# to the nearest dot or energizer (walls and the gate block); Phi = 0 when
-# there is no food left. Reported per step in info["shaping"].
+# r += gamma * Phi(s') - Phi(s), Phi(s) = k_dist * (D_max - d), d = BFS
+# distance from pacman to the nearest dot or energizer (walls and the gate
+# block), D_max = largest such distance in any of the 16 mazes (86).
+# Phi = 0 with no food left and in terminal states. Phi >= 0, so standing
+# still costs (gamma - 1) * Phi on top of the step penalty.
+# Reported per step in info["shaping"].
 shaping:
   enabled: false
   k_dist: 0.1
