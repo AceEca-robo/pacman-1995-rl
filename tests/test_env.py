@@ -137,3 +137,8 @@ def test_1000_random_steps(env):
         if term or trunc:
             obs, info = env.reset()
             assert info["lives"] == 3
+
+
+def test_seeds_0_and_1_differ():
+    actions = [3] * 300
+    assert not same(rollout(0, actions), rollout(1, actions))

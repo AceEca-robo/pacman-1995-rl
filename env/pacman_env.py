@@ -118,7 +118,10 @@ class PacmanEnv(gym.Env):
             srv.bind(path)
             srv.listen(1)
             srv.settimeout(self.cfg["game"]["connect_timeout"])
-            cmd = [self._binary, "--rl", path, "--fast", "--seed", str(seed)]
+            # glibc treats srandom(0) as srandom(1), so shift by one to keep
+            # env seeds 0 and 1 apart
+            game_seed = seed % (2**31 - 1) + 1
+            cmd = [self._binary, "--rl", path, "--fast", "--seed", str(game_seed)]
             env = dict(os.environ)
             if self._display is None:
                 cmd.append("--headless")
