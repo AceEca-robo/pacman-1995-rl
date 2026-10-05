@@ -1,0 +1,9 @@
+game/*.o
+game/pacman
+game/pacman._man
+game/Makefile
+runs/
+*.pt
+*.onnx
+__pycache__/
+.venv/
