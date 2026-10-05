@@ -2,13 +2,14 @@
 
 `scripts/evaluate.py`, environment `configs/env_default.yaml`
 (episode = one game of 3 lives, truncated at `max_episode_steps`).
-"Level 1 cleared" = share of episodes that reached level 2.
-Length is in env steps (game ticks).
+Reward is the env's event reward (see docs/observation.md), score the game's.
+"Level 1 cleared" = share of episodes that reached level 2; "without death"
+= reached it before losing any life. Length is in env steps (game ticks).
 
-| agent | episodes | seeds | mean score | median score | max score | level 1 cleared | mean length | truncated | time, s | commit |
-|---|---|---|---|---|---|---|---|---|---|---|
-| random | 100 | 0..99 | 92 | 80 | 310 | 0% | 129 | 0% | 1.3 | 24f3bda |
-| heuristic | 100 | 0..99 | 16999 | 11825 | 221375 | 82% | 1244 | 0% | 16.4 | 24f3bda |
+| agent | episodes | seeds | mean reward | median reward | mean score | median score | max score | level 1 cleared | level 1 without death | mean length | truncated | time, s | commit |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| random | 100 | 0..99 | -53.4 | -54.0 | 92 | 80 | 310 | 0% | 0% | 129 | 0% | 1.5 | bae470e |
+| heuristic | 100 | 0..99 | 465.5 | 401.2 | 16999 | 11825 | 221375 | 82% | 21% | 1244 | 0% | 17.6 | bae470e |
 
 ## Notes
 
@@ -19,5 +20,7 @@ Length is in env steps (game ticks).
   pacman is still super, and eating the next superfood extends it. The
   heuristic's best episode (seed 42, 221375 points) got 102400 for a single
   ghost. Median is the more telling number.
-- The heuristic's level transitions confirm `level_bonus`: e.g. 1 -> 2 gives
-  reward 0.1 * 2415 (score: food + remaining level bonus) + 50 - 0.01 = 291.49.
+- Since bae470e the reward counts events (fixed 5 per ghost), so these
+  chains no longer dominate the reward, only the score columns.
+- Scores are identical to the previous (score-delta reward) measurement:
+  the reward and observation changes did not change the games played.

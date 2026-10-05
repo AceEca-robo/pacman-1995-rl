@@ -22,15 +22,17 @@ from agents.random_agent import RandomAgent  # noqa: E402
 from env.pacman_env import PacmanEnv  # noqa: E402
 
 AGENTS = {"random": RandomAgent, "heuristic": HeuristicAgent}
-HEADER = ("| agent | episodes | seeds | mean score | median score | max score "
-          "| level 1 cleared | mean length | truncated | time, s | commit |")
+HEADER = ("| agent | episodes | seeds | mean reward | median reward | mean score "
+          "| median score | max score | level 1 cleared | level 1 without death "
+          "| mean length | truncated | time, s | commit |")
 RULE = "|" + "---|" * HEADER.count(" | ") + "---|"
 RESULTS_INTRO = """# Baseline results
 
 `scripts/evaluate.py`, environment `configs/env_default.yaml`
 (episode = one game of 3 lives, truncated at `max_episode_steps`).
-"Level 1 cleared" = share of episodes that reached level 2.
-Length is in env steps (game ticks).
+Reward is the env's event reward (see docs/observation.md), score the game's.
+"Level 1 cleared" = share of episodes that reached level 2; "without death"
+= reached it before losing any life. Length is in env steps (game ticks).
 
 """
 
@@ -38,20 +40,27 @@ Length is in env steps (game ticks).
 def run(agent_name, episodes, seed, env_config, agent_config):
     agent = AGENTS[agent_name](agent_config) if agent_name == "heuristic" else AGENTS[agent_name](seed)
     env = PacmanEnv(config=env_config)
-    scores, lengths, max_levels, truncs = [], [], [], []
+    scores, rewards, lengths, max_levels, clean, truncs = [], [], [], [], [], []
     t0 = time.perf_counter()
     try:
         for i in range(episodes):
             obs, info = env.reset(seed=seed + i)
             agent.reset(seed=seed + i)
-            n, level = 0, info["level"]
+            n, level, total, deaths, clean_clear = 0, info["level"], 0.0, 0, False
             while True:
-                obs, _, term, trunc, info = env.step(agent.act(obs))
+                obs, r, term, trunc, info = env.step(agent.act(obs))
                 n += 1
+                total += r
+                ev = info["events"]
+                if ev["level_up"] and level == 1 and deaths == 0:
+                    clean_clear = True
+                deaths += ev["death"]
                 level = max(level, info["level"])
                 if term or trunc:
                     break
             scores.append(info["score"])
+            rewards.append(total)
+            clean.append(clean_clear)
             lengths.append(n)
             max_levels.append(level)
             truncs.append(trunc)
@@ -63,10 +72,13 @@ def run(agent_name, episodes, seed, env_config, agent_config):
         "agent": agent_name,
         "episodes": episodes,
         "seeds": f"{seed}..{seed + episodes - 1}",
+        "mean reward": f"{np.mean(rewards):.1f}",
+        "median reward": f"{np.median(rewards):.1f}",
         "mean score": f"{scores.mean():.0f}",
         "median score": f"{np.median(scores):.0f}",
         "max score": f"{scores.max()}",
         "level 1 cleared": f"{np.mean(np.array(max_levels) >= 2):.0%}",
+        "level 1 without death": f"{np.mean(clean):.0%}",
         "mean length": f"{np.mean(lengths):.0f}",
         "truncated": f"{np.mean(truncs):.0%}",
         "time, s": f"{elapsed:.1f}",
@@ -80,19 +92,26 @@ def row(res):
 
 
 def update_results(path, res):
-    rows = {}
+    """Rewrite the table in path with res's row replaced; "## " sections after
+    the table are kept."""
+    rows, tail = {}, ""
     if os.path.exists(path):
         with open(path) as f:
-            for line in f:
-                cells = [c.strip() for c in line.strip().strip("|").split("|")]
-                if line.startswith("| ") and line.strip() != HEADER and cells[0] in AGENTS:
-                    rows[cells[0]] = line.rstrip("\n")
+            text = f.read()
+        if "\n## " in text:
+            tail = text[text.index("\n## "):]
+            text = text[:text.index("\n## ")]
+        for line in text.splitlines():
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if line.startswith("| ") and line.strip() != HEADER and cells[0] in AGENTS:
+                rows[cells[0]] = line
     rows[res["agent"]] = row(res)
     with open(path, "w") as f:
         f.write(RESULTS_INTRO + HEADER + "\n" + RULE + "\n")
         for name in AGENTS:
             if name in rows:
                 f.write(rows[name] + "\n")
+        f.write(tail)
 
 
 def main():
