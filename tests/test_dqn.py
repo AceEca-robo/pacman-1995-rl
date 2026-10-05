@@ -61,3 +61,30 @@ def test_network_shapes():
     net = QNetwork(load_config()["network"])
     q = net(torch.zeros(7, len(CHANNELS), HEIGHT, WIDTH), torch.zeros(7, 3))
     assert q.shape == (7, N_ACTIONS)
+
+
+def test_sumtree_proportional():
+    from agents.dqn import SumTree
+    t = SumTree(5)
+    t.set([0, 1, 2, 3, 4], [1.0, 0.0, 3.0, 0.0, 6.0])
+    assert t.total == 10.0
+    assert list(t.find([0.5, 1.5, 3.9, 4.1, 9.99])) == [0, 2, 2, 4, 4]
+    t.set([4, 4], [2.0, 2.0])  # duplicate indices
+    assert t.total == 6.0
+
+
+def test_per_sampling_and_priorities():
+    from agents.dqn import PrioritizedReplayBuffer
+    buf = PrioritizedReplayBuffer(100, alpha=1.0, eps=0.0)
+    z = np.zeros((35, 95), np.uint8)
+    for i in range(10):
+        buf.add(z, np.zeros(3), i % 5, float(i), z, np.zeros(3), 0.99)
+    buf.update_priorities(np.arange(10), np.r_[np.full(9, 1.0), 91.0])  # last: 91 of 100
+    rng = np.random.default_rng(0)
+    (_, _, _, ret, *_), idx, w = buf.sample(rng, 1000, beta=1.0)
+    assert 0.85 < np.mean(idx == 9) < 0.97
+    assert w.max() == 1.0 and np.allclose(w[idx == 9], (1 / 91) / (1 / 1))
+    assert np.all(ret == idx)
+    buf2 = PrioritizedReplayBuffer(100, alpha=1.0, eps=0.0)
+    buf2.load_state_dict(buf.state_dict())
+    assert buf2.tree.total == buf.tree.total and buf2.max_priority == 91.0

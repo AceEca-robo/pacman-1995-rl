@@ -1,0 +1,3 @@
+# dqn0 setup + 200k heuristic steps in the buffer before training.
+base: dqn.yaml
+warm_start: 200000

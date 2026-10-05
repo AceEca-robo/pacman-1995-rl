@@ -42,3 +42,23 @@ def test_checkpoint_and_resume(tmp_path):
             assert os.path.exists(os.path.join(run_dir, f))
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_warm_start_and_per(tmp_path):
+    cfg = tmp_path / "tiny_per.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 3000, "warm_start": 1000,
+                                   "per": {"enabled": True}}))
+    name = f"test-per-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name,
+           "--config", str(cfg)]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        m = re.search(r"warm start: (\d+) heuristic steps, buffer (\d+)", out.stdout)
+        assert m and int(m.group(1)) == 1000 and 990 <= int(m.group(2)) <= 1000, out.stdout
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            assert json.loads(f.readlines()[-1])["steps"] == 3000
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])

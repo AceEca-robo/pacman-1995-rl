@@ -96,8 +96,15 @@ class ReplayBuffer:
         self.pos = (i + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def sample(self, rng, batch):
+    def sample(self, rng, batch, beta=None):
+        """Returns (transitions, indices, importance weights); weights are 1 here."""
         idx = rng.integers(self.size, size=batch)
+        return self._get(idx), idx, np.ones(batch, np.float32)
+
+    def update_priorities(self, idx, td_abs):
+        pass
+
+    def _get(self, idx):
         return (self.obs[idx], self.vec[idx], self.act[idx], self.ret[idx],
                 self.next_obs[idx], self.next_vec[idx], self.discount[idx])
 
@@ -113,6 +120,89 @@ class ReplayBuffer:
         self.size, self.pos = int(d["size"]), int(d["pos"])
         for k in self.ARRAYS:
             getattr(self, k)[:self.size] = d[k]
+
+
+class SumTree:
+    """Binary tree of priority sums over a power-of-two number of leaves,
+    vectorized updates and prefix-sum search."""
+
+    def __init__(self, capacity):
+        self.leaves = 1 << max(1, int(np.ceil(np.log2(capacity))))
+        self.depth = int(np.log2(self.leaves))
+        self.tree = np.zeros(2 * self.leaves, np.float64)
+
+    @property
+    def total(self):
+        return self.tree[1]
+
+    def get(self, idx):
+        return self.tree[np.asarray(idx) + self.leaves]
+
+    def set(self, idx, values):
+        pos = np.asarray(idx, np.int64) + self.leaves
+        self.tree[pos] = values
+        pos = np.unique(pos // 2)
+        while pos[0] >= 1:
+            self.tree[pos] = self.tree[2 * pos] + self.tree[2 * pos + 1]
+            pos = np.unique(pos // 2)
+
+    def find(self, prefix):
+        """Leaf index where the running sum of priorities passes each prefix."""
+        prefix = np.array(prefix, np.float64)
+        node = np.ones(len(prefix), np.int64)
+        for _ in range(self.depth):
+            left = 2 * node
+            right = prefix > self.tree[left]
+            prefix -= self.tree[left] * right
+            node = left + right
+        return node - self.leaves
+
+
+class PrioritizedReplayBuffer(ReplayBuffer):
+    """Proportional PER (Schaul et al. 2016): P(i) ~ (|td_i| + eps)^alpha,
+    new transitions get the current max priority, importance weights
+    (N * P(i))^-beta normalized by the largest weight in the batch."""
+
+    def __init__(self, capacity, alpha, eps, vec_dim=3):
+        super().__init__(capacity, vec_dim)
+        self.alpha, self.eps = alpha, eps
+        self.tree = SumTree(capacity)
+        self.max_priority = 1.0
+
+    def add(self, *transition):
+        i = self.pos
+        super().add(*transition)
+        self.tree.set([i], self.max_priority)
+
+    def sample(self, rng, batch, beta=0.4):
+        total = self.tree.total
+        prefix = (np.arange(batch) + rng.random(batch)) * (total / batch)  # stratified
+        idx = np.minimum(self.tree.find(prefix), self.size - 1)
+        p = self.tree.get(idx) / total
+        w = (self.size * p) ** -beta
+        return self._get(idx), idx, (w / w.max()).astype(np.float32)
+
+    def update_priorities(self, idx, td_abs):
+        pr = (np.asarray(td_abs, np.float64) + self.eps) ** self.alpha
+        self.tree.set(idx, pr)
+        self.max_priority = max(self.max_priority, float(pr.max()))
+
+    def state_dict(self):
+        d = super().state_dict()
+        return {**d, "priorities": self.tree.get(np.arange(self.size)),
+                "max_priority": self.max_priority}
+
+    def load_state_dict(self, d):
+        super().load_state_dict(d)
+        self.tree.set(np.arange(self.size), d["priorities"])
+        self.max_priority = float(d["max_priority"])
+
+
+def make_buffer(cfg):
+    per = cfg.get("per", {})
+    if per.get("enabled"):
+        return PrioritizedReplayBuffer(cfg["buffer_size"], per["alpha"], per["eps"])
+    return ReplayBuffer(cfg["buffer_size"])
 
 
 class NStep:
@@ -197,8 +287,9 @@ class DQNLearner:
         on every enter), more than this tiny forward pass."""
         return self.online(self.decode(self._t(packed)), self._t(vecs)).cpu().numpy()
 
-    def _loss_fn(self, obs2, vec2, act, ret, discount):
-        """obs2/vec2: s and s' stacked; returns (Huber loss, mean max Q(s))."""
+    def _loss_fn(self, obs2, vec2, act, ret, discount, weights):
+        """obs2/vec2: s and s' stacked; returns (importance-weighted Huber loss,
+        mean max Q(s), |TD error| per sample)."""
         n = act.shape[0]
         x = self.decode(obs2)
         with torch.autocast("cuda", torch.bfloat16, enabled=self.amp):
@@ -211,18 +302,21 @@ class DQNLearner:
         with torch.no_grad():
             best = q_both[n:].argmax(1, keepdim=True)  # double DQN: online picks
             target = ret + discount * q_target.gather(1, best).squeeze(1)
-        return F.smooth_l1_loss(q, target), q_all.detach().max(1).values.mean()
+        loss = (weights * F.smooth_l1_loss(q, target, reduction="none")).mean()
+        return loss, q_all.detach().max(1).values.mean(), (q.detach() - target).abs()
 
-    def update(self, batch):
+    def update(self, batch, weights):
+        """Returns device tensors (loss, mean max Q, |TD| per sample)."""
         obs, vec, act, ret, next_obs, next_vec, discount = batch
-        loss, mean_q = self._loss(self._t(np.concatenate([obs, next_obs])),
-                                  self._t(np.concatenate([vec, next_vec])),
-                                  self._t(act, torch.long), self._t(ret), self._t(discount))
+        loss, mean_q, td = self._loss(self._t(np.concatenate([obs, next_obs])),
+                                      self._t(np.concatenate([vec, next_vec])),
+                                      self._t(act, torch.long), self._t(ret), self._t(discount),
+                                      self._t(weights))
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.online.parameters(), self.cfg["grad_clip"], foreach=True)
         self.opt.step()
-        return loss.detach(), mean_q
+        return loss.detach(), mean_q, td
 
     def sync_target(self):
         self.target.load_state_dict(self.online.state_dict())

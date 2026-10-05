@@ -17,6 +17,21 @@ target_update: 10000        # env steps between target network syncs
 bf16: true                  # autocast forward passes to bfloat16 (CUDA only)
 compile: true               # torch.compile the loss (~25 s at start)
 
+# Heuristic agent (agents/heuristic_agent.py) plays this many env steps to
+# fill the buffer before training; they do not count towards total_steps,
+# epsilon/beta schedules or learning_starts. 0 = off.
+warm_start: 0
+warm_start_agent_config: null   # null = configs/heuristic.yaml
+
+# Prioritized replay, proportional variant.
+per:
+  enabled: false
+  alpha: 0.6
+  beta_start: 0.4
+  beta_end: 1.0
+  beta_steps: null          # env steps of linear beta annealing; null = total_steps
+  eps: 0.000001             # added to |TD| so no transition gets priority 0
+
 epsilon_start: 1.0
 epsilon_end: 0.05
 epsilon_steps: 1000000      # linear decay

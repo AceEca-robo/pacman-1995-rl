@@ -1,0 +1,4 @@
+# dqn0 setup + prioritized replay.
+base: dqn.yaml
+per:
+  enabled: true

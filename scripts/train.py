@@ -23,7 +23,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from agents.dqn import N_ACTIONS, DQNLearner, NStep, ReplayBuffer, pack_grid, pack_grids  # noqa: E402
+from agents.dqn import N_ACTIONS, DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
+from agents.heuristic_agent import HeuristicAgent  # noqa: E402
 from env.pacman_env import PacmanEnv  # noqa: E402
 
 
@@ -42,6 +43,72 @@ def load_config(path):
 def epsilon(cfg, steps):
     frac = min(1.0, steps / cfg["epsilon_steps"])
     return cfg["epsilon_start"] + frac * (cfg["epsilon_end"] - cfg["epsilon_start"])
+
+
+def per_beta(cfg, steps):
+    per = cfg["per"]
+    frac = min(1.0, steps / (per["beta_steps"] or cfg["total_steps"]))
+    return per["beta_start"] + frac * (per["beta_end"] - per["beta_start"])
+
+
+class Collector:
+    """Steps the vector env, turns steps into n-step transitions in the
+    buffer and logs finished episodes."""
+
+    def __init__(self, envs, cfg, buffer, writer, seed):
+        self.envs, self.buffer, self.writer = envs, buffer, writer
+        self.n = envs.num_envs
+        self.obs, _ = envs.reset(seed=seed)
+        self.cur = pack_grids(self.obs["grid"])
+        self.nsteps = [NStep(cfg["n_step"], cfg["gamma"]) for _ in range(self.n)]
+        self.ep_reward = np.zeros(self.n)
+        self.ep_len = np.zeros(self.n, int)
+        self.ep_level = np.ones(self.n, int)
+
+    def step(self, actions, log_step, prefix="episode"):
+        """Returns the number of episodes that ended."""
+        obs = self.obs
+        nobs, rew, term, trunc, info = self.envs.step(actions)
+        packed_next = pack_grids(nobs["grid"])
+        ended_count = 0
+        for i in range(self.n):
+            ended = term[i] or trunc[i]
+            if ended:  # nobs holds the next episode's first obs
+                last_packed = pack_grid(info["final_obs"][i]["grid"])
+                last_vec = info["final_obs"][i]["vec"]
+            else:
+                last_packed, last_vec = packed_next[i], nobs["vec"][i]
+            for t in self.nsteps[i].push(self.cur[i], obs["vec"][i], actions[i], rew[i],
+                                         last_packed, last_vec, term[i], ended):
+                self.buffer.add(*t)
+            self.ep_reward[i] += rew[i]
+            self.ep_len[i] += 1
+            src = info["final_info"] if ended else info
+            self.ep_level[i] = max(self.ep_level[i], src["level"][i])
+            if ended:
+                ended_count += 1
+                self.writer.add_scalar(f"{prefix}/reward", self.ep_reward[i], log_step)
+                self.writer.add_scalar(f"{prefix}/score", src["score"][i], log_step)
+                self.writer.add_scalar(f"{prefix}/length", self.ep_len[i], log_step)
+                self.writer.add_scalar(f"{prefix}/level_reached", self.ep_level[i], log_step)
+                self.ep_reward[i], self.ep_len[i], self.ep_level[i] = 0.0, 0, info["level"][i]
+        self.cur, self.obs = packed_next, nobs
+        return ended_count
+
+
+def warm_start(collector, cfg):
+    """Fill the buffer with cfg["warm_start"] env steps of the heuristic agent.
+    These steps do not count towards total_steps or the schedules."""
+    agent = HeuristicAgent(cfg["warm_start_agent_config"])
+    done, t0 = 0, time.perf_counter()
+    while done < cfg["warm_start"]:
+        obs = collector.obs
+        actions = np.array([agent.act({"grid": obs["grid"][i], "vec": obs["vec"][i]})
+                            for i in range(collector.n)])
+        collector.step(actions, done, prefix="warm_start")
+        done += collector.n
+    print(f"warm start: {done} heuristic steps, buffer {collector.buffer.size} "
+          f"({time.perf_counter() - t0:.0f} s)", flush=True)
 
 
 def evaluate(learner, envs, cfg):
@@ -98,6 +165,8 @@ def main():
     if args.resume:
         ck = torch.load(ck_path, map_location=device, weights_only=False)
         cfg, seed = ck["config"], ck["seed"]
+        # options added after the run started keep their defaults (off)
+        cfg = {**load_config(os.path.join(ROOT, "configs", "dqn.yaml")), **cfg}
     else:
         if os.path.exists(ck_path):
             sys.exit(f"{run_dir} already has a checkpoint; use --resume or another --run-name")
@@ -108,7 +177,7 @@ def main():
 
     torch.manual_seed(seed)
     learner = DQNLearner(cfg, device)
-    buffer = ReplayBuffer(cfg["buffer_size"])
+    buffer = make_buffer(cfg)
     rng = np.random.default_rng(seed)
     steps = n_updates = episodes = 0
     best = -np.inf
@@ -128,10 +197,10 @@ def main():
     envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
     eval_envs = [make() for _ in range(n)]
     # a resumed run must not replay the same games
-    obs, _ = envs.reset(seed=seed * 1_000_000 + steps)
-    cur = pack_grids(obs["grid"])
-    nsteps = [NStep(cfg["n_step"], cfg["gamma"]) for _ in range(n)]
-    ep_reward, ep_len, ep_level = np.zeros(n), np.zeros(n, int), np.ones(n, int)
+    col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps)
+    if not ck and cfg["warm_start"]:
+        warm_start(col, cfg)
+    per = cfg["per"]["enabled"]
 
     losses, qs = [], []
     update_credit = 0.0
@@ -147,39 +216,19 @@ def main():
             actions = rng.integers(N_ACTIONS, size=n)
             greedy = rng.random(n) >= eps
             if greedy.any():
-                q = learner.q_values(cur[greedy], obs["vec"][greedy])
+                q = learner.q_values(col.cur[greedy], col.obs["vec"][greedy])
                 actions[greedy] = q.argmax(1)
-            nobs, rew, term, trunc, info = envs.step(actions)
-            packed_next = pack_grids(nobs["grid"])
-            for i in range(n):
-                ended = term[i] or trunc[i]
-                if ended:  # nobs holds the next episode's first obs
-                    last_packed = pack_grid(info["final_obs"][i]["grid"])
-                    last_vec = info["final_obs"][i]["vec"]
-                else:
-                    last_packed, last_vec = packed_next[i], nobs["vec"][i]
-                for t in nsteps[i].push(cur[i], obs["vec"][i], actions[i], rew[i],
-                                        last_packed, last_vec, term[i], ended):
-                    buffer.add(*t)
-                ep_reward[i] += rew[i]
-                ep_len[i] += 1
-                src = info["final_info"] if ended else info
-                ep_level[i] = max(ep_level[i], src["level"][i])
-                if ended:
-                    episodes += 1
-                    writer.add_scalar("episode/reward", ep_reward[i], steps)
-                    writer.add_scalar("episode/score", src["score"][i], steps)
-                    writer.add_scalar("episode/length", ep_len[i], steps)
-                    writer.add_scalar("episode/level_reached", ep_level[i], steps)
-                    ep_reward[i], ep_len[i], ep_level[i] = 0.0, 0, info["level"][i]
-            cur = packed_next
-            obs = nobs
+            episodes += col.step(actions, steps)
             steps += n
 
             if steps >= cfg["learning_starts"]:
                 update_credit += n / cfg["train_every"]
+                beta = per_beta(cfg, steps) if per else None
                 while update_credit >= 1:
-                    loss, mq = learner.update(buffer.sample(rng, cfg["batch_size"]))
+                    batch, idx, weights = buffer.sample(rng, cfg["batch_size"], beta)
+                    loss, mq, td = learner.update(batch, weights)
+                    if per:
+                        buffer.update_priorities(idx, td.cpu().numpy())
                     losses.append(loss)
                     qs.append(mq)
                     n_updates += 1
@@ -194,6 +243,8 @@ def main():
                 writer.add_scalar("train/epsilon", eps, steps)
                 writer.add_scalar("perf/steps_per_sec", sps, steps)
                 writer.add_scalar("train/buffer_size", buffer.size, steps)
+                if per:
+                    writer.add_scalar("train/per_beta", per_beta(cfg, steps), steps)
                 msg = f"{steps:>9} steps  eps {eps:.3f}  {sps:,.0f} steps/s  episodes {episodes}"
                 if losses:
                     loss_m = torch.stack(losses).mean().item()

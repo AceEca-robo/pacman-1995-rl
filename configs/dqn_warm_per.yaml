@@ -1,0 +1,5 @@
+# Both: heuristic warm start and prioritized replay.
+base: dqn.yaml
+warm_start: 200000
+per:
+  enabled: true
