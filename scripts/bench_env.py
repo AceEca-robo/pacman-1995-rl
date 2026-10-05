@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Environment throughput: steps/s for one PacmanEnv and for gymnasium.vector
-(sync and async) with 4 and 8 copies, random actions.
+AsyncVectorEnv with 4 and 8 copies (SyncVectorEnv too with --sync), random actions.
 
-    python scripts/bench_env.py [--seconds 5] [--sizes 4 8]
+    python scripts/bench_env.py [--seconds 5] [--sizes 4 8] [--sync]
 """
 
 import argparse
@@ -53,12 +53,16 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--seconds", type=float, default=5.0)
     p.add_argument("--sizes", type=int, nargs="+", default=[4, 8])
+    p.add_argument("--sync", action="store_true", help="also bench SyncVectorEnv")
     args = p.parse_args()
 
     print(f"cpus: {os.cpu_count()}, {args.seconds:g} s per run, random actions")
     print(f"{'setup':<16}{'env steps/s':>12}")
     print(f"{'single':<16}{bench_single(args.seconds):>12,.0f}")
-    for name, cls in (("sync", gym.vector.SyncVectorEnv), ("async", gym.vector.AsyncVectorEnv)):
+    kinds = [("async", gym.vector.AsyncVectorEnv)]
+    if args.sync:
+        kinds.insert(0, ("sync", gym.vector.SyncVectorEnv))
+    for name, cls in kinds:
         for num in args.sizes:
             print(f"{f'{name} x{num}':<16}{bench_vector(cls, num, args.seconds):>12,.0f}")
 
