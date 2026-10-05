@@ -38,6 +38,8 @@ void getxy(int*,int*);
 void die(Gamedata*);			//when pacman eats ghost
 void start();				//reset ghost
 GID_TYPE getgid();
+gstat getstate() {return st;}	// RL bridge
+direction getdir() {return d;}	// RL bridge
 void lookforpac(Pacman *pac);		//look for pacman
 };
 

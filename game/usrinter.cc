@@ -7,6 +7,7 @@
 #include"pac.h"
 #include<string.h>
 #include"board.h"
+#include"rlbridge.h"	// RL bridge
 
 static GC back;
 
@@ -121,6 +122,7 @@ XSync(mydisplay,0);	//returns when output complete: synchronized
 
 int UserInterface::getinput(void) {	//get input whether quit or not,
 					//it may also change input type
+if (rl_disconnected()) return 1;	// RL bridge: agent gone, end the game
 if (QLength(mydisplay)>0) {
 XNextEvent(mydisplay, &myevent);	//get next event from the queue
 //printf("%d \n",myevent.type);
@@ -192,6 +194,7 @@ return (1 & (key_vector[byteindex]>>bitindex));	//has it been hit?
 }
 
 direction UserInterface::stick(void) {
+if (Argument::rl_socket) return rl_recv_action();	// RL bridge: action from agent
 if (in==Mouse) {						//mouse input
 Window root,child;int dumx,dumy; unsigned int keys_buttons;	//dummies
  last_x=x; last_y=y;					//present is past

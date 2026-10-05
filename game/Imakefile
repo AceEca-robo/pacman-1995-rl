@@ -6,7 +6,7 @@ SRCS = arg.cc blank.cc board.cc bonus.cc bonuslif.cc bonuspnt.cc \
 	gpacman.cc graphele.cc gspecwal.cc gsupfood.cc horiwall.cc \
 	pac.cc pacman.cc point.cc specwall.cc supefood.cc t0.cc \
 	t180.cc t270.cc t90.cc timing.cc usrinter.cc vertwall.cc \
-	walls.cc
+	walls.cc rlbridge.cc	/* RL bridge */
 
 OBJS = arg.o blank.o board.o bonus.o bonuslif.o bonuspnt.o \
 	colour.o corner.o corner1.o corner2.o corner3.o \
@@ -16,7 +16,7 @@ OBJS = arg.o blank.o board.o bonus.o bonuslif.o bonuspnt.o \
 	gpacman.o graphele.o gspecwal.o gsupfood.o horiwall.o \
 	pac.o pacman.o point.o specwall.o supefood.o t0.o \
 	t180.o t270.o t90.o timing.o usrinter.o vertwall.o \
-	walls.o
+	walls.o rlbridge.o	/* RL bridge */
 
 CURSES = -lcurses
 

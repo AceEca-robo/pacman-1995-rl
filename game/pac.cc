@@ -11,6 +11,7 @@
 #include"bonuspnt.h"
 #include"timing.h"
 #include"arg.h"
+#include"rlbridge.h"	// RL bridge
  
 // routine to make the game exit if there was a previous detected error
  
@@ -97,6 +98,7 @@ UserInterface* u=UserInterface::instance(Keyboard); 	//the userinterface to the 
 
 if (Argument::has_seed) srandom(Argument::seed); else	// RL bridge: --seed
 srandom(rand());		//reset random number generator
+if (Argument::rl_socket) rl_connect(Argument::rl_socket);	// RL bridge
 
 Board* board=Board::instance(); //the pacman board matrix
 Pacman pac; 			//the pacman itself
@@ -152,6 +154,7 @@ while (done==0 && da->getlives() && !da->eatenall()) {
  if (bon) board->sprite(bon);	//let it be a sprite
  board->delta_draw(); 		//draw just the changes of the board
  timing(pac.is_super()); 	//do timing: make the game go smooth enough
+ if (rl_active()) rl_send_state(&pac,gh,da,bon);	// RL bridge
  d=u->stick();			//pacman got direction
  if (!bon) { 			// if no bonus if "on"
   if ((random() & 4095)==0) { 
@@ -174,6 +177,7 @@ while (done==0 && da->getlives() && !da->eatenall()) {
   if (bon) board->sprite(bon);	//let it be a sprite
   board->delta_draw();		//draw just the changes of the board
   timing(pac.is_super());	//do timing: make the game go smooth enough
+  if (rl_active()) rl_send_state(&pac,gh,da,bon);	// RL bridge
   d=u->stick();			//pacman got direction
  }
  if (pac.is_dead()) {  		// do this if pacman died

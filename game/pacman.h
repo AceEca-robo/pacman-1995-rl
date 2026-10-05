@@ -17,6 +17,7 @@ direction d,try_d;	//what direction is it going, what direction was tried
 public:
 
 int getsupertime();		//get the remaning time pacman is super
+direction getdir() {return d;}	// RL bridge: direction pacman is going
 void start(); 			//reset pacman
 int is_dead(); 			//is pacman dead?
 void die(Gamedata*);		//let pacman die a life
