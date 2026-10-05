@@ -1,0 +1,16 @@
+# PacmanEnv (env/pacman_env.py) defaults.
+# Reward per step = k_score * (score delta) + death_penalty * (lives lost)
+#                 + step_penalty + level_bonus * (levels gained).
+# All terms are added as is: penalties are negative numbers.
+reward:
+  k_score: 0.1          # food = 10 points -> +1.0
+  death_penalty: -10.0  # per life lost, the final one included
+  step_penalty: -0.01   # every step
+  level_bonus: 50.0     # per level completed
+
+# Steps (game ticks) before truncated=True; null = no limit.
+max_episode_steps: 10000
+
+game:
+  binary: game/pacman   # relative to the repo root
+  connect_timeout: 10.0 # seconds to wait for the game to connect
