@@ -72,12 +72,22 @@ def main():
     p.add_argument("runs", nargs="+", help="run names under runs/")
     p.add_argument("--out-dir", default=os.path.join(ROOT, "docs"))
     p.add_argument("--smooth", type=int, default=200, help="episodes in the rolling median")
+    p.add_argument("--which", choices=("both", "training", "eval"), default="both")
     args = p.parse_args()
 
     data = {r: load_scalars(os.path.join(ROOT, "runs", r)) for r in args.runs}
     baselines = load_baselines(os.path.join(ROOT, "docs", "results.md"))
     os.makedirs(args.out_dir, exist_ok=True)
 
+    written = []
+    if args.which in ("both", "training"):
+        written.append(plot_training(data, baselines, args))
+    if args.which in ("both", "eval"):
+        written.append(plot_eval(data, baselines, args))
+    print("wrote", *written)
+
+
+def plot_training(data, baselines, args):
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.2))
     for ax, (tag, key, title) in zip(axes, (("episode/reward", "reward", "Episode reward"),
                                             ("episode/score", "score", "Game score"))):
@@ -97,8 +107,13 @@ def main():
         axes[1].set_yscale("symlog", linthresh=100)  # ghost chains give a heavy tail
         axes[1].set_ylim(bottom=0)
     fig.tight_layout()
-    fig.savefig(os.path.join(args.out_dir, "training.png"), dpi=120)
+    path = os.path.join(args.out_dir, "training.png")
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    return path
 
+
+def plot_eval(data, baselines, args):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
     panels = (("eval/median_reward", "reward", "Median eval reward"),
               ("eval/median_score", "score", "Median eval score"),
@@ -118,8 +133,10 @@ def main():
         ax.grid(alpha=0.3)
         ax.legend(fontsize=8)
     fig.tight_layout()
-    fig.savefig(os.path.join(args.out_dir, "eval.png"), dpi=120)
-    print("wrote", os.path.join(args.out_dir, "training.png"), os.path.join(args.out_dir, "eval.png"))
+    path = os.path.join(args.out_dir, "eval.png")
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    return path
 
 
 if __name__ == "__main__":

@@ -69,3 +69,24 @@ def test_warm_start_per_shaping_4_actions(tmp_path):
         assert DQNAgent(os.path.join(run_dir, "best.pt"), device="cpu").n_actions == 4
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_resume_without_buffer(tmp_path):
+    cfg = tmp_path / "tiny_nobuf.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 4000, "checkpoint_buffer": False}))
+    name = f"test-nobuf-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name]
+    try:
+        p = subprocess.Popen(cmd + ["--config", str(cfg)], stdout=subprocess.PIPE, text=True)
+        deadline = time.time() + 120
+        while not os.path.exists(os.path.join(run_dir, "checkpoint.pt")) and time.time() < deadline:
+            time.sleep(0.05)
+        p.send_signal(signal.SIGKILL)
+        p.wait()
+        out = subprocess.run(cmd + ["--resume"], capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert re.search(r"resumed at \d+ steps, buffer 0", out.stdout), out.stdout
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])

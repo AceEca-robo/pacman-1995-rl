@@ -9,6 +9,7 @@ markdown table and updates the agent's row in docs/results.md.
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -55,22 +56,44 @@ def make_agent(args):
     return agent, f"dqn {label}"
 
 
-def run(agent, label, episodes, seed, env_config):
+LONG_GAP = 30  # steps without food that count as "long"
+
+
+def food_gaps(food_steps, length):
+    """Steps without eating: gaps between consecutive food events (dots or
+    energizers), the longest gap, the steps after the last food, and the
+    share of the episode spent in stretches of >= LONG_GAP steps without
+    food (the tail after the last food included)."""
+    gaps = np.diff(food_steps) if len(food_steps) > 1 else np.array([])
+    tail = length - food_steps[-1] if food_steps else length
+    stretches = np.append(gaps, tail)
+    return {"food_eaten": len(food_steps),
+            "mean_gap": float(gaps.mean()) if len(gaps) else None,
+            "max_gap": int(gaps.max()) if len(gaps) else None,
+            "steps_after_last_food": int(tail),
+            "long_gap_share": float(stretches[stretches >= LONG_GAP].sum() / length)}
+
+
+def run(agent, label, episodes, seed, env_config, episodes_out=None):
     # the env must offer the agent's actions (4 or 5); shaping stays as in
     # env_config (off by default), so rewards compare across agents
     env = PacmanEnv(config={**load_env_config(env_config), "actions": agent.n_actions})
     scores, rewards, lengths, max_levels, clean, truncs = [], [], [], [], [], []
+    per_episode = []
     t0 = time.perf_counter()
     try:
         for i in range(episodes):
             obs, info = env.reset(seed=seed + i)
             agent.reset(seed=seed + i)
             n, level, total, deaths, clean_clear = 0, info["level"], 0.0, 0, False
+            food_steps = []
             while True:
                 obs, r, term, trunc, info = env.step(agent.act(obs))
                 n += 1
                 total += r
                 ev = info["events"]
+                if ev["eaten_dot"] or ev["eaten_energizer"]:
+                    food_steps.append(n)
                 if ev["level_up"] and level == 1 and deaths == 0:
                     clean_clear = True
                 deaths += ev["death"]
@@ -83,8 +106,15 @@ def run(agent, label, episodes, seed, env_config):
             lengths.append(n)
             max_levels.append(level)
             truncs.append(trunc)
+            per_episode.append({"seed": seed + i, "reward": total, "score": int(info["score"]),
+                                "length": n, "level": int(level), "deaths": deaths,
+                                **food_gaps(food_steps, n)})
     finally:
         env.close()
+    if episodes_out:
+        with open(episodes_out, "w") as f:
+            for e in per_episode:
+                f.write(json.dumps(e) + "\n")
     elapsed = time.perf_counter() - t0
     scores = np.array(scores)
     return {
@@ -138,6 +168,9 @@ def main():
     p.add_argument("--agent", choices=AGENTS, required=True)
     p.add_argument("--checkpoint", help="dqn only: best.pt or checkpoint.pt from scripts/train.py")
     p.add_argument("--epsilon", type=float, default=0.0, help="dqn only: random action probability")
+    p.add_argument("--label", help="row label in the results table (default from the agent)")
+    p.add_argument("--episodes-out", help="write per-episode stats (incl. steps without food) "
+                                          "as JSON lines here")
     p.add_argument("--actions", type=int, choices=(4, 5), default=5,
                    help="random/heuristic: action set; dqn uses its checkpoint's")
     p.add_argument("--episodes", type=int, default=100)
@@ -149,7 +182,8 @@ def main():
     args = p.parse_args()
 
     agent, label = make_agent(args)
-    res = run(agent, label, args.episodes, args.seed, args.env_config)
+    res = run(agent, args.label or label, args.episodes, args.seed, args.env_config,
+              args.episodes_out)
     print(HEADER)
     print(RULE)
     print(row(res))

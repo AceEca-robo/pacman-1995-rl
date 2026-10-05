@@ -205,6 +205,7 @@ def main():
     if not ck and cfg["warm_start"]:
         warm_start(col, cfg)
     per = cfg["per"]["enabled"]
+    min_buffer = min(cfg["learning_starts"], cfg["buffer_size"]) if ck else cfg["batch_size"]
 
     losses, qs = [], []
     update_credit = 0.0
@@ -225,7 +226,8 @@ def main():
             episodes += col.step(actions, steps)
             steps += n
 
-            if steps >= cfg["learning_starts"]:
+            # after a resume without a saved buffer, refill it first
+            if steps >= cfg["learning_starts"] and buffer.size >= min_buffer:
                 update_credit += n / cfg["train_every"]
                 beta = per_beta(cfg, steps) if per else None
                 while update_credit >= 1:

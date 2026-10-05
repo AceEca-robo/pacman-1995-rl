@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Watch training runs (each in a tmux session named like the run).
+
+    python scripts/supervisor.py dqn1 dqn3b [--every 500000] [--episodes 20]
+
+Every --every env steps of each run (as soon as the checkpoint for that step
+is written) it copies runs/<run>/checkpoint.pt to ck_<steps>.pt, evaluates it
+with scripts/evaluate.py (--episodes greedy episodes, seeds 0.., env without
+shaping), which appends a row "dqn <run>@<steps>M" to docs/results.md, writes
+per-episode stats to runs/<run>/sv_eval_<steps>.jsonl and redraws
+docs/eval.png.
+
+If a run's tmux session disappears before the run reached its total_steps,
+it is restarted once with --resume; a second crash is only logged. Speeds
+under --min-speed steps/s are logged. Everything goes to runs/supervisor.log;
+state (restart counts, done evals) in runs/supervisor_state.json.
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+import yaml
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PY = os.path.join(ROOT, ".venv", "bin", "python")
+RUNS = os.path.join(ROOT, "runs")
+LOG = os.path.join(RUNS, "supervisor.log")
+STATE = os.path.join(RUNS, "supervisor_state.json")
+RESULTS = os.path.join(ROOT, "docs", "results.md")
+PLOT_DIR = os.path.join(ROOT, "docs")
+PLOT_RUNS = ["dqn0", "dqn2"]  # finished runs kept on docs/eval.png for reference
+
+
+def log(msg):
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {msg}"
+    print(line, flush=True)
+    with open(LOG, "a") as f:
+        f.write(line + "\n")
+
+
+def alive(session):
+    return subprocess.run(["tmux", "has-session", "-t", session],
+                          capture_output=True).returncode == 0
+
+
+def run_log(run):
+    path = os.path.join(RUNS, f"{run}.log")
+    if not os.path.exists(path):
+        return ""
+    with open(path, errors="replace") as f:
+        return f.read()
+
+
+def total_steps(run):
+    """None until train.py has written the run's config."""
+    path = os.path.join(RUNS, run, "config.yaml")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return yaml.safe_load(f)["total_steps"]
+
+
+_ck_cache = {}  # path -> (mtime, steps)
+
+
+def read_steps(path):
+    import torch
+    try:
+        mtime = os.path.getmtime(path)
+    except FileNotFoundError:
+        return None
+    if path in _ck_cache and _ck_cache[path][0] == mtime:
+        return _ck_cache[path][1]
+    try:
+        steps = torch.load(path, map_location="cpu", weights_only=False)["steps"]
+    except Exception as e:  # being replaced right now; next poll
+        log(f"could not read {path} ({e!r})")
+        return None
+    _ck_cache[path] = (mtime, steps)
+    return steps
+
+
+def evaluate(run, steps, episodes):
+    ck = os.path.join(RUNS, run, f"ck_{steps}.pt")
+    shutil.copy(os.path.join(RUNS, run, "checkpoint.pt"), ck + ".tmp")
+    os.replace(ck + ".tmp", ck)
+    got = read_steps(ck)
+    if got != steps:  # training replaced checkpoint.pt in between
+        log(f"{run}: wanted the {steps} checkpoint, copied {got}; skipped")
+        os.remove(ck)
+        return
+    label = f"dqn {run}@{steps / 1e6:05.2f}M"
+    out = subprocess.run(
+        [PY, os.path.join(ROOT, "scripts", "evaluate.py"), "--agent", "dqn", "--checkpoint", ck,
+         "--episodes", str(episodes), "--seed", "0", "--label", label,
+         "--episodes-out", os.path.join(RUNS, run, f"sv_eval_{steps}.jsonl"),
+         "--results", RESULTS],
+        capture_output=True, text=True, cwd=ROOT)
+    if out.returncode != 0:
+        log(f"{run}: evaluate.py failed at {steps}: {out.stderr.strip()[-500:]}")
+        return
+    log(f"{run}: eval @ {steps}: {out.stdout.strip().splitlines()[-1]}")
+
+
+def plot(runs):
+    have = [r for r in PLOT_RUNS if os.path.isdir(os.path.join(RUNS, r))]
+    out = subprocess.run([PY, os.path.join(ROOT, "scripts", "plot_runs.py"), *have, *runs,
+                          "--which", "eval", "--out-dir", PLOT_DIR],
+                         capture_output=True, text=True, cwd=ROOT)
+    if out.returncode != 0:
+        log(f"plot_runs.py failed: {out.stderr.strip()[-300:]}")
+
+
+def restart(run):
+    cmd = (f"cd {ROOT} && {PY} scripts/train.py --run-name {run} --resume "
+           f"2>&1 | tee -a runs/{run}.log")
+    subprocess.run(["tmux", "new-session", "-d", "-s", run, cmd], check=True)
+
+
+def last_speed(text):
+    m = re.findall(r"([\d,]+) steps/s", text)
+    return int(m[-1].replace(",", "")) if m else None
+
+
+def main():
+    global LOG, STATE, RESULTS, PLOT_DIR
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("runs", nargs="+")
+    p.add_argument("--every", type=int, default=500_000)
+    p.add_argument("--episodes", type=int, default=20)
+    p.add_argument("--poll", type=float, default=15.0, help="seconds between checks")
+    p.add_argument("--min-speed", type=int, default=1500)
+    p.add_argument("--results", default=RESULTS, help="markdown table evaluate.py updates")
+    p.add_argument("--plot-dir", default=PLOT_DIR, help="where eval.png goes")
+    p.add_argument("--log-dir", default=RUNS, help="supervisor.log and supervisor_state.json")
+    args = p.parse_args()
+    LOG = os.path.join(args.log_dir, "supervisor.log")
+    STATE = os.path.join(args.log_dir, "supervisor_state.json")
+    RESULTS, PLOT_DIR = args.results, args.plot_dir
+
+    state = {}
+    if os.path.exists(STATE):
+        with open(STATE) as f:
+            state = json.load(f)
+    for run in args.runs:
+        state.setdefault(run, {"restarts": 0, "status": "running", "evaluated": [],
+                               "slow_logged_at": 0})
+
+    def save():
+        with open(STATE + ".tmp", "w") as f:
+            json.dump(state, f, indent=1)
+        os.replace(STATE + ".tmp", STATE)
+
+    log(f"supervisor started for {', '.join(args.runs)}: eval every {args.every} steps, "
+        f"{args.episodes} episodes")
+    save()
+    while any(state[r]["status"] == "running" for r in args.runs):
+        for run in args.runs:
+            st = state[run]
+            if st["status"] != "running":
+                continue
+            try:
+                check(run, st, args, save)
+            except Exception as e:  # never let one bad poll stop the night
+                log(f"{run}: supervisor error {e!r}")
+        time.sleep(args.poll)
+    plot(args.runs)
+    log("all runs finished or failed; supervisor exits")
+
+
+def check(run, st, args, save):
+    text = run_log(run)
+    total = total_steps(run)
+    if total is None:
+        return
+    finished = f"eval @ {total}:" in text
+
+    steps = read_steps(os.path.join(RUNS, run, "checkpoint.pt"))
+    due = [s for s in range(args.every, (steps or 0) + 1, args.every)
+           if s not in st["evaluated"]]
+    if due:
+        missed = [s for s in due if s != steps]
+        if missed:  # only the latest checkpoint is kept by train.py
+            log(f"{run}: no checkpoint left for {missed[0]}..{missed[-1]} "
+                f"({len(missed)} points), skipped")
+        if steps in due:
+            evaluate(run, steps, args.episodes)
+            plot(args.runs)
+        st["evaluated"].extend(due)
+        save()
+
+    speed = last_speed(text)
+    if speed is not None and speed < args.min_speed and time.time() - st["slow_logged_at"] > 600:
+        log(f"{run}: slow, {speed} steps/s (< {args.min_speed}); no new runs while this lasts")
+        st["slow_logged_at"] = time.time()  # at most every 10 min
+        save()
+
+    if alive(run):
+        return
+    if finished:
+        log(f"{run}: finished ({total} steps)")
+        st["status"] = "finished"
+    elif st["restarts"] == 0:
+        tail = "\n    ".join(text.strip().splitlines()[-5:])
+        log(f"{run}: CRASHED at checkpoint {steps}, restarting once with --resume; "
+            f"log tail:\n    {tail}")
+        st["restarts"] = 1
+        restart(run)
+    else:
+        log(f"{run}: CRASHED again (checkpoint {steps}); not restarting")
+        st["status"] = "failed"
+    save()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
