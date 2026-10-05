@@ -2,6 +2,7 @@ game/*.o
 game/pacman
 game/pacman._man
 game/Makefile
+game/Makefile.bak
 runs/
 *.pt
 *.onnx
