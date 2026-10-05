@@ -1,13 +1,16 @@
 #include"graphele.h"
 #include<stdio.h>
 #include<stdlib.h>
+#include"arg.h"	// RL bridge
 
 #ifdef XWIN				//for X-Win only
 void GraphElement::draw(int x,int y) {	//draw graphical element
+if (Argument::headless) return;		// RL bridge
 XCopyArea(display,pixmap,window,gc,0,0,UNITWIDTH,UNITHEIGHT,TEXTSPACE+UNITWIDTH*x,UNITWIDTH*y);				//copy pixmap to window
  }
 
 void GraphElement::consfn() {		//function to help with constructing
+if (Argument::headless) { display=0; return; }	// RL bridge: no X
 UserInterface* u=UserInterface::instance();	//get UserInterface instance
 display=u->getdisplay();		//get pointer to display connection
 window=u->getwindow();			//get window
@@ -23,11 +26,13 @@ depth=wdepth;				//setting depth
 }
 
 GraphElement::~GraphElement(void) {	//destructor
+if (Argument::headless) return;		// RL bridge
 XFreePixmap(display,pixmap);		//freeing pixmap
 }
 
 //create pixmap
 void GraphElement::pix(Pixmap *p,char map[],unsigned long myforeground, unsigned long mybackground) {
+if (Argument::headless) { *p=0; return; }	// RL bridge
 *p=XCreatePixmapFromBitmapData(display,window,map,UNITWIDTH,UNITHEIGHT,
 				   myforeground,mybackground,depth);
 }

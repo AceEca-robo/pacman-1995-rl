@@ -35,15 +35,19 @@ def display():
 
 
 class Game:
-    def __init__(self, display, tmp_path, seed=1, name="game"):
+    def __init__(self, display, tmp_path, seed=1, name="game", headless=False):
         path = str(tmp_path / f"{name}.sock")
         self.srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.srv.bind(path)
         self.srv.listen(1)
         self.srv.settimeout(10)
         env = dict(os.environ, DISPLAY=display)
+        extra = []
+        if headless:
+            env.pop("DISPLAY")
+            extra = ["--headless"]
         self.proc = subprocess.Popen(
-            [GAME, "--rl", path, "--fast", "--seed", str(seed)], env=env)
+            [GAME, "--rl", path, "--fast", "--seed", str(seed)] + extra, env=env)
         self.conn, _ = self.srv.accept()
         self.rfile = self.conn.makefile("rb")
 
@@ -104,3 +108,18 @@ def test_game_exits_when_socket_closes(display, tmp_path):
     play(g, 10)
     g.state()
     g.close()  # raises if the game is still running after 10 s
+
+
+def test_headless_same_states_without_x(display, tmp_path):
+    runs = []
+    for headless in (False, True):
+        g = Game(display, tmp_path, name=f"h{headless}", headless=headless)
+        runs.append(play(g, 20000))
+        assert g.close() == 1  # the game's normal exit code
+    assert runs[0] == runs[1]
+
+
+def test_headless_needs_rl():
+    env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
+    r = subprocess.run([GAME, "--headless"], env=env, capture_output=True, timeout=10)
+    assert r.returncode == 1 and b"--rl" in r.stderr

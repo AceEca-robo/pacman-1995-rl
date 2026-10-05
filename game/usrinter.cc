@@ -61,6 +61,7 @@ static UserInterface *ui=0;
 #ifdef XWIN				//for X-Win only
 UserInterface::UserInterface() {	//constructor
 setinp(in);				//sets the input type
+if (Argument::headless) return;		// RL bridge: no display, no colours
 mydisplay = XOpenDisplay("");		//connects to a display
 if (!mydisplay) pacexit("no display possible");	//if it was not possible, exit
 myscreen = DefaultScreen(mydisplay);	//get the default screen
@@ -110,6 +111,7 @@ XSelectInput(mydisplay,mywindow,ExposureMask|VisibilityChangeMask);//,ButtonPres
 }
 
 UserInterface::~UserInterface(void) {	//destructor
+if (Argument::headless) return;		// RL bridge
 XUnloadFont(mydisplay,font);		//unload the font
 XFreeGC(mydisplay, mygc);		//destroy gc
 XDestroyWindow(mydisplay, mywindow);	//destroy window
@@ -117,12 +119,14 @@ XCloseDisplay(mydisplay);		//close the display connection
 }
 
 void UserInterface::waitsync(void) {
+if (Argument::headless) return;		// RL bridge
 XSync(mydisplay,0);	//returns when output complete: synchronized
 }
 
 int UserInterface::getinput(void) {	//get input whether quit or not,
 					//it may also change input type
 if (rl_disconnected()) return 1;	// RL bridge: agent gone, end the game
+if (Argument::headless) return 0;	// RL bridge: no X events
 if (QLength(mydisplay)>0) {
 XNextEvent(mydisplay, &myevent);	//get next event from the queue
 //printf("%d \n",myevent.type);
@@ -220,12 +224,14 @@ return none;					//if none of these, then none
 
 //write string at x,y
 void UserInterface::write(int x,int y,char* str) {
+ if (Argument::headless) return;	// RL bridge
  XDrawImageString(mydisplay,mywindow, mygc,TEXTWIDTH*x,TEXTHEIGHT*y,str, strlen(str));
 }
 
 //write number long int at x,y format z
 void UserInterface::write(int x,int y,long int v,int l) {
  char*  str;
+ if (Argument::headless) return;	// RL bridge
  str = (char*) malloc (l+1);
  sprintf (str, "%.*d", l,v);
  XDrawImageString(mydisplay,mywindow, mygc,TEXTWIDTH*x,TEXTHEIGHT*y,str, strlen(str));
