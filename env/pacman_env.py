@@ -89,10 +89,12 @@ def _stop_game(res):
 class PacmanEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, config=None, seed=0, display=None, render_mode=None):
+    def __init__(self, config=None, seed=0, display=None, render_mode=None, fast=True):
         """config: path to yaml, dict of overrides or None (configs/env_default.yaml).
         seed: --seed of the first game process (reset(seed=...) overrides it).
-        display: X display to show the game on; None runs it --headless."""
+        display: X display to show the game on; None runs it --headless.
+        fast: run the game with --fast (no sleeping); False plays in real time
+        (0.25 s per tick, half that while pacman is super), for watching."""
         self.cfg = _load_config(config)
         self.render_mode = render_mode
         self.action_space = spaces.Discrete(len(ACTIONS))
@@ -106,6 +108,7 @@ class PacmanEnv(gym.Env):
         self._res = {}
         self._finalizer = weakref.finalize(self, _stop_game, self._res)
         self._display = display
+        self._fast = fast
         self._binary = os.path.join(ROOT, self.cfg["game"]["binary"])
         self._state = None   # last state received
         self._steps = 0
@@ -124,7 +127,9 @@ class PacmanEnv(gym.Env):
             # glibc treats srandom(0) as srandom(1), so shift by one to keep
             # env seeds 0 and 1 apart
             game_seed = seed % (2**31 - 1) + 1
-            cmd = [self._binary, "--rl", path, "--fast", "--seed", str(game_seed)]
+            cmd = [self._binary, "--rl", path, "--seed", str(game_seed)]
+            if self._fast:
+                cmd.append("--fast")
             env = dict(os.environ)
             if self._display is None:
                 cmd.append("--headless")
