@@ -1,0 +1,106 @@
+"""Protocol tests for the game's RL bridge (game/rlbridge.cc).
+
+The game always opens an X window, so the tests start it under its own
+Xvfb display and are skipped when the binary or Xvfb is missing.
+"""
+
+import json
+import os
+import random
+import shutil
+import socket
+import subprocess
+import time
+
+import pytest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GAME = os.path.join(ROOT, "game", "pacman")
+
+pytestmark = pytest.mark.skipif(
+    not os.path.exists(GAME) or shutil.which("Xvfb") is None,
+    reason="needs built game/pacman and Xvfb",
+)
+
+
+@pytest.fixture(scope="module")
+def display():
+    disp = ":%d" % (90 + os.getpid() % 100)
+    xvfb = subprocess.Popen(["Xvfb", disp, "-nolisten", "tcp"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(0.5)
+    yield disp
+    xvfb.terminate()
+    xvfb.wait()
+
+
+class Game:
+    def __init__(self, display, tmp_path, seed=1, name="game"):
+        path = str(tmp_path / f"{name}.sock")
+        self.srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.srv.bind(path)
+        self.srv.listen(1)
+        self.srv.settimeout(10)
+        env = dict(os.environ, DISPLAY=display)
+        self.proc = subprocess.Popen(
+            [GAME, "--rl", path, "--fast", "--seed", str(seed)], env=env)
+        self.conn, _ = self.srv.accept()
+        self.rfile = self.conn.makefile("rb")
+
+    def state(self):
+        line = self.rfile.readline()
+        assert line, "game closed the connection"
+        return json.loads(line)
+
+    def act(self, a):
+        self.conn.sendall((a + "\n").encode())
+
+    def close(self):
+        self.rfile.close()
+        self.conn.close()
+        self.srv.close()
+        try:
+            return self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            raise
+
+
+def play(game, n, seed=0):
+    rng = random.Random(seed)
+    states = []
+    for _ in range(n):
+        states.append(game.state())
+        game.act(rng.choice("UDLRN"))
+    return states
+
+
+def test_state_format(display, tmp_path):
+    g = Game(display, tmp_path)
+    st = g.state()
+    g.close()
+    assert len(st["grid"]) == 23
+    assert all(len(row) == 33 for row in st["grid"])
+    assert set("".join(st["grid"])) <= set("#.o -")
+    assert st["pacman"]["dir"] in "UDLRS"
+    assert len(st["ghosts"]) == 4
+    for gh in st["ghosts"]:
+        assert gh["state"] in ("normal", "hunted", "eyes")
+        assert gh["dir"] in "UDLRS"
+    assert (st["lives"], st["level"], st["done"]) == (3, 1, False)
+
+
+def test_same_seed_same_game(display, tmp_path):
+    runs = []
+    for i in range(2):
+        g = Game(display, tmp_path, name=f"run{i}")
+        runs.append(play(g, 500))
+        g.close()
+    assert runs[0] == runs[1]
+
+
+def test_game_exits_when_socket_closes(display, tmp_path):
+    g = Game(display, tmp_path)
+    play(g, 10)
+    g.state()
+    g.close()  # raises if the game is still running after 10 s
