@@ -1,17 +1,16 @@
 import glob
 import os
-import shutil
 import tempfile
 
 import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
 
-from env.pacman_env import ROOT, PacmanEnv
+from env.pacman_env import CH, CHANNELS, ROOT, PacmanEnv
 
 pytestmark = pytest.mark.skipif(
-    not os.path.exists(os.path.join(ROOT, "game", "pacman")) or shutil.which("Xvfb") is None,
-    reason="needs built game/pacman and Xvfb",
+    not os.path.exists(os.path.join(ROOT, "game", "pacman")),
+    reason="needs built game/pacman",
 )
 
 
@@ -28,6 +27,30 @@ def env():
     e = PacmanEnv()
     yield e
     e.close()
+
+
+def check_obs(obs):
+    g = obs["grid"]
+    assert g.shape[0] == len(CHANNELS)
+    assert g[CH["pacman"]].sum() == 1
+    pac_dirs = g[CH["pacman_up"]:CH["pacman_right"] + 1]
+    assert pac_dirs.sum() <= 1 and np.all(pac_dirs.sum(0) <= g[CH["pacman"]])
+    ghosts = g[CH["ghost_normal"]:CH["ghost_eyes"] + 1].sum(0)
+    assert ghosts.sum() == 1  # 4 ghosts, 1/4 each
+    ghost_dirs = g[CH["ghost_up"]:CH["ghost_right"] + 1].sum(0)
+    assert np.all(ghost_dirs <= ghosts)  # directions only where ghosts are
+    assert not np.any(g[CH["walls"]] * g[CH["gate"]])
+
+
+def test_headless_needs_no_display(monkeypatch):
+    monkeypatch.delenv("DISPLAY", raising=False)
+    e = PacmanEnv()
+    try:
+        obs, _ = e.reset(seed=0)
+        check_obs(obs)
+        assert obs["grid"][CH["gate"]].sum() == 3
+    finally:
+        e.close()
 
 
 def test_check_env(env):
@@ -95,10 +118,10 @@ def test_close_leaves_nothing():
     e = PacmanEnv()
     e.reset(seed=0)
     e.step(0)
-    game, xvfb = e._res["game"].pid, e._res["xvfb"].pid
+    game = e._res["game"].pid
     e.close()
     e.close()  # idempotent
-    assert not alive(game) and not alive(xvfb)  # waited for, so no zombies either
+    assert not alive(game)  # waited for, so no zombie either
     assert sock_dirs() <= before
 
 
@@ -110,7 +133,7 @@ def test_1000_random_steps(env):
         obs, r, term, trunc, info = env.step(env.action_space.sample())
         assert env.observation_space.contains(obs)
         assert np.isfinite(r)
-        assert obs["grid"][3].sum() == 1  # exactly one pacman
+        check_obs(obs)
         if term or trunc:
             obs, info = env.reset()
             assert info["lives"] == 3

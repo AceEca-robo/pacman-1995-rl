@@ -4,15 +4,17 @@ The game (game/pacman --rl <sock>) connects to a Unix socket served here,
 sends one JSON state per tick and blocks for one action line. See
 game/rlbridge.cc for the protocol.
 
-Observation is a Dict:
-  grid: float32 (8, 23, 33), 0/1 planes, see CHANNELS
+By default the game runs with --headless (no X11 at all); pass display=":0"
+to watch it in a window.
+
+Observation is a Dict, see docs/observation.md:
+  grid: float32 (17, 23, 33) planes in [0, 1], see CHANNELS
   vec:  float32 (3,) = [min(lives, 9) / 3, supertime_left / SUPERTIME, level / LEVELS]
 """
 
 import ctypes
 import json
 import os
-import select
 import signal
 import socket
 import subprocess
@@ -32,9 +34,14 @@ SUPERTIME = 50          # game/pac.h
 LEVELS = 16             # game/pac.h; boards repeat (randomly) after that
 MAX_LIVES = 9           # only for the obs bound; the game has no limit
 ACTIONS = [b"U\n", b"D\n", b"L\n", b"R\n", b"N\n"]
-CHANNELS = ("walls", "food", "superfood", "pacman",
-            "ghost_normal", "ghost_hunted", "ghost_eyes", "bonus")
-GHOST_CHANNEL = {"normal": 4, "hunted": 5, "eyes": 6}
+CHANNELS = ("walls", "gate", "food", "superfood",
+            "pacman", "pacman_up", "pacman_down", "pacman_left", "pacman_right",
+            "ghost_normal", "ghost_hunted", "ghost_eyes",
+            "ghost_up", "ghost_down", "ghost_left", "ghost_right",
+            "bonus")
+CH = {name: i for i, name in enumerate(CHANNELS)}
+DIR_OFFSET = {"U": 0, "D": 1, "L": 2, "R": 3}  # "S" (still) sets no direction plane
+GHOSTS = 4
 
 
 def _load_config(config):
@@ -76,26 +83,13 @@ def _stop_game(res):
         res["game"] = None
 
 
-def _shutdown(res):
-    _stop_game(res)
-    proc = res.get("xvfb")
-    if proc is not None:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        res["xvfb"] = None
-
-
 class PacmanEnv(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, config=None, seed=0, display=None, render_mode=None):
         """config: path to yaml, dict of overrides or None (configs/env_default.yaml).
         seed: --seed of the first game process (reset(seed=...) overrides it).
-        display: X display to run the game on; None starts a private Xvfb."""
+        display: X display to show the game on; None runs it --headless."""
         self.cfg = _load_config(config)
         self.render_mode = render_mode
         self.action_space = spaces.Discrete(len(ACTIONS))
@@ -107,34 +101,14 @@ class PacmanEnv(gym.Env):
         })
 
         self._res = {}
-        self._finalizer = weakref.finalize(self, _shutdown, self._res)
-        self._display = display if display is not None else self._start_xvfb()
+        self._finalizer = weakref.finalize(self, _stop_game, self._res)
+        self._display = display
         self._binary = os.path.join(ROOT, self.cfg["game"]["binary"])
         self._state = None   # last state received
         self._steps = 0
         self._start_game(seed)
 
     # --- processes -------------------------------------------------------
-
-    def _start_xvfb(self):
-        rfd, wfd = os.pipe()
-        self._res["xvfb"] = subprocess.Popen(
-            ["Xvfb", "-displayfd", str(wfd), "-nolisten", "tcp",
-             "-screen", "0", "800x600x24"],
-            pass_fds=(wfd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            preexec_fn=_die_with_parent)
-        os.close(wfd)
-        out = b""
-        try:
-            while not out.endswith(b"\n"):
-                ready, _, _ = select.select([rfd], [], [], 10)
-                chunk = os.read(rfd, 64) if ready else b""
-                if not chunk:
-                    raise RuntimeError("Xvfb did not start")
-                out += chunk
-        finally:
-            os.close(rfd)
-        return ":" + out.decode().strip()
 
     def _start_game(self, seed):
         tmp = tempfile.mkdtemp(prefix="pacman-env-")
@@ -144,10 +118,15 @@ class PacmanEnv(gym.Env):
             srv.bind(path)
             srv.listen(1)
             srv.settimeout(self.cfg["game"]["connect_timeout"])
+            cmd = [self._binary, "--rl", path, "--fast", "--seed", str(seed)]
+            env = dict(os.environ)
+            if self._display is None:
+                cmd.append("--headless")
+                env.pop("DISPLAY", None)
+            else:
+                env["DISPLAY"] = self._display
             self._res["game"] = subprocess.Popen(
-                [self._binary, "--rl", path, "--fast", "--seed", str(seed)],
-                env={**os.environ, "DISPLAY": self._display},
-                stdout=subprocess.DEVNULL, preexec_fn=_die_with_parent)
+                cmd, env=env, stdout=subprocess.DEVNULL, preexec_fn=_die_with_parent)
             try:
                 conn, _ = srv.accept()
             except socket.timeout:
@@ -221,15 +200,20 @@ class PacmanEnv(gym.Env):
     def _obs(st):
         cells = np.frombuffer("".join(st["grid"]).encode(), np.uint8).reshape(HEIGHT, WIDTH)
         grid = np.zeros((len(CHANNELS), HEIGHT, WIDTH), np.float32)
-        grid[0] = (cells == ord("#")) | (cells == ord("-"))  # the gate stops pacman too
-        grid[1] = cells == ord(".")
-        grid[2] = cells == ord("o")
+        grid[CH["walls"]] = cells == ord("#")
+        grid[CH["gate"]] = cells == ord("-")
+        grid[CH["food"]] = cells == ord(".")
+        grid[CH["superfood"]] = cells == ord("o")
         p = st["pacman"]
-        grid[3, p["y"], p["x"]] = 1
+        grid[CH["pacman"], p["y"], p["x"]] = 1
+        if p["dir"] in DIR_OFFSET:
+            grid[CH["pacman_up"] + DIR_OFFSET[p["dir"]], p["y"], p["x"]] = 1
         for g in st["ghosts"]:
-            grid[GHOST_CHANNEL[g["state"]], g["y"], g["x"]] = 1
+            grid[CH["ghost_" + g["state"]], g["y"], g["x"]] += 1 / GHOSTS
+            if g["dir"] in DIR_OFFSET:
+                grid[CH["ghost_up"] + DIR_OFFSET[g["dir"]], g["y"], g["x"]] += 1 / GHOSTS
         if st["bonus"]:
-            grid[7, st["bonus"]["y"], st["bonus"]["x"]] = 1
+            grid[CH["bonus"], st["bonus"]["y"], st["bonus"]["x"]] = 1
         vec = np.array([min(st["lives"], MAX_LIVES) / 3, st["supertime_left"] / SUPERTIME,
                         min(st["level"], LEVELS) / LEVELS], np.float32)
         return {"grid": grid, "vec": vec}
