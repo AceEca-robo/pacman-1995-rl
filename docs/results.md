@@ -11,6 +11,7 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | random | 100 | 0..99 | -53.4 | -54.0 | 92 | 80 | 310 | 0% | 0% | 129 | 0% | 1.5 | bae470e |
 | heuristic | 100 | 0..99 | 465.5 | 401.2 | 16999 | 11825 | 221375 | 82% | 21% | 1244 | 0% | 17.6 | bae470e |
 | dqn dqn0/best.pt | 100 | 0..99 | 61.9 | 61.8 | 1423 | 1360 | 2950 | 0% | 0% | 848 | 0% | 30.4 | 5d22ce4 |
+| dqn dqn2/best.pt | 100 | 0..99 | 56.5 | 59.2 | 1483 | 1420 | 2670 | 0% | 0% | 1088 | 0% | 72.9 | 7f96361 |
 
 ## Notes
 
@@ -34,3 +35,12 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
   cleared level 1. Over 30 games (seeds 0..29) it eats a median of 124 of
   the 168 dots (min 120, max 132), all 4 energizers and ~1 ghost, then
   loses its last life: the remaining ~40 dots are the hard part.
+- `dqn dqn2/best.pt`: dqn0's setup plus 200k heuristic steps in the replay
+  buffer before training (`configs/dqn_warm.yaml`), seed 0, 5M steps, run in
+  parallel with dqn1. best.pt = 4.5M checkpoint. Ends level with dqn0
+  (median reward 59.2 vs 61.8, score 1420 vs 1360, within seed noise for one
+  seed each) but was much worse early: at 1M median eval reward -49.8 vs
+  -12.3. The heuristic transitions first pushed mean Q to +13 while the
+  agent still played randomly, and loss went up to 3.7 while its own data
+  corrected that. Its games are longer (1088 vs 848 steps) for the same
+  reward: more time spent without eating.
