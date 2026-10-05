@@ -10,6 +10,18 @@ reward:
   bonus_eaten: 0.0      # bonus points/life item; not rewarded for now
   step: -0.02
 
+# Potential-based shaping (Ng et al. 1999), added to the reward:
+# r += gamma * Phi(s') - Phi(s), Phi(s) = -k_dist * BFS distance from pacman
+# to the nearest dot or energizer (walls and the gate block); Phi = 0 when
+# there is no food left. Reported per step in info["shaping"].
+shaping:
+  enabled: false
+  k_dist: 0.1
+  gamma: 0.99           # should match the agent's discount
+
+# 5: U/D/L/R/N (N keeps the direction); 4: U/D/L/R only.
+actions: 5
+
 # Steps (game ticks) before truncated=True; null = no limit.
 max_episode_steps: 10000
 

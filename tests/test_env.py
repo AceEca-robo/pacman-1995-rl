@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
 
-from env.pacman_env import CH, CHANNELS, ROOT, PacmanEnv
+from env.pacman_env import CH, CHANNELS, HEIGHT, ROOT, WIDTH, PacmanEnv
 
 pytestmark = pytest.mark.skipif(
     not os.path.exists(os.path.join(ROOT, "game", "pacman")),
@@ -177,3 +177,60 @@ def test_events_match_game_score():
     finally:
         e.close()
     assert all(totals.values()), totals  # every event type was exercised
+
+
+def shaped_run(gamma, seed, agent=None, steps=3000):
+    from agents.heuristic_agent import HeuristicAgent
+    agent = agent or HeuristicAgent()
+    e = PacmanEnv(config={"shaping": {"enabled": True, "k_dist": 0.1, "gamma": gamma}})
+    try:
+        obs, _ = e.reset(seed=seed)
+        phis = [e._phi]
+        shaping = []
+        for _ in range(steps):
+            obs, r, term, trunc, info = e.step(agent.act(obs))
+            shaping.append(info["shaping"])
+            phis.append(e._phi)
+            if term or trunc:
+                break
+    finally:
+        e.close()
+    return np.array(shaping), np.array(phis)
+
+
+def test_shaping_telescopes():
+    # seed 42: the heuristic dies three times and clears levels (Phi = 0 steps)
+    f, phi = shaped_run(1.0, 42)
+    assert (phi == 0).any() and (phi < -1).any()
+    assert f.sum() == pytest.approx(phi[-1] - phi[0])
+    g = 0.99
+    f, phi = shaped_run(g, 42)
+    disc = g ** np.arange(len(f))
+    assert (disc * f).sum() == pytest.approx(g ** len(f) * phi[-1] - phi[0])
+
+
+def test_potential_bfs():
+    e = PacmanEnv.__new__(PacmanEnv)
+    e._k_dist, e._neighbours = 0.5, {}
+    rows = ["#" * WIDTH] * HEIGHT
+    rows[1] = "#" + " " * (WIDTH - 2) + "#"
+    rows[2] = "#" * 5 + "-" + "#" * (WIDTH - 6)
+    rows[3] = "#" * 5 + "." + "#" * (WIDTH - 6)
+    st = {"grid": rows, "pacman": {"x": 1, "y": 1}}
+    assert e._potential(st) == 0.0  # the only dot is behind the gate
+    rows[1] = rows[1][:10] + "o" + rows[1][11:]
+    assert e._potential(st) == -0.5 * 9
+
+
+def test_four_actions():
+    e = PacmanEnv(config={"actions": 4})
+    try:
+        assert e.action_space.n == 4
+        check_env(e, skip_render_check=True)
+        e.reset(seed=0)
+        for a in [3, 3, 0, 1, 2] * 20:
+            e.step(a)
+        with pytest.raises(ValueError):
+            e.step(4)
+    finally:
+        e.close()
