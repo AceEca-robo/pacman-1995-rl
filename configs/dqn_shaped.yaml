@@ -1,0 +1,9 @@
+# dqn0 setup + distance-to-food shaping and no N action (5M steps).
+base: dqn.yaml
+total_steps: 5000000
+checkpoint_buffer: false
+env_config:
+  actions: 4
+  shaping:
+    enabled: true
+    k_dist: 0.1
