@@ -1,0 +1,51 @@
+PACMAN
+
+You are Pacman, and you are supposed to eat all the small dots to get to the next level. You are also supposed to keep away from the ghosts, if they take you, you lose one life, unless you have eaten a large dot, then you can, for a limited amount of time, chase and eat the ghosts. There is also bonus available, for a limited amount of time. An X gives just points, but a little pacman gives an extra life.
+
+You use either keyboard or mouse. Default from start is keyboard.
+
+Keyboard mode: To move use arrows, to quit, press q, to use mouse, press m
+Mouse mode: To move, move mouse, to quit, press RButton, to use
+keyboard, press LButton
+
+Details: When pacman has moved to a new place, if you want it to change
+it's moving direction, hit key/move mouse until it has moved.
+
+STARTUP BW/COLOURS
+
+Colouring is default, it may alse work on grey monitors
+If it don't work, and you got to use grey, write pacman grey
+
+NOTE
+
+(The mentioned #defines is in basis.h.)
+The pacman window puts itself on top, comment out #define RAISE if you
+don't like it.
+The pacman program can deal with exposing, that is, redrawing itself
+after overlapping with other windows, but it's naive, primitive and
+far from perfect, comment out #define XPOSSE if you don't need it.
+
+If you want the game to run smooth, don't use a loaded machine/server.
+
+And if you want a larger window, uncomment #define DOUBLE (you can also
+do the same by uncommenting in the Imakefile).
+
+COMPILING
+
+Two possibilities: use xmkmf or if that doesn't work, gen:
+
+xmkmf:  
+xmkmf -a        # this makes the Makefile and the dependencies
+		# continue and 
+                # try ordinary make even if xmkmf gives errors 
+make; make install; make clean
+#this uses Imakefile, which I am very fresh at...
+
+gen: 
+#Program gen uses makeg to make the makefile.
+#then use ordinary make. 
+#It may have to be customized because of
+#individual compiler configurations. 
+gen
+make
+

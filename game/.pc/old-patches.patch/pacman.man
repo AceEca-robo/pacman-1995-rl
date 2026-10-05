@@ -1,0 +1,52 @@
+.\" pacman.man
+.\"
+.\" This program is free software.  See the file COPYING for a list
+.\" of conditions.
+.\"
+.TH PACMAN 1
+.SH NAME
+pacman - the game of pacman
+.SH SYNOPSIS
+.B "pacman"
+[grey]
+.SH DESCRIPTION
+.PP
+.I Pacman
+is an old action game.
+.PP
+You are Pacman, and you are supposed to eat all the small dots to get
+to the next level. You are also supposed to keep away from the ghosts,
+if they take you, you lose one life, unless you have eaten a large
+dot, then you can, for a limited amount of time, chase and eat the
+ghosts. There is also bonus available, for a limited amount of
+time. An X gives just points, but a little pacman gives an extra life.
+.PP
+You use either keyboard or mouse. Default from start is keyboard.
+.PP
+Keyboard mode: To move use \fIarrows\fP, to quit, press \fIq\fP, to use mouse,
+press \fIm\fP.
+.PP
+Mouse mode: To move, \fImove mouse\fP, to quit, press \fIRButton\fP, to use
+keyboard, press \fILButton\fP.
+.PP
+Details: When pacman has moved to a new place, if you want it to change
+it's moving direction, hit key/move mouse until it has moved.
+.SH OPTIONS
+.PP
+.TP 8
+.B "grey"
+To start in grey mode instead of the default \fBcolor\fP.
+.SH ENVIRONMENT
+.PP
+.TP 8
+.B DISPLAY
+To get default display.
+.SH AUTHOR
+.if t Roar Thron\(aes,
+.if n Roar Thronaes,
+roart@nvg.unit.no.
+.br
+This man page written by
+.if t J\(:org Wunsch,
+.if n Joerg Wunsch,
+joerg_wunsch@uriah.heep.sax.de.

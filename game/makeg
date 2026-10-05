@@ -1,0 +1,111 @@
+#! /bin/sh
+# LISTING 2: Makefile generation can be automated to some 
+# extent.  The **mmake** Bourne shell script-**awk** program 
+# uses the C source file names in the current directory and 
+# **#include "**__header-file__**"** preprocessor directives 
+# in those files in constructing a skeletal **make** 
+# program-description file.  
+#
+# A. Listing of the **mmake** program, which prints a
+# prototype makefile on the standard output:
+#
+# @(#) mmake  Create a simple makefile
+# Author: Mansour G. Raad, July 1989
+# set -x    # Uncomment for debugging
+USAGE="Usage: $0 [target]"
+# Process command-line arguments:
+case $# in
+	0)  CWD=`pwd`; TARGET=`basename $CWD` ;;
+	1)  TARGET=$1 ;;    # User-specified target
+	*)  echo $USAGE >&2 # Only one argument
+		exit 1 ;;
+esac
+# Create make file:
+echo "#"
+echo "# Makefile"
+echo "#"         # Heading lines
+echo "#"
+echo "TARGET = $TARGET"      # TARGET line
+
+OS=`uname -s`
+OSV=`uname -r`
+
+  case $OS in 
+  	SunOS) 
+  case $OSV in 
+	5*) echo "#Solaris "
+  	MYTYPE=1 
+  		;; 
+  	*) echo "#SunOS" 
+  	MYTYPE=2 
+  		;; 
+  esac 
+  		;; 
+  	ULTRIX) echo "#ULTRIX"  
+    	MYTYPE=3 
+  		;; 
+  	Linux) echo "#Linux" 
+  	MYTYPE==4 
+  		;; 
+	*) echo "#unknown"
+		;;
+  esac 
+    
+echo ""
+echo "CFLAGS =-g" # C compiler flags
+echo "CC=gcc"
+CC="gcc"
+echo "LIBS = -lX11 -lcurses -ltermcap"
+case $MYTYPE in
+	1) echo "MORELIBS = -lucb -lsocket"
+	;;
+	2) echo "MOREINCL="#-I/usr/local/lib/gcc-lib/sparc-sun-sunos4.1/2.5.8/include
+	;;
+esac
+echo ""                # Libraries
+echo ""
+# Print entries for header files:
+awk '
+	$1 ~/#include/ && $2 ~ /"/ {
+	print $2
+	}' *.cc | sort -u | awk '{
+		split($1, H, "\"")  # Puts "file.h" into H
+		NH++
+		HH[NH]=H[2]         # Puts file.h into HH
+	}
+END {
+	printf("HFILES= \\\n")
+	for (i = 1; i < NH; i++)
+		printf("\t%s\\\n", HH[i])   # Prints file.h\
+	printf("\t%s\n", HH[NH])        # Prints file.h
+	}'
+# Print eNtries for object files:
+ls *.cc |        # List all C source files
+awk -F. '{
+	CC[NR]=$1   # Store file name without suffix
+	}
+	END {
+		printf("OFILES= \\\n")
+		for (i = 1; i < NR; i++)
+			printf("\t%s.o\\\n", CC[i]) # Prints file.o\
+	printf("\t%s.o\n", CC[NR])      # Prints file.o
+
+# Print entry to make TARGET:
+	printf("\n$(TARGET): $(OFILES)\n")
+	printf("\t$(CC) -o $@ $(CFLAGS) $(OFILES) $(LIBS) $(MORELIBS)\n\n")
+	printf("%%.o :\n")
+	printf("\t$(CC) -o $@ -c  $(MOREINCL) $*.cc\n\n")
+	}'
+#%.d: %.c
+for ff in *.cc ; do
+	${CC} -MM ${ff} ${MOREINCL}
+done
+
+echo ""
+echo "clean: "
+echo "	rm *.o core #*" 
+echo ""
+
+exit 0
+
+
