@@ -1,0 +1,34 @@
+# Double + Dueling DQN, n-step (agents/dqn.py, scripts/train.py).
+# All step counts are env steps summed over the vector envs.
+total_steps: 5000000
+num_envs: 4                 # SyncVectorEnv copies
+env_config: null            # null = configs/env_default.yaml
+
+buffer_size: 500000
+batch_size: 64
+n_step: 3
+gamma: 0.99
+lr: 0.0001
+adam_eps: 0.00015
+grad_clip: 10.0
+learning_starts: 20000      # env steps before the first update
+train_every: 16             # env steps per gradient step
+target_update: 10000        # env steps between target network syncs
+
+epsilon_start: 1.0
+epsilon_end: 0.05
+epsilon_steps: 1000000      # linear decay
+
+network:
+  conv_channels: [32, 64, 64]
+  conv_kernels: [3, 3, 3]
+  conv_strides: [1, 2, 1]   # 23x33 -> 12x17 after the second conv
+  vec_hidden: 64
+  hidden: 512
+
+eval_every: 250000
+eval_episodes: 20
+eval_seed: 1000000          # eval episode i uses env seed eval_seed + i
+best_metric: reward         # median eval episode reward (or: score)
+checkpoint_buffer: true     # save the replay buffer with checkpoints (~3.3 GB)
+log_every: 10000            # env steps between scalar logs
