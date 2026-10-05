@@ -2,6 +2,7 @@
 """Evaluate a baseline agent on Pacman1995-v0.
 
     python scripts/evaluate.py --agent heuristic --episodes 100 --seed 0
+    python scripts/evaluate.py --agent dqn --checkpoint runs/dqn0/best.pt
 
 Episode i is played with env seed (and agent seed) seed + i. Prints a
 markdown table and updates the agent's row in docs/results.md.
@@ -18,10 +19,11 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
+from agents.dqn import DQNAgent  # noqa: E402
 from agents.random_agent import RandomAgent  # noqa: E402
 from env.pacman_env import PacmanEnv  # noqa: E402
 
-AGENTS = {"random": RandomAgent, "heuristic": HeuristicAgent}
+AGENTS = ("random", "heuristic", "dqn")
 HEADER = ("| agent | episodes | seeds | mean reward | median reward | mean score "
           "| median score | max score | level 1 cleared | level 1 without death "
           "| mean length | truncated | time, s | commit |")
@@ -37,8 +39,20 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 """
 
 
-def run(agent_name, episodes, seed, env_config, agent_config):
-    agent = AGENTS[agent_name](agent_config) if agent_name == "heuristic" else AGENTS[agent_name](seed)
+def make_agent(args):
+    """Returns (agent, label for the results table)."""
+    if args.agent == "random":
+        return RandomAgent(args.seed), "random"
+    if args.agent == "heuristic":
+        return HeuristicAgent(args.agent_config), "heuristic"
+    if not args.checkpoint:
+        sys.exit("--agent dqn needs --checkpoint")
+    path = os.path.abspath(args.checkpoint)
+    label = os.path.relpath(path, os.path.join(ROOT, "runs")) if path.startswith(ROOT) else path
+    return DQNAgent(path, epsilon=args.epsilon, seed=args.seed), f"dqn {label}"
+
+
+def run(agent, label, episodes, seed, env_config):
     env = PacmanEnv(config=env_config)
     scores, rewards, lengths, max_levels, clean, truncs = [], [], [], [], [], []
     t0 = time.perf_counter()
@@ -69,7 +83,7 @@ def run(agent_name, episodes, seed, env_config, agent_config):
     elapsed = time.perf_counter() - t0
     scores = np.array(scores)
     return {
-        "agent": agent_name,
+        "agent": label,
         "episodes": episodes,
         "seeds": f"{seed}..{seed + episodes - 1}",
         "mean reward": f"{np.mean(rewards):.1f}",
@@ -103,20 +117,22 @@ def update_results(path, res):
             text = text[:text.index("\n## ")]
         for line in text.splitlines():
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if line.startswith("| ") and line.strip() != HEADER and cells[0] in AGENTS:
+            if line.startswith("| ") and line.strip() != HEADER and cells[0].split()[0] in AGENTS:
                 rows[cells[0]] = line
     rows[res["agent"]] = row(res)
+    order = lambda label: (AGENTS.index(label.split()[0]), label)  # noqa: E731
     with open(path, "w") as f:
         f.write(RESULTS_INTRO + HEADER + "\n" + RULE + "\n")
-        for name in AGENTS:
-            if name in rows:
-                f.write(rows[name] + "\n")
+        for label in sorted(rows, key=order):
+            f.write(rows[label] + "\n")
         f.write(tail)
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--agent", choices=sorted(AGENTS), required=True)
+    p.add_argument("--agent", choices=AGENTS, required=True)
+    p.add_argument("--checkpoint", help="dqn only: best.pt or checkpoint.pt from scripts/train.py")
+    p.add_argument("--epsilon", type=float, default=0.0, help="dqn only: random action probability")
     p.add_argument("--episodes", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--env-config", default=None, help="default configs/env_default.yaml")
@@ -125,7 +141,8 @@ def main():
                    help="markdown file to update; empty string to skip")
     args = p.parse_args()
 
-    res = run(args.agent, args.episodes, args.seed, args.env_config, args.agent_config)
+    agent, label = make_agent(args)
+    res = run(agent, label, args.episodes, args.seed, args.env_config)
     print(HEADER)
     print(RULE)
     print(row(res))
