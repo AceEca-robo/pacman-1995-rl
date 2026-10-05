@@ -1,0 +1,6 @@
+# agents/heuristic_agent.py
+flee_distance: 5        # flee when a normal ghost is closer than this (BFS steps)
+safety_margin: 1        # while fleeing, use only cells pacman reaches this many steps before any ghost
+hunt: true              # chase hunted ghosts while super
+hunt_min_supertime: 6   # ...only if at least this many ticks of supertime are left
+hunt_max_distance: 12   # ...and the nearest hunted ghost is at most this far (BFS steps)
