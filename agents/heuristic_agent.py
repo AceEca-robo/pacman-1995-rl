@@ -71,11 +71,12 @@ class _Graph:
 
 
 class HeuristicAgent(Agent):
-    def __init__(self, config=None):
+    def __init__(self, config=None, n_actions=5):
         if config is None or isinstance(config, (str, os.PathLike)):
             with open(config or DEFAULT_CONFIG) as f:
                 config = yaml.safe_load(f)
         self.cfg = config
+        self.n_actions = n_actions
         self._graphs = {}  # walls/gate layout -> (pacman graph, ghost graph)
 
     def _graphs_for(self, walls, gate):
@@ -107,7 +108,7 @@ class HeuristicAgent(Agent):
                     return move
                 options = pac_g.nbrs[pac]
                 if not options:
-                    return NOOP
+                    return self._idle(g)
                 return max(options, key=lambda mn: d_ghost[mn[1]])[0]
 
         if self.cfg["hunt"] and hunted.any() and supertime >= self.cfg["hunt_min_supertime"]:
@@ -118,4 +119,11 @@ class HeuristicAgent(Agent):
                     return move
 
         move = pac_g.first_move_to(pac, food)
-        return NOOP if move is None else move
+        return self._idle(g) if move is None else move
+
+    def _idle(self, g):
+        """Nothing to do: N, or without N keep pacman's current direction."""
+        if self.n_actions == 5:
+            return NOOP
+        dirs = g[CH["pacman_up"]:CH["pacman_right"] + 1].reshape(4, -1).max(1)
+        return int(dirs.argmax()) if dirs.any() else UP

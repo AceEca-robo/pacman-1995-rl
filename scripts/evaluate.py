@@ -21,7 +21,7 @@ sys.path.insert(0, ROOT)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
 from agents.dqn import DQNAgent  # noqa: E402
 from agents.random_agent import RandomAgent  # noqa: E402
-from env.pacman_env import PacmanEnv  # noqa: E402
+from env.pacman_env import PacmanEnv, load_env_config  # noqa: E402
 
 AGENTS = ("random", "heuristic", "dqn")
 HEADER = ("| agent | episodes | seeds | mean reward | median reward | mean score "
@@ -42,18 +42,23 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 def make_agent(args):
     """Returns (agent, label for the results table)."""
     if args.agent == "random":
-        return RandomAgent(args.seed), "random"
+        label = "random" if args.actions == 5 else "random (4 actions)"
+        return RandomAgent(args.seed, args.actions), label
     if args.agent == "heuristic":
-        return HeuristicAgent(args.agent_config), "heuristic"
+        label = "heuristic" if args.actions == 5 else "heuristic (4 actions)"
+        return HeuristicAgent(args.agent_config, args.actions), label
     if not args.checkpoint:
         sys.exit("--agent dqn needs --checkpoint")
     path = os.path.abspath(args.checkpoint)
     label = os.path.relpath(path, os.path.join(ROOT, "runs")) if path.startswith(ROOT) else path
-    return DQNAgent(path, epsilon=args.epsilon, seed=args.seed), f"dqn {label}"
+    agent = DQNAgent(path, epsilon=args.epsilon, seed=args.seed)
+    return agent, f"dqn {label}"
 
 
 def run(agent, label, episodes, seed, env_config):
-    env = PacmanEnv(config=env_config)
+    # the env must offer the agent's actions (4 or 5); shaping stays as in
+    # env_config (off by default), so rewards compare across agents
+    env = PacmanEnv(config={**load_env_config(env_config), "actions": agent.n_actions})
     scores, rewards, lengths, max_levels, clean, truncs = [], [], [], [], [], []
     t0 = time.perf_counter()
     try:
@@ -133,6 +138,8 @@ def main():
     p.add_argument("--agent", choices=AGENTS, required=True)
     p.add_argument("--checkpoint", help="dqn only: best.pt or checkpoint.pt from scripts/train.py")
     p.add_argument("--epsilon", type=float, default=0.0, help="dqn only: random action probability")
+    p.add_argument("--actions", type=int, choices=(4, 5), default=5,
+                   help="random/heuristic: action set; dqn uses its checkpoint's")
     p.add_argument("--episodes", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--env-config", default=None, help="default configs/env_default.yaml")

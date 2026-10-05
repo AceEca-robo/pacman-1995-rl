@@ -61,6 +61,8 @@ def test_network_shapes():
     net = QNetwork(load_config()["network"])
     q = net(torch.zeros(7, len(CHANNELS), HEIGHT, WIDTH), torch.zeros(7, 3))
     assert q.shape == (7, N_ACTIONS)
+    net4 = QNetwork(load_config()["network"], n_actions=4)
+    assert net4(torch.zeros(2, len(CHANNELS), HEIGHT, WIDTH), torch.zeros(2, 3)).shape == (2, 4)
 
 
 def test_sumtree_proportional():

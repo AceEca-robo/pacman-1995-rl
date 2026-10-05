@@ -23,9 +23,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from agents.dqn import N_ACTIONS, DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
+from agents.dqn import DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
-from env.pacman_env import PacmanEnv  # noqa: E402
+from env.pacman_env import PacmanEnv, load_env_config  # noqa: E402
 
 
 def load_config(path):
@@ -99,7 +99,7 @@ class Collector:
 def warm_start(collector, cfg):
     """Fill the buffer with cfg["warm_start"] env steps of the heuristic agent.
     These steps do not count towards total_steps or the schedules."""
-    agent = HeuristicAgent(cfg["warm_start_agent_config"])
+    agent = HeuristicAgent(cfg["warm_start_agent_config"], n_actions=collector.envs.single_action_space.n)
     done, t0 = 0, time.perf_counter()
     while done < cfg["warm_start"]:
         obs = collector.obs
@@ -176,7 +176,11 @@ def main():
             yaml.safe_dump(cfg, f)
 
     torch.manual_seed(seed)
-    learner = DQNLearner(cfg, device)
+    env_cfg = load_env_config(cfg["env_config"])
+    n_actions = env_cfg["actions"]
+    # evaluation without shaping, so eval rewards compare across runs
+    eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False}}
+    learner = DQNLearner(cfg, device, n_actions)
     buffer = make_buffer(cfg)
     rng = np.random.default_rng(seed)
     steps = n_updates = episodes = 0
@@ -193,9 +197,9 @@ def main():
     writer = SummaryWriter(run_dir, purge_step=steps if ck else None)
 
     n = cfg["num_envs"]
-    make = lambda: PacmanEnv(config=cfg["env_config"])  # noqa: E731
+    make = lambda: PacmanEnv(config=env_cfg)  # noqa: E731
     envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
-    eval_envs = [make() for _ in range(n)]
+    eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(n)]
     # a resumed run must not replay the same games
     col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps)
     if not ck and cfg["warm_start"]:
@@ -213,7 +217,7 @@ def main():
     try:
         while steps < cfg["total_steps"]:
             eps = epsilon(cfg, steps)
-            actions = rng.integers(N_ACTIONS, size=n)
+            actions = rng.integers(n_actions, size=n)
             greedy = rng.random(n) >= eps
             if greedy.any():
                 q = learner.q_values(col.cur[greedy], col.obs["vec"][greedy])
@@ -277,7 +281,8 @@ def main():
                 print(f"eval @ {steps}: " + ", ".join(f"{k} {v:.2f}" for k, v in summary.items()
                                                        if k != "steps")
                       + f"  ({time.perf_counter() - t0:.0f} s)", flush=True)
-                state = {"config": cfg, "seed": seed, "learner": learner.state_dict(),
+                state = {"config": cfg, "seed": seed, "n_actions": n_actions,
+                         "env_config": env_cfg, "learner": learner.state_dict(),
                          "steps": steps, "n_updates": n_updates, "episodes": episodes,
                          "best": max(best, metric), "rng": rng.bit_generator.state,
                          "torch_rng": torch.get_rng_state()}

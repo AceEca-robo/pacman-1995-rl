@@ -61,3 +61,14 @@ def test_random_agent_reproducible():
     xs = [a.act(None) for _ in range(50)]
     assert xs == [b.act(None) for _ in range(50)]
     assert set(xs) <= {UP, DOWN, LEFT, RIGHT, NOOP}
+
+
+def test_four_actions_never_noop():
+    obs = make_obs(["#####",
+                    "# P #",
+                    "#####"])  # no food: idle
+    assert HeuristicAgent(CFG).act(obs) == NOOP
+    obs["grid"][CH["pacman_left"], 1, 2] = 1  # moving left
+    assert HeuristicAgent(CFG, n_actions=4).act(obs) == LEFT
+    r = RandomAgent(0, n_actions=4)
+    assert set(r.act(None) for _ in range(200)) == {UP, DOWN, LEFT, RIGHT}

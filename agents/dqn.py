@@ -19,7 +19,7 @@ from agents.base import Agent
 from env.pacman_env import CHANNELS, HEIGHT, ROOT, WIDTH
 
 DEFAULT_CONFIG = os.path.join(ROOT, "configs", "dqn.yaml")
-N_ACTIONS = 5
+N_ACTIONS = 5  # default; the env's "actions" (4 or 5) decides
 CELLS = HEIGHT * WIDTH
 COUNT_CH = [i for i, name in enumerate(CHANNELS) if name.startswith("ghost_")]  # values k/4
 BINARY_CH = [i for i in range(len(CHANNELS)) if i not in COUNT_CH]
@@ -233,7 +233,7 @@ class NStep:
 # --- network -----------------------------------------------------------------
 
 class QNetwork(nn.Module):
-    def __init__(self, cfg, vec_dim=3):
+    def __init__(self, cfg, n_actions=N_ACTIONS, vec_dim=3):
         super().__init__()
         layers, c = [], len(CHANNELS)
         for out, k, s in zip(cfg["conv_channels"], cfg["conv_kernels"], cfg["conv_strides"]):
@@ -245,7 +245,7 @@ class QNetwork(nn.Module):
         self.vec = nn.Sequential(nn.Linear(vec_dim, cfg["vec_hidden"]), nn.ReLU())
         self.fc = nn.Sequential(nn.Linear(conv_out + cfg["vec_hidden"], cfg["hidden"]), nn.ReLU())
         self.value = nn.Linear(cfg["hidden"], 1)
-        self.adv = nn.Linear(cfg["hidden"], N_ACTIONS)
+        self.adv = nn.Linear(cfg["hidden"], n_actions)
 
     def forward(self, grid, vec):
         h = self.fc(torch.cat([self.conv(grid), self.vec(vec)], 1))
@@ -261,14 +261,14 @@ class DQNLearner:
     the loss, online(s) and online(s') in one forward pass, no host syncs in
     update() (loss and Q come back as device tensors)."""
 
-    def __init__(self, cfg, device):
-        self.cfg, self.device = cfg, device
+    def __init__(self, cfg, device, n_actions=N_ACTIONS):
+        self.cfg, self.device, self.n_actions = cfg, device, n_actions
         cuda = str(device).startswith("cuda")
         if cuda:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-        self.online = QNetwork(cfg["network"]).to(device)
-        self.target = QNetwork(cfg["network"]).to(device)
+        self.online = QNetwork(cfg["network"], n_actions).to(device)
+        self.target = QNetwork(cfg["network"], n_actions).to(device)
         self.target.load_state_dict(self.online.state_dict())
         self.target.requires_grad_(False)
         self.opt = torch.optim.Adam(self.online.parameters(), lr=cfg["lr"], eps=cfg["adam_eps"],
@@ -282,7 +282,7 @@ class DQNLearner:
 
     @torch.no_grad()
     def q_values(self, packed, vecs):
-        """packed: uint8 (B, N_PLANES, PACKED) numpy; returns numpy (B, N_ACTIONS).
+        """packed: uint8 (B, N_PLANES, PACKED) numpy; returns numpy (B, n_actions).
         Plain fp32: entering torch.autocast costs ~0.1 ms (torch.cuda.is_available()
         on every enter), more than this tiny forward pass."""
         return self.online(self.decode(self._t(packed)), self._t(vecs)).cpu().numpy()
@@ -339,7 +339,8 @@ class DQNAgent(Agent):
     def __init__(self, checkpoint, epsilon=0.0, device=None, seed=None):
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         ck = torch.load(checkpoint, map_location=device, weights_only=False)
-        self.net = QNetwork(ck["config"]["network"]).to(device).eval()
+        self.n_actions = ck.get("n_actions", N_ACTIONS)  # runs before dqn3 had 5
+        self.net = QNetwork(ck["config"]["network"], self.n_actions).to(device).eval()
         self.net.load_state_dict(ck["learner"]["online"])
         self.device, self.epsilon = device, epsilon
         self.rng = np.random.default_rng(seed)
@@ -351,7 +352,7 @@ class DQNAgent(Agent):
     @torch.no_grad()
     def act(self, obs) -> int:
         if self.rng.random() < self.epsilon:
-            return int(self.rng.integers(N_ACTIONS))
+            return int(self.rng.integers(self.n_actions))
         g = torch.as_tensor(obs["grid"], device=self.device)[None]
         v = torch.as_tensor(obs["vec"], device=self.device)[None]
         return int(self.net(g, v).argmax(1).item())

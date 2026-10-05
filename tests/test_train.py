@@ -44,11 +44,13 @@ def test_checkpoint_and_resume(tmp_path):
         subprocess.run(["rm", "-rf", run_dir])
 
 
-def test_warm_start_and_per(tmp_path):
+def test_warm_start_per_shaping_4_actions(tmp_path):
     cfg = tmp_path / "tiny_per.yaml"
     cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
                                    "total_steps": 3000, "warm_start": 1000,
-                                   "per": {"enabled": True}}))
+                                   "per": {"enabled": True},
+                                   "env_config": {"actions": 4,
+                                                  "shaping": {"enabled": True}}}))
     name = f"test-per-{os.getpid()}"
     run_dir = os.path.join(ROOT, "runs", name)
     cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name,
@@ -60,5 +62,10 @@ def test_warm_start_and_per(tmp_path):
         assert m and int(m.group(1)) == 1000 and 990 <= int(m.group(2)) <= 1000, out.stdout
         with open(os.path.join(run_dir, "evals.jsonl")) as f:
             assert json.loads(f.readlines()[-1])["steps"] == 3000
+        import torch
+        from agents.dqn import DQNAgent
+        ck = torch.load(os.path.join(run_dir, "best.pt"), weights_only=False)
+        assert ck["n_actions"] == 4 and ck["env_config"]["shaping"]["enabled"]
+        assert DQNAgent(os.path.join(run_dir, "best.pt"), device="cpu").n_actions == 4
     finally:
         subprocess.run(["rm", "-rf", run_dir])
