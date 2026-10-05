@@ -1,2 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pacman-rl"
+version = "0.1.0"
+description = "RL agents for pacman 1.0 (1995, Roar Thronaes) over a socket bridge"
+requires-python = ">=3.10"
+license = { text = "GPL-2.0-or-later" }
+# Versions as tested in .venv (torch was installed as the CUDA 13.0 build,
+# 2.14.1+cu130, from the PyTorch index).
+dependencies = [
+    "gymnasium==1.4.0",
+    "torch==2.14.1",
+    "numpy==2.2.6",
+    "PyYAML==6.0.3",
+    "tensorboard==2.21.0",
+    "matplotlib==3.10.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[tool.setuptools]
+packages = ["env", "agents"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]

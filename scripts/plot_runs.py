@@ -95,6 +95,7 @@ def main():
         ax.legend(fontsize=8)
     if baselines.get("heuristic"):
         axes[1].set_yscale("symlog", linthresh=100)  # ghost chains give a heavy tail
+        axes[1].set_ylim(bottom=0)
     fig.tight_layout()
     fig.savefig(os.path.join(args.out_dir, "training.png"), dpi=120)
 
