@@ -84,8 +84,8 @@ void rl_send_state(Pacman *pac,Ghost **gh,Gamedata *da,Bonus *bon) {
   if (j<BOARDHEIGHT-1) buf[n++]=',';
  }
  pac->getxy(&x,&y);
- n+=sprintf(buf+n,"],\"pacman\":{\"x\":%d,\"y\":%d,\"dir\":\"%c\"},\"ghosts\":[",
-            x,y,dirchar(pac->getdir()));
+ n+=sprintf(buf+n,"],\"pacman\":{\"x\":%d,\"y\":%d,\"dir\":\"%c\",\"try_dir\":\"%c\"},\"ghosts\":[",
+            x,y,dirchar(pac->getdir()),dirchar(pac->gettrydir()));
  for(i=0;i<GHOSTS;i++) {
   const char *st;
   switch (gh[i]->getstate()) {

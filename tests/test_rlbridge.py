@@ -87,6 +87,7 @@ def test_state_format(display, tmp_path):
     assert all(len(row) == 33 for row in st["grid"])
     assert set("".join(st["grid"])) <= set("#.o -")
     assert st["pacman"]["dir"] in "UDLRS"
+    assert st["pacman"]["try_dir"] in "UDLRS"  # S on the first tick of a life
     assert len(st["ghosts"]) == 4
     for gh in st["ghosts"]:
         assert gh["state"] in ("normal", "hunted", "eyes")
