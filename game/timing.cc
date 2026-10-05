@@ -2,6 +2,7 @@
 //#include<sys/wait.h>
 #include<stdio.h>
 #include"pac.h"
+#include"arg.h"	// RL bridge
 
 
 #ifdef UNIX
@@ -84,6 +85,7 @@ void timing(int super){         	//do timing/synchronization
 
 super++;				//divisor
 if (!super) pacexit("super zero");	//if would then be division be zero
+if (Argument::fast) return;		// RL bridge: --fast, no sleeping
 do {
 #ifdef UNIX
  gettimeofday(tp2,NULL);		//get the time now

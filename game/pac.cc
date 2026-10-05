@@ -95,6 +95,7 @@ int done; 			//whether game is done
 direction d; 			//the direction pacman moved
 UserInterface* u=UserInterface::instance(Keyboard); 	//the userinterface to the user
 
+if (Argument::has_seed) srandom(Argument::seed); else	// RL bridge: --seed
 srandom(rand());		//reset random number generator
 
 Board* board=Board::instance(); //the pacman board matrix
