@@ -14,6 +14,8 @@ grad_clip: 10.0
 learning_starts: 20000      # env steps before the first update
 train_every: 16             # env steps per gradient step
 target_update: 10000        # env steps between target network syncs
+bf16: true                  # autocast forward passes to bfloat16 (CUDA only)
+compile: true               # torch.compile the loss (~25 s at start)
 
 epsilon_start: 1.0
 epsilon_end: 0.05
@@ -22,7 +24,7 @@ epsilon_steps: 1000000      # linear decay
 network:
   conv_channels: [32, 64, 64]
   conv_kernels: [3, 3, 3]
-  conv_strides: [1, 2, 1]   # 23x33 -> 12x17 after the second conv
+  conv_strides: [1, 2, 2]   # 23x33 -> 12x17 -> 6x9 (64*6*9 = 3456 into the 512 layer)
   vec_hidden: 64
   hidden: 512
 

@@ -35,13 +35,18 @@ def load_config(path=None):
 
 # --- observation packing ---------------------------------------------------
 
+def pack_grids(grids):
+    """float32 (B, C, H, W) grids -> uint8 (B, N_PLANES, PACKED)."""
+    flat = grids.reshape(len(grids), len(CHANNELS), CELLS)
+    counts = np.rint(flat[:, COUNT_CH] * 4).astype(np.uint8)
+    bits = [flat[:, BINARY_CH] > 0]
+    bits += [(counts >> b) & 1 for b in range(COUNT_BITS)]
+    return np.packbits(np.concatenate(bits, 1).astype(np.uint8), axis=-1)
+
+
 def pack_grid(grid):
     """float32 (C, H, W) grid -> uint8 (N_PLANES, PACKED)."""
-    flat = grid.reshape(len(CHANNELS), CELLS)
-    counts = np.rint(flat[COUNT_CH] * 4).astype(np.uint8)
-    bits = [flat[BINARY_CH] > 0]
-    bits += [(counts >> b) & 1 for b in range(COUNT_BITS)]
-    return np.packbits(np.concatenate(bits).astype(np.uint8), axis=-1)
+    return pack_grids(grid[None])[0]
 
 
 class GridDecoder:
@@ -96,12 +101,18 @@ class ReplayBuffer:
         return (self.obs[idx], self.vec[idx], self.act[idx], self.ret[idx],
                 self.next_obs[idx], self.next_vec[idx], self.discount[idx])
 
+    ARRAYS = ("obs", "next_obs", "vec", "next_vec", "act", "ret", "discount")
+
     def state_dict(self):
-        return {k: v for k, v in vars(self).items()}
+        """Only the filled part of the arrays."""
+        d = {k: getattr(self, k)[:self.size] for k in self.ARRAYS}
+        return {**d, "capacity": self.capacity, "size": self.size, "pos": self.pos}
 
     def load_state_dict(self, d):
-        for k, v in d.items():
-            setattr(self, k, v)
+        assert int(d["capacity"]) == self.capacity, "buffer_size differs from the checkpoint"
+        self.size, self.pos = int(d["size"]), int(d["pos"])
+        for k in self.ARRAYS:
+            getattr(self, k)[:self.size] = d[k]
 
 
 class NStep:
@@ -155,40 +166,63 @@ class QNetwork(nn.Module):
 # --- learner -----------------------------------------------------------------
 
 class DQNLearner:
+    """Speed (this is what keeps training above ~5k env steps/s on a laptop
+    RTX 4060): fused Adam, TF32, optional bf16 autocast and torch.compile of
+    the loss, online(s) and online(s') in one forward pass, no host syncs in
+    update() (loss and Q come back as device tensors)."""
+
     def __init__(self, cfg, device):
         self.cfg, self.device = cfg, device
+        cuda = str(device).startswith("cuda")
+        if cuda:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
         self.online = QNetwork(cfg["network"]).to(device)
         self.target = QNetwork(cfg["network"]).to(device)
         self.target.load_state_dict(self.online.state_dict())
         self.target.requires_grad_(False)
-        self.opt = torch.optim.Adam(self.online.parameters(), lr=cfg["lr"], eps=cfg["adam_eps"])
+        self.opt = torch.optim.Adam(self.online.parameters(), lr=cfg["lr"], eps=cfg["adam_eps"],
+                                    fused=cuda)
         self.decode = GridDecoder(device)
+        self.amp = cuda and cfg.get("bf16", False)
+        self._loss = torch.compile(self._loss_fn) if cfg.get("compile", False) else self._loss_fn
 
     def _t(self, x, dtype=None):
         return torch.as_tensor(x, device=self.device, dtype=dtype)
 
     @torch.no_grad()
-    def q_values(self, grids, vecs):
-        """grids: float32 (B, C, H, W) numpy; returns numpy (B, N_ACTIONS)."""
-        return self.online(self._t(grids), self._t(vecs)).cpu().numpy()
+    def q_values(self, packed, vecs):
+        """packed: uint8 (B, N_PLANES, PACKED) numpy; returns numpy (B, N_ACTIONS).
+        Plain fp32: entering torch.autocast costs ~0.1 ms (torch.cuda.is_available()
+        on every enter), more than this tiny forward pass."""
+        return self.online(self.decode(self._t(packed)), self._t(vecs)).cpu().numpy()
+
+    def _loss_fn(self, obs2, vec2, act, ret, discount):
+        """obs2/vec2: s and s' stacked; returns (Huber loss, mean max Q(s))."""
+        n = act.shape[0]
+        x = self.decode(obs2)
+        with torch.autocast("cuda", torch.bfloat16, enabled=self.amp):
+            q_both = self.online(x, vec2)
+            with torch.no_grad():
+                q_target = self.target(x[n:], vec2[n:])
+        q_both, q_target = q_both.float(), q_target.float()
+        q_all = q_both[:n]
+        q = q_all.gather(1, act[:, None]).squeeze(1)
+        with torch.no_grad():
+            best = q_both[n:].argmax(1, keepdim=True)  # double DQN: online picks
+            target = ret + discount * q_target.gather(1, best).squeeze(1)
+        return F.smooth_l1_loss(q, target), q_all.detach().max(1).values.mean()
 
     def update(self, batch):
         obs, vec, act, ret, next_obs, next_vec, discount = batch
-        s, v = self.decode(self._t(obs)), self._t(vec)
-        s2, v2 = self.decode(self._t(next_obs)), self._t(next_vec)
-        act, ret, discount = self._t(act, torch.long), self._t(ret), self._t(discount)
-
-        q_all = self.online(s, v)
-        q = q_all.gather(1, act[:, None]).squeeze(1)
-        with torch.no_grad():
-            best = self.online(s2, v2).argmax(1, keepdim=True)  # double DQN
-            target = ret + discount * self.target(s2, v2).gather(1, best).squeeze(1)
-        loss = F.smooth_l1_loss(q, target)
+        loss, mean_q = self._loss(self._t(np.concatenate([obs, next_obs])),
+                                  self._t(np.concatenate([vec, next_vec])),
+                                  self._t(act, torch.long), self._t(ret), self._t(discount))
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
-        nn.utils.clip_grad_norm_(self.online.parameters(), self.cfg["grad_clip"])
+        nn.utils.clip_grad_norm_(self.online.parameters(), self.cfg["grad_clip"], foreach=True)
         self.opt.step()
-        return loss.item(), q_all.max(1).values.mean().item()
+        return loss.detach(), mean_q
 
     def sync_target(self):
         self.target.load_state_dict(self.online.state_dict())
