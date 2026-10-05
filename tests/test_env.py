@@ -142,3 +142,38 @@ def test_1000_random_steps(env):
 def test_seeds_0_and_1_differ():
     actions = [3] * 300
     assert not same(rollout(0, actions), rollout(1, actions))
+
+
+def test_events_match_game_score():
+    """Score change per step = 10 per dot + 1000 per bonus point + level
+    completion bonus + ghosts (100 * 2^k each, doubling within one super)."""
+    from agents.heuristic_agent import HeuristicAgent
+
+    agent = HeuristicAgent()
+    e = PacmanEnv()
+    totals = dict.fromkeys(["eaten_dot", "ghost_eaten", "level_up", "bonus_eaten"], 0)
+    try:
+        for seed in (9, 42):  # 9: eats a bonus point; 42: levels, long ghost chains
+            obs, info = e.reset(seed=seed)
+            while True:
+                prev = e._state
+                obs, r, term, trunc, info = e.step(agent.act(obs))
+                ev, st = info["events"], e._state
+                for k in totals:
+                    totals[k] += ev[k]
+                rest = st["score"] - prev["score"] - 10 * ev["eaten_dot"]
+                if ev["bonus_eaten"] and prev["bonus"]["type"] == "point":
+                    rest -= 1000
+                if ev["level_up"]:
+                    assert 0 <= rest <= 5000  # remaining level bonus
+                elif ev["ghost_eaten"]:
+                    assert rest >= 100 * ev["ghost_eaten"] and rest % 100 == 0
+                else:
+                    assert rest == 0, (ev, rest)
+                expected = sum(e.cfg["reward"][k] * n for k, n in ev.items())
+                assert r == pytest.approx(expected)
+                if term or trunc:
+                    break
+    finally:
+        e.close()
+    assert all(totals.values()), totals  # every event type was exercised

@@ -4,7 +4,7 @@
 
 | key    | shape          | dtype   | range  |
 |--------|----------------|---------|--------|
-| `grid` | (17, 23, 33)   | float32 | [0, 1] |
+| `grid` | (21, 23, 33)   | float32 | [0, 1] |
 | `vec`  | (3,)           | float32 | see below |
 
 The board is 23 rows x 33 columns (`BOARDHEIGHT`/`BOARDWIDTH` in
@@ -25,14 +25,18 @@ so pacman and ghosts walk through blank cells between the dots.
 | 6 | `pacman_down`  | same, down |
 | 7 | `pacman_left`  | same, left |
 | 8 | `pacman_right` | same, right |
-| 9 | `ghost_normal` | (ghosts in state normal in the cell) / 4 |
-| 10 | `ghost_hunted` | (ghosts in state hunted in the cell) / 4 |
-| 11 | `ghost_eyes`  | (eaten ghosts in the cell) / 4 |
-| 12 | `ghost_up`    | (ghosts in the cell moving up) / 4 |
-| 13 | `ghost_down`  | same, down |
-| 14 | `ghost_left`  | same, left |
-| 15 | `ghost_right` | same, right |
-| 16 | `bonus`       | 1 at the bonus (points or extra life, not distinguished) |
+| 9 | `try_up`     | 1 at pacman if the last direction asked for (`try_dir`) was up |
+| 10 | `try_down`    | same, down |
+| 11 | `try_left`    | same, left |
+| 12 | `try_right`   | same, right |
+| 13 | `ghost_normal` | (ghosts in state normal in the cell) / 4 |
+| 14 | `ghost_hunted` | (ghosts in state hunted in the cell) / 4 |
+| 15 | `ghost_eyes`  | (eaten ghosts in the cell) / 4 |
+| 16 | `ghost_up`    | (ghosts in the cell moving up) / 4 |
+| 17 | `ghost_down`  | same, down |
+| 18 | `ghost_left`  | same, left |
+| 19 | `ghost_right` | same, right |
+| 20 | `bonus`       | 1 at the bonus (points or extra life, not distinguished) |
 
 Notes:
 
@@ -40,7 +44,10 @@ Notes:
   a wall or just respawned, eaten ghosts) sets no direction plane, so all
   four direction planes are 0 there.
 - Pacman's direction is what it is actually doing: after a blocked move it
-  is still, not the requested direction.
+  is still. `try_dir` is the last direction passed to the game (the last
+  action other than N), `S` on the first tick of a life. It does not make
+  pacman turn later: the game has no buffered turns; asking for a direction
+  into a wall stops pacman and N then keeps it standing.
 - Ghost state `normal` covers both the game's random-walk and hunting
   states. `eyes` ghosts sit on their start cell in the ghost house until
   they revive.
@@ -59,3 +66,22 @@ Notes:
 
 One step = one game tick that reads input. While pacman is super it moves
 twice per ghost move, so ghosts move every other step then.
+
+## Reward
+
+Per step, sum of coefficient * count over events (`reward` in
+`configs/env_default.yaml`), counts in `info["events"]`:
+
+| event | detected as | default |
+|---|---|---|
+| `eaten_dot` | dots on the board decreased (same level) | 1 |
+| `eaten_energizer` | superfood decreased (same level) | 2 |
+| `ghost_eaten` | a ghost turned into eyes | 5 |
+| `level_up` | level increased | 50 |
+| `death` | lives decreased | -20 |
+| `bonus_eaten` | the bonus vanished with pacman on its cell | 0 |
+| `step` | every step | -0.02 |
+
+The game's own score stays in `info["score"]`; it gives ghosts
+100 * 2^k within one super period, superfood 0 points and a level
+completion bonus of 5000 minus 5 per tick.

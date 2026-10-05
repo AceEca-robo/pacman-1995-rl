@@ -8,7 +8,7 @@ By default the game runs with --headless (no X11 at all); pass display=":0"
 to watch it in a window.
 
 Observation is a Dict, see docs/observation.md:
-  grid: float32 (17, 23, 33) planes in [0, 1], see CHANNELS
+  grid: float32 (21, 23, 33) planes in [0, 1], see CHANNELS
   vec:  float32 (3,) = [min(lives, 9) / 3, supertime_left / SUPERTIME, level / LEVELS]
 """
 
@@ -36,12 +36,15 @@ MAX_LIVES = 9           # only for the obs bound; the game has no limit
 ACTIONS = [b"U\n", b"D\n", b"L\n", b"R\n", b"N\n"]
 CHANNELS = ("walls", "gate", "food", "superfood",
             "pacman", "pacman_up", "pacman_down", "pacman_left", "pacman_right",
+            "try_up", "try_down", "try_left", "try_right",
             "ghost_normal", "ghost_hunted", "ghost_eyes",
             "ghost_up", "ghost_down", "ghost_left", "ghost_right",
             "bonus")
 CH = {name: i for i, name in enumerate(CHANNELS)}
 DIR_OFFSET = {"U": 0, "D": 1, "L": 2, "R": 3}  # "S" (still) sets no direction plane
 GHOSTS = 4
+EVENTS = ("eaten_dot", "eaten_energizer", "ghost_eaten", "level_up", "death",
+          "bonus_eaten", "step")
 
 
 def _load_config(config):
@@ -184,20 +187,43 @@ class PacmanEnv(gym.Env):
         self._state = st
         self._steps += 1
 
-        r = self.cfg["reward"]
-        reward = (r["k_score"] * (st["score"] - prev["score"])
-                  + r["death_penalty"] * max(0, prev["lives"] - st["lives"])
-                  + r["step_penalty"]
-                  + r["level_bonus"] * max(0, st["level"] - prev["level"]))
+        events = self._events(prev, st)
+        coef = self.cfg["reward"]
+        reward = sum(coef[k] * n for k, n in events.items())
         terminated = bool(st["done"])
         limit = self.cfg["max_episode_steps"]
         truncated = not terminated and limit is not None and self._steps >= limit
-        return self._obs(st), float(reward), terminated, truncated, self._info(st)
+        info = self._info(st)
+        info["events"] = events
+        return self._obs(st), float(reward), terminated, truncated, info
 
     def close(self):
         self._finalizer()
 
-    # --- state -> obs ----------------------------------------------------
+    # --- state -> reward / obs -------------------------------------------
+
+    @staticmethod
+    def _events(prev, st):
+        """What happened between two consecutive states (counts)."""
+        ev = dict.fromkeys(EVENTS, 0)
+        ev["step"] = 1
+        if st["level"] == prev["level"]:
+            # the board is rebuilt on a new level; the first tick of a level
+            # never eats (pacman starts still)
+            before, after = "".join(prev["grid"]), "".join(st["grid"])
+            ev["eaten_dot"] = before.count(".") - after.count(".")
+            ev["eaten_energizer"] = before.count("o") - after.count("o")
+        else:
+            ev["level_up"] = st["level"] - prev["level"]
+        # a ghost turns into eyes only by being eaten (normally from hunted;
+        # also from normal when the energizer and the ghost meet in one tick)
+        ev["ghost_eaten"] = sum(a["state"] != "eyes" and b["state"] == "eyes"
+                                for a, b in zip(prev["ghosts"], st["ghosts"]))
+        ev["death"] = max(0, prev["lives"] - st["lives"])
+        b, p = prev["bonus"], st["pacman"]
+        ev["bonus_eaten"] = int(b is not None and st["bonus"] is None
+                                and (b["x"], b["y"]) == (p["x"], p["y"]))
+        return ev
 
     @staticmethod
     def _obs(st):
@@ -211,6 +237,8 @@ class PacmanEnv(gym.Env):
         grid[CH["pacman"], p["y"], p["x"]] = 1
         if p["dir"] in DIR_OFFSET:
             grid[CH["pacman_up"] + DIR_OFFSET[p["dir"]], p["y"], p["x"]] = 1
+        if p["try_dir"] in DIR_OFFSET:
+            grid[CH["try_up"] + DIR_OFFSET[p["try_dir"]], p["y"], p["x"]] = 1
         for g in st["ghosts"]:
             grid[CH["ghost_" + g["state"]], g["y"], g["x"]] += 1 / GHOSTS
             if g["dir"] in DIR_OFFSET:

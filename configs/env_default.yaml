@@ -1,12 +1,14 @@
 # PacmanEnv (env/pacman_env.py) defaults.
-# Reward per step = k_score * (score delta) + death_penalty * (lives lost)
-#                 + step_penalty + level_bonus * (levels gained).
-# All terms are added as is: penalties are negative numbers.
+# Reward per step = sum over events of coefficient * count (env/pacman_env.py
+# PacmanEnv._events). The game's score is only reported in info["score"].
 reward:
-  k_score: 0.1          # food = 10 points -> +1.0
-  death_penalty: -10.0  # per life lost, the final one included
-  step_penalty: -0.01   # every step
-  level_bonus: 50.0     # per level completed
+  eaten_dot: 1.0
+  eaten_energizer: 2.0
+  ghost_eaten: 5.0      # fixed, no doubling like the game score
+  level_up: 50.0
+  death: -20.0          # per life lost, the final one included
+  bonus_eaten: 0.0      # bonus points/life item; not rewarded for now
+  step: -0.02
 
 # Steps (game ticks) before truncated=True; null = no limit.
 max_episode_steps: 10000
