@@ -61,6 +61,10 @@ eps = 0, checkpoint `best_food.pt`).
   atomically, accepts any row label, and a test checks that rows and "## "
   sections survive an update. The summary table (`scripts/summary_table.py`)
   is a "## Summary of all runs" section at the end of results.md.
+- 13:58 dqn6 finished, no crash, no slowdown. Mean food on seeds 0..19 per
+  500k checkpoint: 11, 26, 49, 92, 99, 104, 102, 111, 112, 114, 115, 122, 123, 123, 125, 129, 131, 131, 130, 132. Ahead of dqn5 at 2M (92 vs 74), behind it from
+  3M to 7M, ahead at the end: best_food.pt = 10M, 131.8 (dqn5: 126.9).
+  Final evaluation started.
 
 ## Ideas for later
 
