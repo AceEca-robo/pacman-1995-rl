@@ -236,6 +236,16 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
 - 01:07 Throughput measured on the idle machine and added to
   docs/results.md: single env 32.4k steps/s (39k on 2026-10-05 with the
   smaller observation of the time).
+- 01:13 Why step 4 failed, checked (analysis only, no new training):
+  - Endgame maps of the fine-tunes (100 games, eps 0, `docs/leftover_dqn8*_eps0.png`):
+    dqn8 now eats the pocket (its dots left in 3 / 1 games) and no cell is
+    left in all games (most often (7,13), 20 games). dqn8s0 still leaves
+    (31,11), (31,9), (31,7), (29,15), (27,15) in all 100 games, dqn8s2 still
+    leaves (27,3..9), (25,9) in all 100: their blind spots did not move.
+  - Prefix coverage (food still on those cells at the prefix end): seed 1's
+    pocket in 14 of 28 prefixes, seed 0's cells in 11 of 28, seed 2's in 0
+    of 28. So seed 2 never saw its region as an endgame, but seed 0 did and
+    still did not learn it; coverage is not the whole story.
 
 ## Unclear points and how they were resolved (night 2)
 
