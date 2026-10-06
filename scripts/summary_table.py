@@ -31,6 +31,7 @@ EARLIER = [  # (run, checkpoint, what changed, per-game file)
     ("ppo0", "best.pt (2.0M)", "PPO, hunger_limit 200, 4 actions", "night_final/final_ppo0_100.jsonl"),
 ]
 LATER = {  # run -> what changed (checkpoint: best_food.pt)
+    "dqn1": "20M steps, eps over 3M; seed 0, picked by food",
     "dqn5": "dqn1 + food-distance channel + steps since food, 10M",
     "dqn6": "dqn5 + n_step 5, gamma 0.995",
 }
@@ -84,7 +85,7 @@ def main():
         base = re.sub(r"s\d+$", "", run)
         what = LATER.get(base, "")
         if base != run:
-            what = f"{base}, seed {run[len(base) + 1:]}"
+            what = f"{base} setup, seed {run[len(base) + 1:]}"
         steps = best_food_steps(run)
         ck = f"best_food.pt ({steps / 1e6:.1f}M)" if steps else "best_food.pt"
         n = nums(load(os.path.join(RUNS, run, "final_eps0.jsonl")))
