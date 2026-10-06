@@ -11,8 +11,9 @@ per-episode stats to runs/<run>/sv_eval_<steps>.jsonl and redraws
 docs/eval.png.
 
 If a run's tmux session disappears before the run reached its total_steps,
-it is restarted once with --resume; a second crash is only logged. Speeds
-under --min-speed steps/s are logged. Everything goes to runs/supervisor.log;
+it is restarted once with --resume (train.py or train_ppo.py, by the run's
+"algo"); a second crash is only logged. A mean speed under --min-speed
+steps/s over the last 20 log lines is logged (at most every 10 min). Everything goes to runs/supervisor.log;
 state (restart counts, done evals) in runs/supervisor_state.json.
 """
 
@@ -95,9 +96,10 @@ def evaluate(run, steps, episodes):
         log(f"{run}: wanted the {steps} checkpoint, copied {got}; skipped")
         os.remove(ck)
         return
-    label = f"dqn {run}@{steps / 1e6:05.2f}M"
+    algo = run_algo(run)
+    label = f"{algo} {run}@{steps / 1e6:05.2f}M"
     out = subprocess.run(
-        [PY, os.path.join(ROOT, "scripts", "evaluate.py"), "--agent", "dqn", "--checkpoint", ck,
+        [PY, os.path.join(ROOT, "scripts", "evaluate.py"), "--agent", algo, "--checkpoint", ck,
          "--episodes", str(episodes), "--seed", "0", "--label", label,
          "--episodes-out", os.path.join(RUNS, run, f"sv_eval_{steps}.jsonl"),
          "--results", RESULTS],
@@ -117,15 +119,28 @@ def plot(runs):
         log(f"plot_runs.py failed: {out.stderr.strip()[-300:]}")
 
 
+def run_algo(run):
+    """"dqn" or "ppo", from the run's config.yaml."""
+    with open(os.path.join(RUNS, run, "config.yaml")) as f:
+        return yaml.safe_load(f).get("algo", "dqn")
+
+
 def restart(run):
-    cmd = (f"cd {ROOT} && {PY} scripts/train.py --run-name {run} --resume "
+    script = "train_ppo.py" if run_algo(run) == "ppo" else "train.py"
+    cmd = (f"cd {ROOT} && {PY} scripts/{script} --run-name {run} --resume "
            f"2>&1 | tee -a runs/{run}.log")
     subprocess.run(["tmux", "new-session", "-d", "-s", run, cmd], check=True)
 
 
-def last_speed(text):
+SPEED_WINDOW = 20  # log lines
+
+
+def recent_speed(text):
+    """Mean steps/s over the last SPEED_WINDOW log lines (None until there are that many)."""
     m = re.findall(r"([\d,]+) steps/s", text)
-    return int(m[-1].replace(",", "")) if m else None
+    if len(m) < SPEED_WINDOW:
+        return None
+    return sum(int(x.replace(",", "")) for x in m[-SPEED_WINDOW:]) / SPEED_WINDOW
 
 
 def main():
@@ -179,25 +194,32 @@ def check(run, st, args, save):
     total = total_steps(run)
     if total is None:
         return
-    finished = f"eval @ {total}:" in text
+    # PPO counts in rollouts of 1024 steps, so its last eval is at or just past total
+    evals_at = [int(s) for s in re.findall(r"eval @ (\d+):", text)]
+    finished = bool(evals_at) and max(evals_at) >= total
 
     steps = read_steps(os.path.join(RUNS, run, "checkpoint.pt"))
     due = [s for s in range(args.every, (steps or 0) + 1, args.every)
            if s not in st["evaluated"]]
     if due:
-        missed = [s for s in due if s != steps]
-        if missed:  # only the latest checkpoint is kept by train.py
+        # the first checkpoint at or after a point stands for it (DQN saves at
+        # exact multiples, PPO at the first rollout past them)
+        target = due[-1]
+        fresh = steps - target < args.every // 2
+        missed = due[:-1] if fresh else due
+        if missed:  # only the latest checkpoint is kept by the training scripts
             log(f"{run}: no checkpoint left for {missed[0]}..{missed[-1]} "
                 f"({len(missed)} points), skipped")
-        if steps in due:
+        if fresh:
             evaluate(run, steps, args.episodes)
             plot(args.runs)
         st["evaluated"].extend(due)
         save()
 
-    speed = last_speed(text)
+    speed = recent_speed(text)
     if speed is not None and speed < args.min_speed and time.time() - st["slow_logged_at"] > 600:
-        log(f"{run}: slow, {speed} steps/s (< {args.min_speed}); no new runs while this lasts")
+        log(f"{run}: slow, {speed:,.0f} steps/s over the last {SPEED_WINDOW} log lines "
+            f"(< {args.min_speed}); no new runs while this lasts")
         st["slow_logged_at"] = time.time()  # at most every 10 min
         save()
 

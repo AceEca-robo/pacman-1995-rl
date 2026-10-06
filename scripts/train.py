@@ -64,6 +64,7 @@ class Collector:
         self.ep_reward = np.zeros(self.n)
         self.ep_len = np.zeros(self.n, int)
         self.ep_level = np.ones(self.n, int)
+        self.ended = self.hungry = 0  # episodes ended / ended by hunger_limit, since last read
 
     def step(self, actions, log_step, prefix="episode"):
         """Returns the number of episodes that ended."""
@@ -87,6 +88,10 @@ class Collector:
             self.ep_level[i] = max(self.ep_level[i], src["level"][i])
             if ended:
                 ended_count += 1
+                hunger = bool(src["hunger"][i]) if "hunger" in src else False
+                self.ended += 1
+                self.hungry += hunger
+                self.writer.add_scalar(f"{prefix}/hunger", float(hunger), log_step)
                 self.writer.add_scalar(f"{prefix}/reward", self.ep_reward[i], log_step)
                 self.writer.add_scalar(f"{prefix}/score", src["score"][i], log_step)
                 self.writer.add_scalar(f"{prefix}/length", self.ep_len[i], log_step)
@@ -188,8 +193,9 @@ def main():
     torch.manual_seed(seed)
     env_cfg = load_env_config(cfg["env_config"])
     n_actions = env_cfg["actions"]
-    # evaluation without shaping, so eval rewards compare across runs
-    eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False}}
+    # evaluation without shaping and hunger_limit, so eval rewards compare across runs
+    eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False},
+                    "hunger_limit": 0}
     learner = DQNLearner(cfg, device, n_actions)
     buffer = make_buffer(cfg)
     rng = np.random.default_rng(seed)
@@ -262,6 +268,9 @@ def main():
                 if per:
                     writer.add_scalar("train/per_beta", per_beta(cfg, steps), steps)
                 msg = f"{steps:>9} steps  eps {eps:.3f}  {sps:,.0f} steps/s  episodes {episodes}"
+                if col.ended:
+                    msg += f"  hunger {col.hungry}/{col.ended}"
+                    col.ended = col.hungry = 0
                 if losses:
                     loss_m = torch.stack(losses).mean().item()
                     q_m = torch.stack(qs).mean().item()

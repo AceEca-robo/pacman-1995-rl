@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 
+import pytest
 import yaml
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,27 +24,38 @@ def kill_run(name):
     subprocess.run(["pkill", "-9", "-f", "--", f"--run-name {name}"])
 
 
-def test_supervisor_evaluates_and_restarts_once(tmp_path):
-    name = f"test-sv-{os.getpid()}"
+TINY = {
+    "dqn": ("train.py", {"base": "dqn.yaml", "total_steps": 200000, "buffer_size": 5000,
+                         "learning_starts": 500, "epsilon_steps": 2000, "eval_every": 1000,
+                         "eval_episodes": 1, "log_every": 1000, "compile": False,
+                         "checkpoint_buffer": False}),
+    # PPO steps come in rollouts of 4 * 64 = 256, so checkpoints miss the 2000 marks
+    "ppo": ("train_ppo.py", {"base": "ppo_hunger.yaml", "total_steps": 200000, "num_envs": 4,
+                             "n_steps": 64, "eval_every": 1000, "eval_episodes": 1,
+                             "log_every": 1000}),
+}
+
+
+@pytest.mark.parametrize("algo", ["dqn", "ppo"])
+def test_supervisor_evaluates_and_restarts_once(tmp_path, algo):
+    name = f"test-sv-{algo}-{os.getpid()}"
     run_dir = os.path.join(ROOT, "runs", name)
+    script, tiny = TINY[algo]
     cfg = tmp_path / "tiny.yaml"
     cfg.write_text(yaml.safe_dump({
-        "base": os.path.relpath(os.path.join(ROOT, "configs", "dqn.yaml"), tmp_path),
-        "total_steps": 200000, "buffer_size": 5000, "learning_starts": 500,
-        "epsilon_steps": 2000, "eval_every": 1000, "eval_episodes": 1, "log_every": 1000,
-        "compile": False, "checkpoint_buffer": False}))
+        **tiny, "base": os.path.relpath(os.path.join(ROOT, "configs", tiny["base"]), tmp_path)}))
     results = tmp_path / "results.md"
     sv = None
     try:
         subprocess.run(["tmux", "new-session", "-d", "-s", name,
-                        f"cd {ROOT} && {PY} scripts/train.py --config {cfg} --run-name {name} "
+                        f"cd {ROOT} && {PY} scripts/{script} --config {cfg} --run-name {name} "
                         f"2>&1 | tee -a runs/{name}.log"], check=True)
         sv = subprocess.Popen([PY, os.path.join(ROOT, "scripts", "supervisor.py"), name,
                                "--every", "2000", "--episodes", "1", "--poll", "0.5",
                                "--results", str(results), "--plot-dir", str(tmp_path),
                                "--log-dir", str(tmp_path)], stdout=subprocess.DEVNULL)
         log = tmp_path / "supervisor.log"
-        assert wait_for(lambda: results.exists() and f"dqn {name}@" in results.read_text(), 120)
+        assert wait_for(lambda: results.exists() and f"{algo} {name}@" in results.read_text(), 120)
         assert wait_for(lambda: (tmp_path / "eval.png").exists(), 60)
         assert any(f.startswith("sv_eval_") for f in os.listdir(run_dir))
 

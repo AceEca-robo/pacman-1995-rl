@@ -1,0 +1,5 @@
+# ppo0: PPO, 8 envs, hunger_limit 200, 4 actions, no shaping, 5M steps.
+base: ppo.yaml
+env_config:
+  actions: 4
+  hunger_limit: 200

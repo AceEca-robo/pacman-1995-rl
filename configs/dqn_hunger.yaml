@@ -1,0 +1,7 @@
+# dqn4: dqn0 setup + hunger_limit 200, 4 actions, no shaping, 5M steps.
+base: dqn.yaml
+total_steps: 5000000
+checkpoint_buffer: false
+env_config:
+  actions: 4
+  hunger_limit: 200

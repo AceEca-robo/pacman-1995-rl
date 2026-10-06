@@ -21,10 +21,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
 from agents.dqn import DQNAgent  # noqa: E402
+from agents.ppo import PPOAgent  # noqa: E402
 from agents.random_agent import RandomAgent  # noqa: E402
 from env.pacman_env import PacmanEnv, load_env_config  # noqa: E402
 
-AGENTS = ("random", "heuristic", "dqn")
+AGENTS = ("random", "heuristic", "dqn", "ppo")
 HEADER = ("| agent | episodes | seeds | mean reward | median reward | mean score "
           "| median score | max score | level 1 cleared | level 1 without death "
           "| mean length | truncated | time, s | commit |")
@@ -49,9 +50,11 @@ def make_agent(args):
         label = "heuristic" if args.actions == 5 else "heuristic (4 actions)"
         return HeuristicAgent(args.agent_config, args.actions), label
     if not args.checkpoint:
-        sys.exit("--agent dqn needs --checkpoint")
+        sys.exit(f"--agent {args.agent} needs --checkpoint")
     path = os.path.abspath(args.checkpoint)
     label = os.path.relpath(path, os.path.join(ROOT, "runs")) if path.startswith(ROOT) else path
+    if args.agent == "ppo":
+        return PPOAgent(path, seed=args.seed), f"ppo {label}"
     agent = DQNAgent(path, epsilon=args.epsilon, seed=args.seed)
     return agent, f"dqn {label}"
 
@@ -166,7 +169,8 @@ def update_results(path, res):
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--agent", choices=AGENTS, required=True)
-    p.add_argument("--checkpoint", help="dqn only: best.pt or checkpoint.pt from scripts/train.py")
+    p.add_argument("--checkpoint", help="dqn/ppo: best.pt or checkpoint.pt from scripts/train.py "
+                                        "or scripts/train_ppo.py")
     p.add_argument("--epsilon", type=float, default=0.0, help="dqn only: random action probability")
     p.add_argument("--label", help="row label in the results table (default from the agent)")
     p.add_argument("--episodes-out", help="write per-episode stats (incl. steps without food) "

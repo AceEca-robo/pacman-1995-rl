@@ -1,0 +1,32 @@
+# PPO (agents/ppo.py, scripts/train_ppo.py). Step counts are env steps
+# summed over the parallel envs.
+algo: ppo
+total_steps: 5000000
+num_envs: 8                 # SyncVectorEnv copies
+n_steps: 128                # steps per env per rollout (1024 per update)
+epochs: 4
+minibatches: 4              # 256 samples each
+gamma: 0.99
+gae_lambda: 0.95
+clip: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+lr: 0.00025
+anneal_lr: true             # linear to 0 over total_steps
+adam_eps: 0.00001
+max_grad_norm: 0.5
+normalize_reward: true      # learning signal / running std of the discounted return
+env_config: null            # null = configs/env_default.yaml
+
+network:                    # same trunk as configs/dqn.yaml
+  conv_channels: [32, 64, 64]
+  conv_kernels: [3, 3, 3]
+  conv_strides: [1, 2, 2]
+  vec_hidden: 64
+  hidden: 512
+
+eval_every: 250000
+eval_episodes: 20
+eval_seed: 1000000
+best_metric: mean_reward
+log_every: 10000
