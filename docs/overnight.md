@@ -199,4 +199,10 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   gets 1 * (1 + 20 / 1) = 21. Only dots get the bonus, not energizers.
 - Training episodes from a prefix start at the prefix end; the replayed
   steps are not given to the agent.
+- README "patch of ~12 lines": the real size is 63 added / 4 removed lines
+  in 10 original files (mostly argument parsing in arg.cc) plus the new
+  rlbridge.cc/.h (157 lines); the README says that.
+- README throughput "39k steps/s": measured on 2026-10-05 (git log, commit
+  b13cbc3) but not recorded in docs/results.md, so the README says TODO
+  until it is measured again and added there.
 
