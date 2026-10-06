@@ -99,7 +99,10 @@ the bottom-right side loop and leaves its two dots in every game; seeds 0 and
 |---|---|
 | ![](docs/leftover_heuristic.png) | ![](docs/leftover_dqn1s1_eps0.png) |
 
-GIF of the best agent: TODO (`scripts/play.py --record`, 400 steps, Xvfb).
+dqn1 seed 1 (best_food.pt, greedy), the first 400 ticks of seed 0 in real
+time (`scripts/play.py --record`, Xvfb):
+
+![dqn1 seed 1 playing](docs/dqn1s1.gif)
 
 ## What worked, what did not
 
