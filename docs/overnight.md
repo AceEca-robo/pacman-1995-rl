@@ -83,6 +83,11 @@ eps = 0, checkpoint `best_food.pt`).
   85.4, none stuck (the best mean reward of all runs). Without ghosts it stops
   after 92 (eps 0) / 111 (eps 0.05) food items. dqn1s1/dqn1s2 at 1.2M,
   1.65-1.73k steps/s each while this evaluation ran next to them.
+- 15:02 Seeds diverge. dqn1s1 follows seed 0 (mean food 141 at 6M on the
+  supervisor's games). dqn1s2 is stuck at ~100 food since 2.5M; train.py's
+  own evals of it went negative (mean reward -15 to +13 at 5-5.75M, mean
+  length 2200-3600 steps: standing again). Both at ~6M, 1.76-1.91k
+  steps/s, no crash.
 
 ## Ideas for later
 
