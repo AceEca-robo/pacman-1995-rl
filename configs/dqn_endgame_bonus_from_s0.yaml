@@ -1,0 +1,4 @@
+# dqn8s0: dqn8's fine-tune (prefixes + endgame dot reward) started from dqn1
+# seed 0's best_food.pt instead of seed 1's, for the 3-seed statistics.
+base: dqn_endgame_bonus.yaml
+init_checkpoint: runs/dqn1/best_food.pt

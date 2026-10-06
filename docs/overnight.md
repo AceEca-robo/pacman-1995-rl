@@ -207,6 +207,20 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   evaluations up to 4.5M. Pocket steps in training: dqn7 and dqn8 enter the
   pocket now (401 / 604 steps in the first ~1.7M; dqn1s1 had 0 in 100 games).
   Final 100-game evaluations started automatically.
+- 23:52 **dqn8 final (best_food.pt = 3.5M), 100 games, no prefixes: SUCCESS.**
+  eps 0: level 1 cleared **67%** (66% on seeds 20..99), mean food 246.2,
+  mean reward 214.8, median score 5030, 1% stuck. eps 0.05: level 1 only
+  4%, food 159.5, reward 102.4: random moves now cost the precise endgame.
+  Without ghosts it still stops for good (32 food at eps 0).
+- 23:58 **dqn7 final (best_food.pt = 4.0M): FAILURE** by the night-2
+  criteria: eps 0 food 169.4 (< 170), level 1 0%, reward 40.4, 29% stuck;
+  eps 0.05 food 161.7, level 1 0%. (final_eval.py prints "SUCCESS" by the
+  afternoon's food >= 160 rule; the night-2 verdict is from
+  `scripts/night2_verdict.py`.) Prefixes alone did not clear the level; the
+  endgame dot reward did.
+- 23:59 **Step 4, SUCCESS branch**: dqn8's config fine-tuned from dqn1 seed 0
+  (dqn8s0) and seed 2 (dqn8s2) best_food.pt, in parallel, 5M steps each,
+  supervisor started first. Disk 29 GB free, GPU 15 MB used.
 
 ## Unclear points and how they were resolved (night 2)
 
@@ -225,6 +239,9 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
 - dqn7's crash was a code bug before any checkpoint existed, so "one
   --resume per crash" could not apply. Conservative choice: fix, test and
   restart both runs from scratch (nothing to lose), and say so here.
+- Step 4 "the same 5M from seed 0 and seed 2": only the starting network
+  differs; the training seed stays 0 as for dqn8, the prefixes and all other
+  settings are the same (`configs/dqn_endgame_bonus_from_s0/s2.yaml`).
 - README throughput "39k steps/s": measured on 2026-10-05 (git log, commit
   b13cbc3) but not recorded in docs/results.md, so the README says TODO
   until it is measured again and added there.
