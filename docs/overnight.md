@@ -140,3 +140,22 @@ eps = 0, checkpoint `best_food.pt`).
 - The two dots at (25, 19) and (27, 19) that dqn1s1 never eats: check
   whether the agent ever visits that pocket in training (state visitation
   counts), and whether episodes starting there would fix it.
+
+# Night session 2026-10-06 22:39 .. 2026-10-07 08:00: clearing level 1
+
+Goal: clear level 1. Starting point: dqn1s1/best_food.pt eats 168.8 of 172
+and leaves the same two dots (25,19), (27,19) in every checked game; seeds
+differ (101-169). Plan as given: 1) endgame diagnostics, 2) endgame
+prefixes (heuristic play up to <= 15 food left, replayed in PacmanEnv
+resets), 3) fine-tunes dqn7 (prefixes) and dqn8 (prefixes + endgame dot
+reward) from dqn1s1/best_food.pt, 4) branch on the result, 5) README draft.
+Rules unchanged (<= 2 runs in parallel, game/ untouched, disk > 10 GB and
+GPU < 6 GB before a launch, checkpoint_buffer false, one --resume per crash,
+best_food.pt, 100-game evaluations with eps 0 and 0.05).
+
+## Chronology (night 2)
+
+- 22:39 Start. Disk 30 GB free, GPU 15 MB of 8 GB used, nothing running.
+
+## Unclear points and how they were resolved (night 2)
+
