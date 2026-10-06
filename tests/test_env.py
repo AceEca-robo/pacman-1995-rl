@@ -285,3 +285,53 @@ def test_no_ghosts_stay_home():
                 break
     finally:
         e.close()
+
+
+def test_hunger_limit_ends_standing_still():
+    e = PacmanEnv(config={"hunger_limit": 15, "ghosts": False})
+    try:
+        e.reset(seed=0)
+        for t in range(1, 16):
+            _, r, term, trunc, info = e.step(0)  # up from the start cell: a wall
+            assert e._state["pacman"]["dir"] == "S"
+            if t < 15:
+                assert not term and not info["hunger"]
+        assert term and info["hunger"] and not trunc
+        assert r == pytest.approx(-20.0 - 0.02)
+        _, info = e.reset()  # the game was not over: a new one is started
+        assert (info["score"], info["lives"]) == (0, 3)
+    finally:
+        e.close()
+
+
+def test_hunger_counter_resets_on_food():
+    e = PacmanEnv(config={"hunger_limit": 3, "ghosts": False})
+    try:
+        e.reset(seed=0)
+        hungry = []
+        for a in [3, 3, 3, 3, 3, 3]:  # right along the dots of the start row
+            _, _, term, _, info = e.step(a)
+            hungry.append(e._hungry)
+            assert not info["hunger"]
+        assert min(hungry) == 0
+    finally:
+        e.close()
+
+
+def test_hunger_limit_zero_changes_nothing():
+    actions = np.random.default_rng(3).integers(5, size=1500).tolist()
+    runs = []
+    for cfg in (None, {"hunger_limit": 0}):
+        e = PacmanEnv(config=cfg)
+        try:
+            out = [e.reset(seed=4)[0]]
+            for a in actions:
+                obs, r, term, trunc, info = e.step(a)
+                assert not info["hunger"]
+                out.append((obs, r, term, trunc))
+                if term or trunc:
+                    out.append(e.reset()[0])
+        finally:
+            e.close()
+        runs.append(out)
+    assert same(runs[0], runs[1])

@@ -169,6 +169,7 @@ class PacmanEnv(gym.Env):
         self._k_dist, self._shaping_gamma = shaping.get("k_dist", 0.0), shaping.get("gamma", 0.99)
         self._neighbours = {}  # maze layout -> passable neighbour lists
         self._d_max = d_max() if self._shaping else None
+        self._hunger_limit = self.cfg.get("hunger_limit") or 0
         self.observation_space = spaces.Dict({
             "grid": spaces.Box(0.0, 1.0, (len(CHANNELS), HEIGHT, WIDTH), np.float32),
             # lives can exceed 3 through bonus lives, clipped at MAX_LIVES
@@ -246,6 +247,7 @@ class PacmanEnv(gym.Env):
             if not (self._fresh and self._seed == seed):
                 self._restart_game(seed)
         elif not self._fresh and not (self._state and self._state["done"]):
+            # also after a hunger termination
             # mid-game (truncated or reset early): the game cannot be reset
             # from outside, start a new process
             self._restart_game(int(self.np_random.integers(2**31 - 1)))
@@ -255,6 +257,7 @@ class PacmanEnv(gym.Env):
             self._res["conn"].sendall(ACTIONS[4])
         self._state = self._recv()
         self._steps = 0
+        self._hungry = 0  # steps since pacman last ate a dot or an energizer
         self._phi = self._potential(self._state) if self._shaping else 0.0
         return self._obs(self._state), self._info(self._state)
 
@@ -273,6 +276,15 @@ class PacmanEnv(gym.Env):
         coef = self.cfg["reward"]
         reward = sum(coef[k] * n for k, n in events.items())
         terminated = bool(st["done"])
+        hunger = False
+        if self._hunger_limit:
+            ate = events["eaten_dot"] or events["eaten_energizer"]
+            self._hungry = 0 if ate else self._hungry + 1
+            if self._hungry >= self._hunger_limit and not terminated:
+                # ends the episode like a death; the game itself goes on and
+                # is restarted by the next reset()
+                hunger = terminated = True
+                reward += coef["death"]
         shaping = self._shape(st, terminated) if self._shaping else 0.0
         reward += shaping
         limit = self.cfg["max_episode_steps"]
@@ -280,6 +292,7 @@ class PacmanEnv(gym.Env):
         info = self._info(st)
         info["events"] = events
         info["shaping"] = shaping
+        info["hunger"] = hunger
         return self._obs(st), float(reward), terminated, truncated, info
 
     def close(self):

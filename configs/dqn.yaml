@@ -46,6 +46,6 @@ network:
 eval_every: 250000
 eval_episodes: 20
 eval_seed: 1000000          # eval episode i uses env seed eval_seed + i
-best_metric: reward         # median eval episode reward (or: score)
+best_metric: mean_reward    # mean eval reward; or median_reward (dqn0..dqn3b used it), median_score
 checkpoint_buffer: true     # save the replay buffer with checkpoints (~3.3 GB)
 log_every: 10000            # env steps between scalar logs

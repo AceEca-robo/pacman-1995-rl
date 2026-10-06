@@ -138,6 +138,16 @@ def evaluate(learner, envs, cfg):
     return sorted(results, key=lambda x: x["seed"])
 
 
+def best_metric(name, results):
+    """Value to pick best.pt by. "mean_reward" (default since dqn4: a median
+    ignores games stuck until the step limit while they are under half),
+    "median_reward" / "median_score"; old configs say "reward" / "score"."""
+    name = {"reward": "median_reward", "score": "median_score"}.get(name, name)
+    stat, key = name.split("_")
+    values = [r[key] for r in results]
+    return float(np.mean(values) if stat == "mean" else np.median(values))
+
+
 def save_npz(d, path):
     with open(path, "wb") as f:  # a file object: np.savez would append .npz to a name
         np.savez(f, **d)
@@ -266,7 +276,7 @@ def main():
             if steps >= next_eval or steps >= cfg["total_steps"]:
                 t0 = time.perf_counter()
                 res = evaluate(learner, eval_envs, cfg)
-                metric = float(np.median([r[cfg["best_metric"]] for r in res]))
+                metric = best_metric(cfg["best_metric"], res)
                 summary = {
                     "steps": steps,
                     "median_reward": float(np.median([r["reward"] for r in res])),

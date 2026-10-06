@@ -11,7 +11,10 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | random | 100 | 0..99 | -53.4 | -54.0 | 92 | 80 | 310 | 0% | 0% | 129 | 0% | 1.5 | bae470e |
 | heuristic | 100 | 0..99 | 465.5 | 401.2 | 16999 | 11825 | 221375 | 82% | 21% | 1244 | 0% | 17.6 | bae470e |
 | dqn dqn0/best.pt | 100 | 0..99 | 61.9 | 61.8 | 1423 | 1360 | 2950 | 0% | 0% | 848 | 0% | 30.4 | 5d22ce4 |
-| dqn dqn1/best.pt | 100 | 0..99 | 49.1 | 70.1 | 1688 | 1580 | 3180 | 0% | 0% | 2924 | 15% | 95.2 | af91590 |
+| dqn dqn1/best.pt (11.0M, by mean) | 100 | 0..99 | 65.7 | 71.9 | 1696 | 1605 | 2990 | 0% | 0% | 1875 | 3% | 115.2 | a5cfce0 |
+| dqn dqn1/best_median.pt, no ghosts | 50 | 0..49 | -143.0 | -143.0 | 530 | 530 | 530 | 0% | 0% | 10000 | 100% | 257.8 | a5cfce0 |
+| dqn dqn1/best_median.pt | 100 | 0..99 | 49.1 | 70.1 | 1688 | 1580 | 3180 | 0% | 0% | 2924 | 15% | 95.2 | af91590 |
+| dqn dqn1/best_median.pt, 50 games | 50 | 0..49 | 46.0 | 67.3 | 1724 | 1590 | 3180 | 0% | 0% | 3104 | 16% | 95.4 | a5cfce0 |
 | dqn dqn1@08.00M | 20 | 0..19 | 58.7 | 63.8 | 1606 | 1480 | 2880 | 0% | 0% | 1634 | 0% | 35.1 | cbc1d8a |
 | dqn dqn1@08.50M | 20 | 0..19 | 59.2 | 63.8 | 1552 | 1475 | 2430 | 0% | 0% | 1584 | 0% | 32.1 | af91590 |
 | dqn dqn1@09.00M | 20 | 0..19 | 55.5 | 65.2 | 1620 | 1535 | 2410 | 0% | 0% | 1991 | 0% | 39.5 | af91590 |
@@ -79,3 +82,27 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
   agent still played randomly, and loss went up to 3.7 while its own data
   corrected that. Its games are longer (1088 vs 848 steps) for the same
   reward: more time spent without eating.
+
+## Diagnostics: standing still without ghosts (2026-10-06)
+
+`configs/env_noghosts.yaml` (game `--no-ghosts`: the ghosts stay in their
+house, pacman cannot die), no shaping, 5 actions, greedy. Without ghosts the
+game is deterministic, so all games of one agent are the same game.
+
+| agent | games | mean reward | median score | max score | level 1 cleared | food eaten | after last food | in 30+ gaps | stuck (10000 steps) |
+|---|---|---|---|---|---|---|---|---|---|
+| dqn1/best_median.pt (13.25M), ghosts | 50 | 46.0 | 1590 | 3180 | 0% | 152 | 836 | 74% | 16% |
+| dqn1/best_median.pt (13.25M), no ghosts | 50 | -143.0 | 530 | 530 | 0% | 55 | 9886 | 99% | 100% |
+| dqn1/best.pt (11.0M), no ghosts | 3 | -110.0 | 820 | 820 | 0% | 86 | 9809 | 98% | 100% |
+| dqn0/best.pt, no ghosts | 3 | -176.0 | 220 | 220 | 0% | 23 | 9953 | 100% | 100% |
+
+Without ghosts every agent stops for good, earlier than with ghosts: dqn1
+13.25M eats 55 food items in 114 steps, then stands at (23, 21) against the
+bottom wall choosing N, with four dots and an energizer next to it in the
+same row, until the step limit. So it does not stand to hide from ghosts.
+It looks like a fixed point of the greedy policy: when pacman stands, the
+observation stops changing (nothing else moves without ghosts), so the same
+action is chosen again forever. With ghosts their moves change the
+observation and usually break the loop (8 of these 50 games with ghosts
+still hit the limit). Caveat: ghosts frozen in the house are something the
+network never saw during training.

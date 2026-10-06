@@ -90,3 +90,12 @@ def test_resume_without_buffer(tmp_path):
         assert re.search(r"resumed at \d+ steps, buffer 0", out.stdout), out.stdout
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_best_metric():
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from train import best_metric
+    res = [{"reward": r, "score": s} for r, s in [(60, 1), (70, 2), (80, 3), (-200, 4), (-200, 5)]]
+    assert best_metric("mean_reward", res) == -38.0
+    assert best_metric("reward", res) == best_metric("median_reward", res) == 60.0
+    assert best_metric("score", res) == 3.0

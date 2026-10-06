@@ -25,6 +25,11 @@ shaping:
 # 5: U/D/L/R/N (N keeps the direction); 4: U/D/L/R only.
 actions: 5
 
+# End the episode after this many steps without eating a dot or an
+# energizer, with the death reward (reward.death); info["hunger"] = True.
+# 0 = off.
+hunger_limit: 0
+
 # false: the ghosts never leave their house (game --no-ghosts), so pacman
 # cannot die. Diagnostics only.
 ghosts: true
