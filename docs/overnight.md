@@ -32,6 +32,10 @@ eps = 0, checkpoint `best_food.pt`).
   starts from now on). dqn5 so far, mean food on seeds 0..19 per checkpoint:
   16 (0.5M), 36, 46, 74, 101, 113, **123 (3.5M)**, 119, 123, 119, 119, 121,
   121 (6.5M): flat since 3.5M while the score keeps rising (ghosts).
+- 12:30 dqn5 finished, no crash. Mean food per checkpoint kept rising
+  slowly after the plateau: 121 (6.5M) .. 127 (10M). best_food.pt = 10M
+  (126.9 on seeds 0..19). Evaluations at 8M, 9.5M, 10M had 10-20% of games
+  stuck until the 10000-step limit. Final evaluation started.
 
 ## Ideas for later
 
