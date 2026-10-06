@@ -87,7 +87,10 @@ dots + energizers eaten per game, 172 on level 1. From `docs/results.md`
 | dqn1, 20M steps, 3 seeds (mean +- std) | best_food.pt | 140.6 +- 28.5 | 0% | 23.4 +- 37.4 | 1668 +- 157 |
 | dqn1 seed 1 (best single run) | best_food.pt | 168.8 | 0% | 56.1 | 1855 |
 | dqn1 seed 1, eps 0.05 | best_food.pt | 159.4 | 0% | 99.0 | - |
-| dqn7 / dqn8, endgame fine-tunes of dqn1 seed 1 | best_food.pt | TODO | TODO | TODO | TODO |
+| dqn7: dqn1 seed 1 fine-tuned on endgame prefixes, 5M | best_food.pt | 169.4 | 0% | 40.4 | 1760 |
+| **dqn8: dqn7 + endgame dot reward** | best_food.pt | **246.2** | **67%** | **214.8** | **5030** |
+| dqn8, eps 0.05 | best_food.pt | 159.5 | 4% | 102.4 | - |
+| dqn8 setup from dqn1 seeds 0, 1, 2 (mean +- std) | best_food.pt | TODO | TODO | TODO | TODO |
 
 Training curves: `docs/training.png`; evaluation curves: `docs/eval.png`.
 
@@ -99,10 +102,11 @@ the bottom-right side loop and leaves its two dots in every game; seeds 0 and
 |---|---|
 | ![](docs/leftover_heuristic.png) | ![](docs/leftover_dqn1s1_eps0.png) |
 
-dqn1 seed 1 (best_food.pt, greedy), the first 400 ticks of seed 0 in real
-time (`scripts/play.py --record`, Xvfb):
+dqn8 (best_food.pt, greedy), the first 400 ticks of seed 0 in real time
+(`scripts/play.py --record`, Xvfb); `docs/dqn1s1.gif` shows its starting
+point, dqn1 seed 1:
 
-![dqn1 seed 1 playing](docs/dqn1s1.gif)
+![dqn8 playing](docs/dqn8.gif)
 
 ## What worked, what did not
 
@@ -114,15 +118,24 @@ Worked:
 - Choosing checkpoints by food eaten instead of mean reward, and by mean
   instead of median (a median hides games stuck until the step limit).
 
+- Clearing level 1 (dqn8): fine-tuning the best DQN with episodes that start
+  near the end of level 1 (replayed heuristic openings with <= 15 food left,
+  `data/endgame_prefixes.json`, half of the resets) **and** dots worth more
+  as the board empties (`1 + 20 / max(food left, 1)`): level 1 cleared in
+  67% of 100 greedy games, from 0%.
+
 Did not work (each one seed unless noted, `docs/results.md`):
 - Heuristic warm start of the replay buffer (dqn2): same at 5M, slower at 1M.
 - Potential-based distance shaping (dqn3b), hunger limit (dqn4), PPO (ppo0).
 - A food-distance plane and steps-since-food (dqn5), plus 5-step returns and
   gamma 0.995 (dqn6): below plain dqn1 at the same step count.
-- Endgame curriculum and endgame dot reward (dqn7, dqn8): TODO.
+- The endgame prefixes alone (dqn7): 169.4 food, level 1 never cleared.
+- eps 0.05 with dqn8: level 1 cleared in only 4% of games; the precise
+  endgame does not tolerate random moves.
 
-No agent has cleared level 1 (TODO: unless dqn7/dqn8 do). Seeds differ more
-than any change tried: the same dqn1 config gives 101.5 to 168.8 food.
+Before dqn8 no agent cleared level 1. Seeds differ more than most changes
+tried: the same dqn1 config gives 101.5 to 168.8 food. Whether dqn8's result
+holds from the other seeds: TODO (dqn8s0, dqn8s2).
 
 ## Known problem: a fixed point of the greedy policy
 
@@ -139,7 +152,8 @@ From "Ideas for later" in `docs/overnight.md`:
 - at least 3 seeds per config: the seed spread is larger than the effects;
 - a little randomness as part of the policy, or sampling when the
   observation repeats;
-- a reward that values the last dots more (TODO: see dqn8);
+- (done in dqn8: a reward that values the last dots more, with endgame
+  starts; it cleared the level)
 - separate the effects of the dqn5 observation parts and of the shorter
   epsilon schedule;
 - a separate seed range for checkpoint selection.
