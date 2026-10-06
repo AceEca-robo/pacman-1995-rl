@@ -201,6 +201,8 @@ class PacmanEnv(gym.Env):
             cmd = [self._binary, "--rl", path, "--seed", str(game_seed)]
             if self._fast:
                 cmd.append("--fast")
+            if not self.cfg.get("ghosts", True):
+                cmd.append("--no-ghosts")
             env = dict(os.environ)
             if self._display is None:
                 cmd.append("--headless")

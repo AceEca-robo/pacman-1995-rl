@@ -9,6 +9,7 @@ char** Argument::args=0;
 char* Argument::rl_socket=0;	// RL bridge
 int Argument::fast=0;		// RL bridge
 int Argument::headless=0;	// RL bridge
+int Argument::no_ghosts=0;	// RL bridge
 int Argument::has_seed=0;	// RL bridge
 int Argument::seed=0;		// RL bridge
 
@@ -22,6 +23,7 @@ for(i=0;i<c;i++) {		// RL bridge
  if (i>0 && !strcmp(s[i],"--rl") && i+1<c) rl_socket=s[++i];
  else if (i>0 && !strcmp(s[i],"--fast")) fast=1;
  else if (i>0 && !strcmp(s[i],"--headless")) headless=1;
+ else if (i>0 && !strcmp(s[i],"--no-ghosts")) no_ghosts=1;
  else if (i>0 && !strcmp(s[i],"--seed") && i+1<c) { has_seed=1; seed=atoi(s[++i]); }
  else rest[n++]=s[i];
 }

@@ -270,3 +270,18 @@ def test_four_actions():
             e.step(4)
     finally:
         e.close()
+
+
+def test_no_ghosts_stay_home():
+    e = PacmanEnv(config={"ghosts": False})
+    try:
+        e.reset(seed=0)
+        start = [(g["x"], g["y"]) for g in e._state["ghosts"]]
+        for a in np.random.default_rng(0).integers(5, size=2000):
+            _, _, term, trunc, info = e.step(a)
+            assert [(g["x"], g["y"]) for g in e._state["ghosts"]] == start
+            assert info["events"]["death"] == 0
+            if term or trunc:
+                break
+    finally:
+        e.close()

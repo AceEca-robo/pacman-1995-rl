@@ -25,6 +25,10 @@ shaping:
 # 5: U/D/L/R/N (N keeps the direction); 4: U/D/L/R only.
 actions: 5
 
+# false: the ghosts never leave their house (game --no-ghosts), so pacman
+# cannot die. Diagnostics only.
+ghosts: true
+
 # Steps (game ticks) before truncated=True; null = no limit.
 max_episode_steps: 10000
 

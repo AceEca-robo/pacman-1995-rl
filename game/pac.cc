@@ -142,9 +142,11 @@ while (done==0 && da->getlives() && !da->eatenall()) {
 				// and while not all food eaten
 
  u->write(1,8,da->getlives(),8);
+ if (!Argument::no_ghosts)	// RL bridge: --no-ghosts
  for(i=0;i<GHOSTS;i++) 		//let all ghosts look for pacman
   gh[i]->lookforpac(&pac);
  g=pac.go(d,da); 		//let pacman go direction d
+ if (!Argument::no_ghosts)	// RL bridge: --no-ghosts
  for(i=0;i<GHOSTS;i++)
   gh[i]->go(&pac); 		//let the ghosts move
  check(board,da,&pac,gh,bon);	// checks whether pacman has eaten the bonus, or pacman or some ghost have met and one of them must "die" 
