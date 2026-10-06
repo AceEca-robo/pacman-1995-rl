@@ -32,7 +32,8 @@ def run_eval(run, ck, label, out, episodes, epsilon, env_config=None):
     import torch
     algo = torch.load(ck, map_location="cpu", weights_only=False).get("algo", "dqn")
     cmd = [PY, os.path.join(ROOT, "scripts", "evaluate.py"), "--agent", algo, "--checkpoint", ck,
-           "--episodes", str(episodes), "--seed", "0", "--label", label, "--episodes-out", out]
+           "--episodes", str(episodes), "--seed", "0", "--label", f"{algo} {label}",
+           "--episodes-out", out]
     if epsilon:
         cmd += ["--epsilon", str(epsilon)]
     if env_config:
