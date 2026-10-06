@@ -174,6 +174,29 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   3 steps with eps 0.05. Seeds 0 and 2 do go there; they have blind spots of
   their own elsewhere (each leaves its own cells in all 100 games). So every
   seed learned one fixed route with a region it never visits.
+- 22:45 **Step 2**: `tools/record_prefixes.py` kept 28 of 100 seeds (the
+  heuristic lost a life before <= 15 food left in the other 72), prefixes of
+  395..533 steps, `data/endgame_prefixes.json`. In 14 of the 28 a pocket dot
+  is still on the board at the prefix end. PacmanEnv `prefix_prob` replays
+  a random prefix on reset (tested: <= 15 food, 3 lives, level 1;
+  prefix_prob 0 changes nothing). `endgame_dot` reward option (tested).
+  train.py: `init_checkpoint`, `track_cells` (pocket steps in each log line),
+  prefixed-episode count; evaluation without prefixes and bonus. 56 tests pass.
+- 22:48 **Step 3** started: supervisor (dqn7, dqn8), then dqn7
+  (`configs/dqn_endgame.yaml`: from dqn1s1/best_food.pt, prefix_prob 0.5,
+  5M steps, eps 0.1 -> 0.05 over 1M, lr 5e-5) and dqn8
+  (`configs/dqn_endgame_bonus.yaml`: dqn7 + endgame dot reward k = 20).
+  Disk 30 GB free, GPU 15 MB used before the launch.
 
 ## Unclear points and how they were resolved (night 2)
+
+- "<= 15 points left": counted as food items (dots + energizers) on the
+  board, the same unit as the food metric.
+- Fine-tune: online and target networks start from best_food.pt; the
+  optimizer, replay buffer, step counter and schedules start fresh
+  (learning_starts 20000 steps before the first update, as in dqn.yaml).
+- dqn8 "remaining": food items left after the dot is eaten; the last dot
+  gets 1 * (1 + 20 / 1) = 21. Only dots get the bonus, not energizers.
+- Training episodes from a prefix start at the prefix end; the replayed
+  steps are not given to the agent.
 
