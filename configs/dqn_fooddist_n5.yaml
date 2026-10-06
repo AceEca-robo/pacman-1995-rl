@@ -1,0 +1,5 @@
+# dqn6 (FAILURE branch of the autonomous session): dqn5 + 5-step returns and
+# gamma 0.995, 10M steps.
+base: dqn_fooddist.yaml
+n_step: 5
+gamma: 0.995
