@@ -51,7 +51,7 @@ eps = 0, checkpoint `best_food.pt`).
   (`configs/dqn_fooddist_n5.yaml`). Decision for a case the plan does not
   name: if dqn6 is SUCCESS or PARTIAL, seeds 1 and 2 are run for dqn6 (as in
   the other branches); only FAILURE leads to seeds 1 and 2 of dqn1.
-- 13:05 **Incident (my bug), fixed.** The first, failed run of
+- 12:49 **Incident (my bug), fixed.** The first, failed run of
   `final_eval.py` for dqn5 (row label without the agent type) made
   `evaluate.py` crash while rewriting docs/results.md: it had already opened
   the file for writing, so the file was left with only its header. That
