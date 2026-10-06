@@ -88,6 +88,9 @@ eps = 0, checkpoint `best_food.pt`).
   own evals of it went negative (mean reward -15 to +13 at 5-5.75M, mean
   length 2200-3600 steps: standing again). Both at ~6M, 1.76-1.91k
   steps/s, no crash.
+- 17:03 dqn1s1 at 17.6M (best_food.pt = 11M, 165.2 on seeds 0..19),
+  dqn1s2 at 16.5M (best 11.5M, 101.0), both ~1.5k steps/s, no crash. Final
+  evaluations set to start by themselves when each run finishes.
 
 ## Ideas for later
 
@@ -102,3 +105,17 @@ eps = 0, checkpoint `best_food.pt`).
   learns to hunt ghosts rather than to clear the board; a reward that values
   the last dots more (e.g. a bonus growing as food runs out) would target
   that directly.
+- Seeds matter as much as any change tried: with the same config dqn1s1
+  reaches ~165 food and dqn1s2 stays at ~100. Comparing configs on one seed
+  (everything before dqn1s1/s2) cannot separate small effects; 3 seeds per
+  config would be the minimum.
+- The food-distance channel and steps-since-food did not help (dqn5/dqn6
+  below plain dqn1 at the same steps). Untried variants: the channel without
+  steps-since-food, or only near pacman (a local crop), and the effect of the
+  shorter epsilon schedule (2M vs 3M) on its own.
+- Picking checkpoints by 20 games on seeds 0..19 and evaluating on 0..99
+  overlaps; a separate selection seed range would remove the bias (here the
+  numbers on seeds 20..99 were within 0.5 food of the 100-game ones).
+- Train the end of the level directly: start some episodes from boards with
+  few dots left (needs a game option to remove dots), since that is the part
+  no agent learned.
