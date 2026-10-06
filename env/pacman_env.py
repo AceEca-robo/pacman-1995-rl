@@ -199,6 +199,17 @@ class PacmanEnv(gym.Env):
         self._neighbours = {}  # maze layout -> passable neighbour lists
         self._d_max = d_max() if self._shaping else None
         self._hunger_limit = self.cfg.get("hunger_limit") or 0
+        endgame = self.cfg.get("endgame_dot") or {}
+        self._endgame_k = endgame.get("k", 0.0) if endgame.get("enabled") else 0.0
+        self._prefix_prob = self.cfg.get("prefix_prob") or 0.0
+        self._prefixes = []
+        if self._prefix_prob:
+            path = os.path.join(ROOT, self.cfg["prefix_file"])
+            with open(path) as f:
+                data = json.load(f)
+            if data["n_actions"] != n_actions:
+                raise ValueError(f"{path} was recorded with {data['n_actions']} actions")
+            self._prefixes = data["prefixes"]
         obs_cfg = self.cfg.get("obs") or {}
         self._food_distance = bool(obs_cfg.get("food_distance"))
         self._steps_since_food = bool(obs_cfg.get("steps_since_food"))
@@ -280,6 +291,22 @@ class PacmanEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
+        prefix = None
+        if self._prefix_prob and self.np_random.random() < self._prefix_prob:
+            prefix = self._prefixes[int(self.np_random.integers(len(self._prefixes)))]
+        if prefix is not None:
+            # replay a recorded opening of its game (same seed, same actions:
+            # the game is deterministic), then hand over the position
+            if not (self._fresh and self._seed == prefix["seed"]):
+                self._restart_game(prefix["seed"])
+            self._state = self._recv()
+            for a in prefix["actions"]:
+                self._res["conn"].sendall(ACTIONS[a])
+                self._state = self._recv()
+            left = sum(r.count(".") + r.count("o") for r in self._state["grid"])
+            if left != prefix["food_left"] or self._state["lives"] != 3:
+                raise RuntimeError(f"prefix replay of seed {prefix['seed']} diverged")
+            return self._after_reset(prefix["seed"])
         if seed is not None:
             if not (self._fresh and self._seed == seed):
                 self._restart_game(seed)
@@ -293,10 +320,15 @@ class PacmanEnv(gym.Env):
             # answering the final state is ignored by the game
             self._res["conn"].sendall(ACTIONS[4])
         self._state = self._recv()
+        return self._after_reset(None)
+
+    def _after_reset(self, prefix_seed):
         self._steps = 0
         self._hungry = 0  # steps since pacman last ate a dot or an energizer
         self._phi = self._potential(self._state) if self._shaping else 0.0
-        return self._obs(self._state), self._info(self._state)
+        info = self._info(self._state)
+        info["prefix"] = prefix_seed
+        return self._obs(self._state), info
 
     def step(self, action):
         if self._state is None:
@@ -312,6 +344,12 @@ class PacmanEnv(gym.Env):
         events = self._events(prev, st)
         coef = self.cfg["reward"]
         reward = sum(coef[k] * n for k, n in events.items())
+        endgame = 0.0
+        if self._endgame_k and events["eaten_dot"]:
+            # each dot is worth eaten_dot * (1 + k / max(food left, 1))
+            left = sum(r.count(".") + r.count("o") for r in st["grid"])
+            endgame = coef["eaten_dot"] * events["eaten_dot"] * self._endgame_k / max(left, 1)
+            reward += endgame
         terminated = bool(st["done"])
         hunger = False
         ate = events["eaten_dot"] or events["eaten_energizer"]
@@ -329,6 +367,7 @@ class PacmanEnv(gym.Env):
         info = self._info(st)
         info["events"] = events
         info["shaping"] = shaping
+        info["endgame_bonus"] = endgame
         info["hunger"] = hunger
         return self._obs(st), float(reward), terminated, truncated, info
 

@@ -403,3 +403,65 @@ def test_obs_flags_off_by_default():
         assert obs["grid"].shape[0] == len(CHANNELS) and obs["vec"].shape == (3,)
     finally:
         e.close()
+
+
+def test_prefix_reset_starts_in_the_endgame():
+    e = PacmanEnv(config={"prefix_prob": 1.0})
+    try:
+        seeds = set()
+        for i in range(4):
+            obs, info = e.reset(seed=i) if i == 0 else e.reset()
+            st = e._state
+            left = sum(r.count(".") + r.count("o") for r in st["grid"])
+            assert left <= 15 and st["lives"] == 3 and st["level"] == 1
+            assert info["prefix"] is not None
+            assert obs["grid"][CH["food"]].sum() + obs["grid"][CH["superfood"]].sum() == left
+            seeds.add(info["prefix"])
+            for _ in range(20):
+                obs, r, term, trunc, info = e.step(3)
+                if term:
+                    break
+        assert len(seeds) > 1
+    finally:
+        e.close()
+
+
+def test_prefix_prob_zero_changes_nothing():
+    actions = np.random.default_rng(5).integers(5, size=800).tolist()
+    runs = []
+    for cfg in (None, {"prefix_prob": 0.0}):
+        e = PacmanEnv(config=cfg)
+        try:
+            obs, info = e.reset(seed=6)
+            assert info["prefix"] is None
+            out = [obs] + [e.step(a)[:4] for a in actions]
+        finally:
+            e.close()
+        runs.append(out)
+    assert same(runs[0], runs[1])
+
+
+def test_endgame_dot_reward_formula():
+    e = PacmanEnv(config={"endgame_dot": {"enabled": True, "k": 20}, "prefix_prob": 1.0})
+    try:
+        e.reset(seed=0)
+        seen = 0
+        for _ in range(400):
+            prev_left = sum(r.count(".") + r.count("o") for r in e._state["grid"])
+            obs, r, term, trunc, info = e.step(int(np.random.default_rng(seen).integers(5)))
+            ev = info["events"]
+            left = sum(row.count(".") + row.count("o") for row in e._state["grid"])
+            if ev["eaten_dot"]:
+                seen += 1
+                assert info["endgame_bonus"] == pytest.approx(20 / max(left, 1))
+                assert left == prev_left - 1
+            else:
+                assert info["endgame_bonus"] == 0.0
+            if term or trunc:
+                e.reset()
+        assert seen > 0
+    finally:
+        e.close()
+    # the formula itself: dot reward 1 * (1 + 20 / max(left, 1))
+    for left, total in ((15, 1 + 20 / 15), (1, 21.0), (0, 21.0)):
+        assert 1.0 * (1 + 20 / max(left, 1)) == pytest.approx(total)

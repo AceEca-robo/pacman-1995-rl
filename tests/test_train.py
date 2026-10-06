@@ -123,3 +123,30 @@ def test_train_and_evaluate_with_extra_obs(tmp_path):
         assert ev.returncode == 0, ev.stderr
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_finetune_from_checkpoint_with_prefixes(tmp_path):
+    base = {**TINY, "base": os.path.relpath(TINY["base"], tmp_path), "total_steps": 2000,
+            "eval_every": 1000, "checkpoint_buffer": False}
+    first = f"test-ft0-{os.getpid()}"
+    second = f"test-ft1-{os.getpid()}"
+    dirs = [os.path.join(ROOT, "runs", n) for n in (first, second)]
+    train = [sys.executable, os.path.join(ROOT, "scripts", "train.py")]
+    try:
+        c0 = tmp_path / "c0.yaml"
+        c0.write_text(yaml.safe_dump(base))
+        assert subprocess.run(train + ["--run-name", first, "--config", str(c0)],
+                              capture_output=True, timeout=300).returncode == 0
+        c1 = tmp_path / "c1.yaml"
+        c1.write_text(yaml.safe_dump({**base, "init_checkpoint": f"runs/{first}/best.pt",
+                                      "track_cells": [[24, 19], [25, 19]],
+                                      "env_config": {"prefix_prob": 1.0,
+                                                     "endgame_dot": {"enabled": True, "k": 20}}}))
+        out = subprocess.run(train + ["--run-name", second, "--config", str(c1)],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert f"initialized from runs/{first}/best.pt" in out.stdout
+        assert "pocket" in out.stdout and "prefixed" in out.stdout
+    finally:
+        for d in dirs:
+            subprocess.run(["rm", "-rf", d])

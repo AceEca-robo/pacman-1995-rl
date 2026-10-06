@@ -1,0 +1,13 @@
+# dqn7: fine-tune dqn1s1/best_food.pt on endgame prefixes (night 2).
+base: dqn.yaml
+init_checkpoint: runs/dqn1s1/best_food.pt
+total_steps: 5000000
+epsilon_start: 0.1
+epsilon_end: 0.05
+epsilon_steps: 1000000
+lr: 0.00005
+checkpoint_buffer: false
+# the bottom-right pocket of maze 1 whose dots dqn1s1 never eats
+track_cells: [[24, 19], [25, 19], [26, 19], [27, 19], [27, 18]]
+env_config:
+  prefix_prob: 0.5

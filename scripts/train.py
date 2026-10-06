@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.dqn import DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
-from env.pacman_env import PacmanEnv, load_env_config, obs_dims  # noqa: E402
+from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims  # noqa: E402
 
 
 def load_config(path):
@@ -65,10 +65,17 @@ class Collector:
         self.ep_len = np.zeros(self.n, int)
         self.ep_level = np.ones(self.n, int)
         self.ended = self.hungry = 0  # episodes ended / ended by hunger_limit, since last read
+        cells = cfg.get("track_cells") or []
+        self.track = (np.array([c[0] for c in cells]), np.array([c[1] for c in cells])) \
+            if cells else None
+        self.tracked = 0  # pacman steps on track_cells since last read
+        self.prefixed = 0  # episodes started from an endgame prefix since last read
 
     def step(self, actions, log_step, prefix="episode"):
         """Returns the number of episodes that ended."""
         obs = self.obs
+        if self.track:  # pacman's steps on the tracked cells (before this move)
+            self.tracked += int(obs["grid"][:, CH["pacman"], self.track[1], self.track[0]].sum())
         nobs, rew, term, trunc, info = self.envs.step(actions)
         packed_next = pack_grids(nobs["grid"])
         ended_count = 0
@@ -88,6 +95,9 @@ class Collector:
             self.ep_level[i] = max(self.ep_level[i], src["level"][i])
             if ended:
                 ended_count += 1
+                # same-step autoreset: info holds the next episode's reset info
+                if "prefix" in info and info["_prefix"][i] and info["prefix"][i] is not None:
+                    self.prefixed += 1
                 hunger = bool(src["hunger"][i]) if "hunger" in src else False
                 self.ended += 1
                 self.hungry += hunger
@@ -193,15 +203,27 @@ def main():
     torch.manual_seed(seed)
     env_cfg = load_env_config(cfg["env_config"])
     n_actions = env_cfg["actions"]
-    # evaluation without shaping and hunger_limit, so eval rewards compare across runs
+    # evaluation without shaping, hunger_limit, prefixes or the endgame dot
+    # bonus, so eval rewards compare across runs
     eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False},
-                    "hunger_limit": 0}
+                    "hunger_limit": 0, "prefix_prob": 0.0, "endgame_dot": {"enabled": False}}
     n_channels, vec_dim = obs_dims(env_cfg)
     learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
     buffer = make_buffer(cfg, n_channels, vec_dim)
     rng = np.random.default_rng(seed)
     steps = n_updates = episodes = 0
     best = -np.inf
+    if not ck and cfg.get("init_checkpoint"):
+        # fine-tune: start from another run's network (online and target);
+        # optimizer, buffer, step counts and schedules start fresh
+        init = torch.load(os.path.join(ROOT, cfg["init_checkpoint"]), map_location=device,
+                          weights_only=False)
+        if init.get("n_actions", 5) != n_actions or \
+                obs_dims(init.get("env_config") or {}) != (n_channels, vec_dim):
+            sys.exit(f"{cfg['init_checkpoint']} does not match this env's actions/observation")
+        learner.online.load_state_dict(init["learner"]["online"])
+        learner.target.load_state_dict(init["learner"]["online"])
+        print(f"initialized from {cfg['init_checkpoint']} ({init['steps']} steps)")
     if ck:
         learner.load_state_dict(ck["learner"])
         steps, n_updates, episodes, best = ck["steps"], ck["n_updates"], ck["episodes"], ck["best"]
@@ -269,6 +291,13 @@ def main():
                 if per:
                     writer.add_scalar("train/per_beta", per_beta(cfg, steps), steps)
                 msg = f"{steps:>9} steps  eps {eps:.3f}  {sps:,.0f} steps/s  episodes {episodes}"
+                if col.track is not None:
+                    writer.add_scalar("train/tracked_cell_steps", col.tracked, steps)
+                    msg += f"  pocket {col.tracked}"
+                    col.tracked = 0
+                if col.prefixed:
+                    msg += f"  prefixed {col.prefixed}"
+                    col.prefixed = 0
                 if col.ended:
                     msg += f"  hunger {col.hungry}/{col.ended}"
                     col.ended = col.hungry = 0

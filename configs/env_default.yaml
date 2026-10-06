@@ -39,6 +39,20 @@ obs:
 # cannot die. Diagnostics only.
 ghosts: true
 
+# Dots get more valuable as the board empties: a dot eaten with n food items
+# (dots + energizers) left afterwards is worth reward.eaten_dot * (1 + k / max(n, 1)).
+# The extra part is in info["endgame_bonus"]. Off by default.
+endgame_dot:
+  enabled: false
+  k: 20
+
+# Endgame curriculum: with this probability a reset replays a recorded
+# opening from prefix_file (tools/record_prefixes.py: heuristic play until
+# <= 15 food left on level 1, no life lost) and starts the episode there.
+# info["prefix"] = the replayed game's seed. 0 = off; evaluation never uses it.
+prefix_prob: 0.0
+prefix_file: data/endgame_prefixes.json
+
 # Steps (game ticks) before truncated=True; null = no limit.
 max_episode_steps: 10000
 
