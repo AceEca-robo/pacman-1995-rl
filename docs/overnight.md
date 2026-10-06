@@ -65,6 +65,19 @@ eps = 0, checkpoint `best_food.pt`).
   500k checkpoint: 11, 26, 49, 92, 99, 104, 102, 111, 112, 114, 115, 122, 123, 123, 125, 129, 131, 131, 130, 132. Ahead of dqn5 at 2M (92 vs 74), behind it from
   3M to 7M, ahead at the end: best_food.pt = 10M, 131.8 (dqn5: 126.9).
   Final evaluation started.
+- 14:01 **dqn6 final evaluation (best_food.pt = 10M), verdict FAILURE.**
+  100 games eps 0: mean food 130.8, level 1 cleared 0%, mean reward 51.1,
+  median score 1685, no game stuck. Seeds 20..99: food 130.6, FAILURE.
+  eps 0.05: food 127.8, reward 60.8. Without ghosts it stops even earlier
+  than dqn5 (21 food items at eps 0, 76 at eps 0.05).
+- 14:02 Branch end: dqn6 also FAILURE, so no more new configs; seeds 1
+  and 2 of dqn1 (`configs/dqn_long.yaml`, 20M steps each, in parallel:
+  runs dqn1s1, dqn1s2), supervisor started first. For the three-seed table
+  dqn1 seed 0 is re-picked by the same food rule: best_food.pt = 17.5M
+  (152.7 on seeds 0..19; the supervisor's copies cover 8M..20M only, the
+  night supervisor started late). Plain dqn1 already ate ~149 at 10M, more
+  than dqn5/dqn6 (127/132) with the extra observation parts at the same step
+  count (its epsilon decays over 3M instead of 2M).
 
 ## Ideas for later
 
