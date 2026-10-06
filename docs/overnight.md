@@ -156,6 +156,24 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
 ## Chronology (night 2)
 
 - 22:39 Start. Disk 30 GB free, GPU 15 MB of 8 GB used, nothing running.
+- 22:47 **Step 1, endgame diagnostics** (`scripts/diag_endgame.py`, 100
+  games each, seeds 0..99, level 1 only; maps in `docs/leftover_<name>.png`,
+  data in `runs/diag/endgame_<name>.json`). "Pocket" = the side loop
+  (24..27, 19) + (27, 18) holding the two dots.
+
+  | agent | level 1 cleared | mean food left | games with (25,19)/(27,19) left | pacman steps on them | steps in the pocket | cells left in 100% of games |
+  |---|---|---|---|---|---|---|
+  | heuristic | 82% | 3.3 | 7 / 7 | 95 / 94 | 462 | none |
+  | dqn1s1 best_food, eps 0 | 0% | 3.2 | 100 / 100 | 0 / 0 | 0 | (25,19), (27,19) |
+  | dqn1s1 best_food, eps 0.05 | 0% | 12.6 | 100 / 100 | 0 / 0 | 3 | (25,19), (27,19) |
+  | dqn1 seed 0 best_food, eps 0 | 0% | 20.4 | 15 / 15 | 85 / 87 | 430 | (31,9), (31,7), (29,15), (27,15), (25,15) |
+  | dqn1s2 best_food, eps 0 | 0% | 70.5 | 7 / 7 | 96 / 95 | 475 | (27,9), (27,7), (27,5), (27,3), (25,9) |
+
+  Answers: the heuristic does eat (25,19)/(27,19) (left in 7% of games).
+  dqn1s1 never enters the pocket with eps 0 (0 steps in 100 games) and only
+  3 steps with eps 0.05. Seeds 0 and 2 do go there; they have blind spots of
+  their own elsewhere (each leaves its own cells in all 100 games). So every
+  seed learned one fixed route with a region it never visits.
 
 ## Unclear points and how they were resolved (night 2)
 
