@@ -300,7 +300,7 @@ std of the discounted return.
 
 Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0, no shaping or hunger_limit (dqn5 on: best_food.pt, the checkpoint with the most food in the supervisor's 20-game evaluations). Food = dots + energizers eaten per game (172 on level 1). Stuck = games that hit the 10000-step limit. Last column: the same checkpoint with eps 0.05.
 
-| run | checkpoint | change | mean food | level 1 cleared | mean reward | median score | max score | stuck | steps after last food | eps 0.05: food / reward |
+| run | checkpoint | change | mean food | level 1 cleared | mean reward | median score | max score | stuck | steps after last food | eps 0.05: food / reward / level 1 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | dqn0 | best.pt (4.75M) | baseline DQN, 5M | 128.3 | 0% | 61.9 | 1360 | 2950 | 0% | 69 | - |
 | dqn2 | best.pt (4.5M) | + heuristic warm start | 125.6 | 0% | 56.5 | 1420 | 2670 | 0% | 236 | - |
@@ -308,10 +308,12 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | dqn3b | best.pt (4.75M) | + distance shaping, 4 actions | 126.8 | 0% | 62.2 | 1490 | 3070 | 0% | 212 | - |
 | dqn4 | best.pt (5.0M) | + hunger_limit 200, 4 actions | 112.9 | 0% | 43.0 | 1285 | 2450 | 0% | 172 | - |
 | ppo0 | best.pt (2.0M) | PPO, hunger_limit 200, 4 actions | 99.8 | 0% | 35.7 | 1020 | 1330 | 0% | 6 | - |
-| dqn1 | best_food.pt (17.5M) | 20M steps, eps over 3M; seed 0, picked by food | 151.6 | 0% | 42.9 | 1680 | 2980 | 16% | 1190 | 146.4 / 85.4 |
-| dqn1s1 | best_food.pt (19.5M) | dqn1 setup, seed 1 | 168.8 | 0% | 56.1 | 1855 | 4690 | 20% | 488 | 159.4 / 99.0 |
-| dqn1s2 | best_food.pt (18.5M) | dqn1 setup, seed 2 | 101.5 | 0% | -28.9 | 1470 | 4030 | 6% | 3622 | 101.2 / 26.5 |
-| dqn5 | best_food.pt (10.0M) | dqn1 + food-distance channel + steps since food, 10M | 127.4 | 0% | 20.4 | 1950 | 7480 | 20% | 602 | 125.6 / 67.0 |
-| dqn6 | best_food.pt (10.0M) | dqn5 + n_step 5, gamma 0.995 | 130.8 | 0% | 51.1 | 1685 | 5450 | 0% | 344 | 127.8 / 60.8 |
+| dqn1 | best_food.pt (17.5M) | 20M steps, eps over 3M; seed 0, picked by food | 151.6 | 0% | 42.9 | 1680 | 2980 | 16% | 1190 | 146.4 / 85.4 / 0% |
+| dqn1s1 | best_food.pt (19.5M) | dqn1 setup, seed 1 | 168.8 | 0% | 56.1 | 1855 | 4690 | 20% | 488 | 159.4 / 99.0 / 0% |
+| dqn1s2 | best_food.pt (18.5M) | dqn1 setup, seed 2 | 101.5 | 0% | -28.9 | 1470 | 4030 | 6% | 3622 | 101.2 / 26.5 / 0% |
+| dqn5 | best_food.pt (10.0M) | dqn1 + food-distance channel + steps since food, 10M | 127.4 | 0% | 20.4 | 1950 | 7480 | 20% | 602 | 125.6 / 67.0 / 0% |
+| dqn6 | best_food.pt (10.0M) | dqn5 + n_step 5, gamma 0.995 | 130.8 | 0% | 51.1 | 1685 | 5450 | 0% | 344 | 127.8 / 60.8 / 0% |
+| dqn7 | best_food.pt (4.0M) | fine-tune of dqn1 seed 1 on endgame prefixes, 5M | 169.4 | 0% | 40.4 | 1760 | 14340 | 29% | 1308 | 161.7 / 99.6 / 0% |
+| dqn8 | best_food.pt (3.5M) | dqn7 + endgame dot reward (k 20); from dqn1 seed 1 | 246.2 | 67% | 214.8 | 5030 | 8775 | 1% | 12 | 159.5 / 102.4 / 4% |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%

@@ -34,6 +34,8 @@ LATER = {  # run -> what changed (checkpoint: best_food.pt)
     "dqn1": "20M steps, eps over 3M; seed 0, picked by food",
     "dqn5": "dqn1 + food-distance channel + steps since food, 10M",
     "dqn6": "dqn5 + n_step 5, gamma 0.995",
+    "dqn7": "fine-tune of dqn1 seed 1 on endgame prefixes, 5M",
+    "dqn8": "dqn7 + endgame dot reward (k 20); from dqn1 seed 1",
 }
 
 
@@ -53,7 +55,8 @@ def nums(games):
 
 
 def row(run, ck, what, n, n005):
-    eps = f"{n005['food']:.1f} / {n005['reward']:.1f}" if n005 else "-"
+    eps = (f"{n005['food']:.1f} / {n005['reward']:.1f} / {n005['level1']:.0%}"
+           if n005 else "-")
     return (f"| {run} | {ck} | {what} | {n['food']:.1f} | {n['level1']:.0%} | {n['reward']:.1f} | "
             f"{n['score']:.0f} | {n['max_score']} | {n['stuck']:.0%} | {n['after']:.0f} | {eps} |")
 
@@ -74,7 +77,7 @@ def main():
              "energizers eaten per game (172 on level 1). Stuck = games that hit the "
              "10000-step limit. Last column: the same checkpoint with eps 0.05.", "",
              "| run | checkpoint | change | mean food | level 1 cleared | mean reward | "
-             "median score | max score | stuck | steps after last food | eps 0.05: food / reward |",
+             "median score | max score | stuck | steps after last food | eps 0.05: food / reward / level 1 |",
              "|---|---|---|---|---|---|---|---|---|---|---|"]
     groups = {}
     for run, ck, what, f in EARLIER:
@@ -85,7 +88,8 @@ def main():
         base = re.sub(r"s\d+$", "", run)
         what = LATER.get(base, "")
         if base != run:
-            what = f"{base} setup, seed {run[len(base) + 1:]}"
+            what = (f"dqn8 setup, from dqn1 seed {run[len(base) + 1:]}" if base == "dqn8"
+                    else f"{base} setup, seed {run[len(base) + 1:]}")
         steps = best_food_steps(run)
         ck = f"best_food.pt ({steps / 1e6:.1f}M)" if steps else "best_food.pt"
         n = nums(load(os.path.join(RUNS, run, "final_eps0.jsonl")))
