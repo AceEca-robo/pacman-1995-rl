@@ -12,9 +12,9 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | heuristic | 100 | 0..99 | 465.5 | 401.2 | 16999 | 11825 | 221375 | 82% | 21% | 1244 | 0% | 17.6 | bae470e |
 | dqn dqn0/best.pt | 100 | 0..99 | 61.9 | 61.8 | 1423 | 1360 | 2950 | 0% | 0% | 848 | 0% | 30.4 | 5d22ce4 |
 | dqn dqn1/best.pt (11.0M, by mean) | 100 | 0..99 | 65.7 | 71.9 | 1696 | 1605 | 2990 | 0% | 0% | 1875 | 3% | 115.2 | a5cfce0 |
-| dqn dqn1/best_median.pt, no ghosts | 50 | 0..49 | -143.0 | -143.0 | 530 | 530 | 530 | 0% | 0% | 10000 | 100% | 257.8 | a5cfce0 |
 | dqn dqn1/best_median.pt | 100 | 0..99 | 49.1 | 70.1 | 1688 | 1580 | 3180 | 0% | 0% | 2924 | 15% | 95.2 | af91590 |
 | dqn dqn1/best_median.pt, 50 games | 50 | 0..49 | 46.0 | 67.3 | 1724 | 1590 | 3180 | 0% | 0% | 3104 | 16% | 95.4 | a5cfce0 |
+| dqn dqn1/best_median.pt, no ghosts | 50 | 0..49 | -143.0 | -143.0 | 530 | 530 | 530 | 0% | 0% | 10000 | 100% | 257.8 | a5cfce0 |
 | dqn dqn1@08.00M | 20 | 0..19 | 58.7 | 63.8 | 1606 | 1480 | 2880 | 0% | 0% | 1634 | 0% | 35.1 | cbc1d8a |
 | dqn dqn1@08.50M | 20 | 0..19 | 59.2 | 63.8 | 1552 | 1475 | 2430 | 0% | 0% | 1584 | 0% | 32.1 | af91590 |
 | dqn dqn1@09.00M | 20 | 0..19 | 55.5 | 65.2 | 1620 | 1535 | 2410 | 0% | 0% | 1991 | 0% | 39.5 | af91590 |
@@ -50,6 +50,28 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | dqn dqn3b@04.00M | 20 | 0..19 | 52.1 | 51.8 | 1366 | 1345 | 1940 | 0% | 0% | 874 | 0% | 17.7 | af91590 |
 | dqn dqn3b@04.50M | 20 | 0..19 | 59.8 | 63.5 | 1572 | 1500 | 2820 | 0% | 0% | 1006 | 0% | 20.3 | af91590 |
 | dqn dqn3b@05.00M | 20 | 0..19 | 61.3 | 63.2 | 1688 | 1605 | 2740 | 0% | 0% | 1061 | 0% | 14.2 | af91590 |
+| dqn dqn4/best.pt | 100 | 0..99 | 43.0 | 46.1 | 1314 | 1285 | 2450 | 0% | 0% | 1073 | 0% | 36.8 | 8b2de66 |
+| dqn dqn4@00.50M | 20 | 0..19 | -56.7 | -55.3 | 135 | 140 | 160 | 0% | 0% | 510 | 0% | 10.0 | 8b2de66 |
+| dqn dqn4@01.00M | 20 | 0..19 | -44.1 | -42.5 | 190 | 200 | 280 | 0% | 0% | 256 | 0% | 5.4 | 8b2de66 |
+| dqn dqn4@01.50M | 20 | 0..19 | 13.0 | 12.4 | 784 | 775 | 1070 | 0% | 0% | 284 | 0% | 6.0 | 8b2de66 |
+| dqn dqn4@02.00M | 20 | 0..19 | 17.9 | 21.0 | 866 | 860 | 1170 | 0% | 0% | 483 | 0% | 9.8 | 8b2de66 |
+| dqn dqn4@02.50M | 20 | 0..19 | 20.9 | 19.6 | 996 | 955 | 1550 | 0% | 0% | 701 | 0% | 14.3 | 8b2de66 |
+| dqn dqn4@03.00M | 20 | 0..19 | 27.1 | 27.8 | 1066 | 1040 | 1410 | 0% | 0% | 876 | 0% | 16.2 | 8b2de66 |
+| dqn dqn4@03.50M | 20 | 0..19 | 38.9 | 39.0 | 1223 | 1200 | 1530 | 0% | 0% | 949 | 0% | 18.6 | 8b2de66 |
+| dqn dqn4@04.00M | 20 | 0..19 | 36.8 | 36.6 | 1217 | 1155 | 2140 | 0% | 0% | 963 | 0% | 18.9 | 8b2de66 |
+| dqn dqn4@04.50M | 20 | 0..19 | 41.4 | 41.5 | 1272 | 1265 | 1960 | 0% | 0% | 928 | 0% | 12.1 | 8b2de66 |
+| dqn dqn4@05.00M | 20 | 0..19 | 41.5 | 44.7 | 1314 | 1215 | 2450 | 0% | 0% | 1064 | 0% | 7.7 | 8b2de66 |
+| ppo ppo0/best.pt | 100 | 0..99 | 35.7 | 36.2 | 1034 | 1020 | 1330 | 0% | 0% | 576 | 0% | 19.8 | 8b2de66 |
+| ppo ppo0@00.50M | 20 | 0..19 | -28.1 | -28.1 | 352 | 350 | 470 | 0% | 0% | 271 | 0% | 5.7 | 8b2de66 |
+| ppo ppo0@01.00M | 20 | 0..19 | 0.8 | 1.3 | 675 | 625 | 920 | 0% | 0% | 469 | 0% | 8.9 | 8b2de66 |
+| ppo ppo0@01.50M | 20 | 0..19 | 29.2 | 29.1 | 998 | 980 | 1190 | 0% | 0% | 617 | 0% | 12.0 | 8b2de66 |
+| ppo ppo0@02.00M | 20 | 0..19 | 34.6 | 36.2 | 1026 | 1010 | 1330 | 0% | 0% | 601 | 0% | 11.6 | 8b2de66 |
+| ppo ppo0@02.50M | 20 | 0..19 | 41.3 | 41.0 | 1124 | 1120 | 1670 | 0% | 0% | 592 | 0% | 11.8 | 8b2de66 |
+| ppo ppo0@03.00M | 20 | 0..19 | 38.4 | 39.9 | 1134 | 1125 | 1830 | 0% | 0% | 790 | 0% | 14.7 | 8b2de66 |
+| ppo ppo0@03.50M | 20 | 0..19 | 27.7 | 29.4 | 1015 | 1040 | 1240 | 0% | 0% | 889 | 0% | 16.9 | 8b2de66 |
+| ppo ppo0@04.00M | 20 | 0..19 | 26.3 | 31.3 | 1043 | 980 | 1740 | 0% | 0% | 951 | 0% | 18.1 | 8b2de66 |
+| ppo ppo0@04.50M | 20 | 0..19 | 30.6 | 32.7 | 1015 | 990 | 1240 | 0% | 0% | 746 | 0% | 14.2 | 8b2de66 |
+| ppo ppo0@05.00M | 20 | 0..19 | 27.4 | 29.2 | 1010 | 990 | 1240 | 0% | 0% | 893 | 0% | 10.6 | 8b2de66 |
 
 ## Notes
 
@@ -106,3 +128,23 @@ action is chosen again forever. With ghosts their moves change the
 observation and usually break the loop (8 of these 50 games with ghosts
 still hit the limit). Caveat: ghosts frozen in the house are something the
 network never saw during training.
+
+## hunger_limit 200: dqn4 and ppo0 (2026-10-06)
+
+Both: 4 actions, no shaping, hunger_limit 200 in training only (evaluation
+without it), seed 0, 5M steps, run in parallel. best.pt by mean eval
+reward. Final evaluation: 100 games, seeds 0..99. "Hunger": training
+episodes that ended by hunger_limit.
+
+| checkpoint | mean reward | median reward | median score | max score | level 1 cleared | food eaten | after last food | in 30+ gaps | stuck | hunger (training) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| dqn0/best.pt (4.75M; 5 actions) | 61.9 | 61.8 | 1360 | 2950 | 0% | 128 | 69 | 54% | 0% | - |
+| dqn1/best.pt (11.0M of 20M, by mean) | 65.7 | 71.9 | 1605 | 2990 | 0% | 152 | 378 | 65% | 3% | - |
+| dqn3b/best.pt (4.75M; shaping, 4 actions) | 62.2 | 62.4 | 1490 | 3070 | 0% | 127 | 212 | 59% | 0% | - |
+| dqn4/best.pt (5.0M; hunger 200, 4 actions) | 43.0 | 46.1 | 1285 | 2450 | 0% | 113 | 172 | 61% | 0% | 30% (4092/13598); last 1M 63% |
+| ppo0/best.pt (2.0M; hunger 200, 4 actions) | 35.7 | 36.2 | 1020 | 1330 | 0% | 98 | 6 | 57% | 0% | 55% (6818/12455); last 1M 75% |
+
+PPO is our own implementation (`agents/ppo.py`): 8 envs x 128 steps,
+4 epochs x 4 minibatches, clip 0.2, GAE lambda 0.95, gamma 0.99, entropy
+0.01, lr 2.5e-4 annealed to 0, the learning signal divided by the running
+std of the discounted return.
