@@ -196,6 +196,17 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   vector env; 57 tests pass), both runs and the supervisor restarted from
   scratch with the same configs. The failed attempts are kept as
   `runs/dqn7_crashed`, `runs/dqn8_crashed`; about 3 minutes of training lost.
+- 23:00-23:20 Both runs dipped just under 1.5k steps/s (20-line mean 1473-1494)
+  while I recorded the GIF and the supervisor evaluated; no new runs were
+  pending anyway.
+- 23:49 dqn8 finished (5M, no crash). Supervisor evaluations (20 games,
+  seeds 0..19, eps 0, no prefixes): **level 1 cleared 55% at 3.0M, 70% at
+  3.5M, 65% at 4.0M, 55% at 4.5M and 5.0M, no stuck games** (0-5% before
+  2.5M). best_food.pt = 3.5M (260.3 food per game: it goes on into level 2).
+  dqn7 (prefixes, no endgame bonus) never cleared level 1 in these
+  evaluations up to 4.5M. Pocket steps in training: dqn7 and dqn8 enter the
+  pocket now (401 / 604 steps in the first ~1.7M; dqn1s1 had 0 in 100 games).
+  Final 100-game evaluations started automatically.
 
 ## Unclear points and how they were resolved (night 2)
 
