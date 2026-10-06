@@ -78,6 +78,11 @@ eps = 0, checkpoint `best_food.pt`).
   night supervisor started late). Plain dqn1 already ate ~149 at 10M, more
   than dqn5/dqn6 (127/132) with the extra observation parts at the same step
   count (its epsilon decays over 3M instead of 2M).
+- 14:13 dqn1 seed 0, best_food.pt (17.5M), 100 games: eps 0 food 151.6,
+  level 1 0%, mean reward 42.9, 16% stuck; eps 0.05 food 146.4, mean reward
+  85.4, none stuck (the best mean reward of all runs). Without ghosts it stops
+  after 92 (eps 0) / 111 (eps 0.05) food items. dqn1s1/dqn1s2 at 1.2M,
+  1.65-1.73k steps/s each while this evaluation ran next to them.
 
 ## Ideas for later
 
