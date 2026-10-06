@@ -104,6 +104,35 @@ def d_max():
     return _D_MAX
 
 
+FOOD_DISTANCE_CH = len(CHANNELS)  # index of the optional food-distance plane
+HUNGER_SCALE = 200                # steps_since_food is reported / this, clipped to 1
+
+
+def obs_dims(env_cfg):
+    """(grid channels, vec size) of the observation for an env config."""
+    obs = env_cfg.get("obs") or {}
+    return (len(CHANNELS) + bool(obs.get("food_distance")),
+            3 + bool(obs.get("steps_since_food")))
+
+
+def food_distance_field(cells, nbrs):
+    """BFS steps from every cell pacman can reach to the nearest dot or
+    energizer (multi-source BFS from the food); int array (H*W,), 0 on
+    walls, the gate, cells pacman cannot reach, food cells, and everywhere
+    when there is no food."""
+    dist = np.zeros(len(cells), np.int64)
+    q = deque(c for c, ch in enumerate(cells) if ch in ".o")
+    seen = set(q)
+    while q:
+        c = q.popleft()
+        for nb in nbrs[c]:
+            if nb not in seen:
+                seen.add(nb)
+                dist[nb] = dist[c] + 1
+                q.append(nb)
+    return dist
+
+
 def load_env_config(config):
     """Full env config: configs/env_default.yaml updated by config (a path,
     a dict of overrides or None)."""
@@ -170,11 +199,19 @@ class PacmanEnv(gym.Env):
         self._neighbours = {}  # maze layout -> passable neighbour lists
         self._d_max = d_max() if self._shaping else None
         self._hunger_limit = self.cfg.get("hunger_limit") or 0
+        obs_cfg = self.cfg.get("obs") or {}
+        self._food_distance = bool(obs_cfg.get("food_distance"))
+        self._steps_since_food = bool(obs_cfg.get("steps_since_food"))
+        if self._food_distance:
+            self._d_max = d_max()
+            self._field_cache = (None, None)  # (grid string, normalized field)
+        n_channels, vec_dim = obs_dims(self.cfg)
+        vec_high = [MAX_LIVES / 3, 1.0, 1.0] + [1.0] * (vec_dim - 3)
         self.observation_space = spaces.Dict({
-            "grid": spaces.Box(0.0, 1.0, (len(CHANNELS), HEIGHT, WIDTH), np.float32),
+            "grid": spaces.Box(0.0, 1.0, (n_channels, HEIGHT, WIDTH), np.float32),
             # lives can exceed 3 through bonus lives, clipped at MAX_LIVES
-            "vec": spaces.Box(np.zeros(3, np.float32),
-                              np.array([MAX_LIVES / 3, 1.0, 1.0], np.float32), dtype=np.float32),
+            "vec": spaces.Box(np.zeros(vec_dim, np.float32),
+                              np.array(vec_high, np.float32), dtype=np.float32),
         })
 
         self._res = {}
@@ -277,9 +314,9 @@ class PacmanEnv(gym.Env):
         reward = sum(coef[k] * n for k, n in events.items())
         terminated = bool(st["done"])
         hunger = False
+        ate = events["eaten_dot"] or events["eaten_energizer"]
+        self._hungry = 0 if ate else self._hungry + 1
         if self._hunger_limit:
-            ate = events["eaten_dot"] or events["eaten_energizer"]
-            self._hungry = 0 if ate else self._hungry + 1
             if self._hungry >= self._hunger_limit and not terminated:
                 # ends the episode like a death; the game itself goes on and
                 # is restarted by the next reset()
@@ -353,10 +390,9 @@ class PacmanEnv(gym.Env):
                                 and (b["x"], b["y"]) == (p["x"], p["y"]))
         return ev
 
-    @staticmethod
-    def _obs(st):
+    def _obs(self, st):
         cells = np.frombuffer("".join(st["grid"]).encode(), np.uint8).reshape(HEIGHT, WIDTH)
-        grid = np.zeros((len(CHANNELS), HEIGHT, WIDTH), np.float32)
+        grid = np.zeros((len(CHANNELS) + self._food_distance, HEIGHT, WIDTH), np.float32)
         grid[CH["walls"]] = cells == ord("#")
         grid[CH["gate"]] = cells == ord("-")
         grid[CH["food"]] = cells == ord(".")
@@ -373,9 +409,26 @@ class PacmanEnv(gym.Env):
                 grid[CH["ghost_up"] + DIR_OFFSET[g["dir"]], g["y"], g["x"]] += 1 / GHOSTS
         if st["bonus"]:
             grid[CH["bonus"], st["bonus"]["y"], st["bonus"]["x"]] = 1
-        vec = np.array([min(st["lives"], MAX_LIVES) / 3, st["supertime_left"] / SUPERTIME,
-                        min(st["level"], LEVELS) / LEVELS], np.float32)
-        return {"grid": grid, "vec": vec}
+        if self._food_distance:
+            grid[FOOD_DISTANCE_CH] = self._food_field(st)
+        vec = [min(st["lives"], MAX_LIVES) / 3, st["supertime_left"] / SUPERTIME,
+               min(st["level"], LEVELS) / LEVELS]
+        if self._steps_since_food:
+            vec.append(min(self._hungry / HUNGER_SCALE, 1.0))
+        return {"grid": grid, "vec": np.array(vec, np.float32)}
+
+    def _food_field(self, st):
+        """Food distance plane / D_max; recomputed only when the board changes."""
+        cells = "".join(st["grid"])
+        if self._field_cache[0] != cells:
+            layout = cells.replace(".", " ").replace("o", " ")
+            nbrs = self._neighbours.get(layout)
+            if nbrs is None:
+                nbrs = self._neighbours[layout] = _passable_neighbours(cells)
+            dist = food_distance_field(cells, nbrs).astype(np.float32)
+            field = (dist / np.float32(self._d_max)).reshape(HEIGHT, WIDTH)
+            self._field_cache = (cells, field)
+        return self._field_cache[1]
 
     @staticmethod
     def _info(st):

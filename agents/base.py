@@ -11,6 +11,12 @@ class Agent(ABC):
 
     n_actions = 5
 
+    @property
+    def env_overrides(self):
+        """Env config entries this agent needs (action set, extra obs parts);
+        checkpoint agents set _env_overrides from their training env."""
+        return getattr(self, "_env_overrides", {"actions": self.n_actions})
+
     def reset(self, seed=None):
         """Called at the start of every episode."""
 

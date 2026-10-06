@@ -14,7 +14,7 @@ from gymnasium import spaces
 
 from agents.base import Agent
 from agents.dqn import GridDecoder, pack_grids
-from env.pacman_env import CHANNELS, HEIGHT, WIDTH
+from env.pacman_env import HEIGHT, WIDTH, obs_dims
 
 
 def layer_init(layer, gain=np.sqrt(2), bias=0.0):
@@ -29,14 +29,15 @@ class ActorCritic(nn.Module):
         self.dict_obs = isinstance(obs_space, spaces.Dict)
         hidden = net_cfg["hidden"]
         if self.dict_obs:
-            layers, c = [], len(CHANNELS)
+            in_channels = obs_space["grid"].shape[0]
+            layers, c = [], in_channels
             for out, k, s in zip(net_cfg["conv_channels"], net_cfg["conv_kernels"],
                                  net_cfg["conv_strides"]):
                 layers += [layer_init(nn.Conv2d(c, out, k, s, padding=k // 2)), nn.ReLU()]
                 c = out
             self.conv = nn.Sequential(*layers, nn.Flatten())
             with torch.no_grad():
-                conv_out = self.conv(torch.zeros(1, len(CHANNELS), HEIGHT, WIDTH)).shape[1]
+                conv_out = self.conv(torch.zeros(1, in_channels, HEIGHT, WIDTH)).shape[1]
             vec_dim = obs_space["vec"].shape[0]
             self.vec = nn.Sequential(layer_init(nn.Linear(vec_dim, net_cfg["vec_hidden"])), nn.ReLU())
             trunk_in = conv_out + net_cfg["vec_hidden"]
@@ -66,7 +67,7 @@ class ObsCodec:
     def __init__(self, obs_space, device):
         self.dict_obs = isinstance(obs_space, spaces.Dict)
         self.device = device
-        self.decode = GridDecoder(device) if self.dict_obs else None
+        self.decode = GridDecoder(device, obs_space["grid"].shape[0]) if self.dict_obs else None
 
     def store(self, obs):
         """Batched env observation -> compact numpy form (tuple)."""
@@ -187,9 +188,12 @@ class PPOAgent(Agent):
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         ck = torch.load(checkpoint, map_location=device, weights_only=False)
         self.n_actions = ck["n_actions"]
+        env_cfg = ck.get("env_config") or {}
+        n_channels, vec_dim = obs_dims(env_cfg)
+        self._env_overrides = {"actions": self.n_actions, "obs": env_cfg.get("obs") or {}}
         obs_space = spaces.Dict({
-            "grid": spaces.Box(0.0, 1.0, (len(CHANNELS), HEIGHT, WIDTH), np.float32),
-            "vec": spaces.Box(0.0, 3.0, (3,), np.float32)})
+            "grid": spaces.Box(0.0, 1.0, (n_channels, HEIGHT, WIDTH), np.float32),
+            "vec": spaces.Box(0.0, 3.0, (vec_dim,), np.float32)})
         self.net = ActorCritic(obs_space, self.n_actions, ck["config"]["network"]).to(device).eval()
         self.net.load_state_dict(ck["learner"]["net"])
         self.device, self.sample = device, sample

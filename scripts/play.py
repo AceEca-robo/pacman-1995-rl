@@ -81,7 +81,8 @@ def main():
     args = p.parse_args()
 
     agent = make_agent(args)
-    env = PacmanEnv(display=args.display, fast=False, config={"max_episode_steps": None})
+    env = PacmanEnv(display=args.display, fast=False,
+                    config={"max_episode_steps": None, **agent.env_overrides})
     frames, durations = [], []
     try:
         obs, info = env.reset(seed=args.seed)

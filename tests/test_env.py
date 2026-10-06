@@ -335,3 +335,71 @@ def test_hunger_limit_zero_changes_nothing():
             e.close()
         runs.append(out)
     assert same(runs[0], runs[1])
+
+
+def field_env():
+    e = PacmanEnv.__new__(PacmanEnv)
+    e._neighbours, e._d_max, e._field_cache = {}, d_max(), (None, None)
+    return e
+
+
+def test_food_distance_channel_synthetic():
+    e = field_env()
+    rows = ["#" * WIDTH] * HEIGHT
+    rows[1] = "#." + " " * 11 + "#" * (WIDTH - 13)          # corridor x=1..12, food at x=1
+    rows[2] = "#" * 12 + " " + "#" * (WIDTH - 13)            # then down at x=12
+    rows[3] = "#" * 12 + " " + "#" * (WIDTH - 13)
+    f = e._food_field({"grid": rows}) * d_max()
+    assert f[1, 1] == 0                                       # the food cell
+    path = [f[1, x] for x in range(1, 13)] + [f[2, 12], f[3, 12]]
+    assert np.allclose(path, np.arange(14), atol=1e-4)        # BFS steps, around the corner
+    assert np.all(np.diff(path) > 0)                          # grows along the path
+    assert f[0].sum() == 0 and f[2, 0] == 0                   # walls are 0
+    rows[1] = rows[1].replace(".", " ")
+    e._field_cache = (None, None)
+    assert not e._food_field({"grid": rows}).any()            # no food: all 0
+
+
+def test_food_distance_channel_real_board():
+    from env.pacman_env import FOOD_DISTANCE_CH, _passable_neighbours
+    e = PacmanEnv(config={"obs": {"food_distance": True}})
+    try:
+        obs, _ = e.reset(seed=0)
+        rng = np.random.default_rng(0)
+        for _ in range(300):
+            obs, *_ = e.step(int(rng.integers(5)))
+        assert obs["grid"].shape[0] == len(CHANNELS) + 1
+        assert e.observation_space.contains(obs)
+        cells = "".join(e._state["grid"])
+        nbrs = _passable_neighbours(cells)
+        d = np.rint(obs["grid"][FOOD_DISTANCE_CH].ravel() * d_max()).astype(int)
+        for c, ch in enumerate(cells):
+            if ch in ".o":
+                assert d[c] == 0
+            elif nbrs[c] and d[c] > 0:  # one step closer along a shortest path
+                assert min(d[n] if cells[n] not in ".o" else 0 for n in nbrs[c]) == d[c] - 1
+    finally:
+        e.close()
+
+
+def test_steps_since_food_in_vec():
+    e = PacmanEnv(config={"obs": {"steps_since_food": True}, "ghosts": False})
+    try:
+        obs, _ = e.reset(seed=0)
+        assert obs["vec"].shape == (4,) and obs["vec"][3] == 0
+        for t in range(1, 251):
+            obs, *_ = e.step(0)  # into the wall above the start: never eats
+            assert obs["vec"][3] == pytest.approx(min(t / 200, 1.0))
+        obs, _, _, _, info = e.step(3)  # right: a dot next to the start cell
+        assert info["events"]["eaten_dot"] and obs["vec"][3] == 0
+    finally:
+        e.close()
+
+
+def test_obs_flags_off_by_default():
+    e = PacmanEnv()
+    try:
+        obs, _ = e.reset(seed=0)
+        assert obs["grid"].shape[0] == len(CHANNELS) and obs["vec"].shape == (3,)
+    finally:
+        e.close()

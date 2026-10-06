@@ -1,0 +1,10 @@
+# dqn5: dqn1's setup (dqn_long.yaml: 5 actions, no shaping, no hunger_limit)
+# + food-distance grid channel and steps-since-food in vec; 10M steps,
+# epsilon over 2M.
+base: dqn_long.yaml
+total_steps: 10000000
+epsilon_steps: 2000000
+env_config:
+  obs:
+    food_distance: true
+    steps_since_food: true

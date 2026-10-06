@@ -90,3 +90,19 @@ def test_per_sampling_and_priorities():
     buf2 = PrioritizedReplayBuffer(100, alpha=1.0, eps=0.0)
     buf2.load_state_dict(buf.state_dict())
     assert buf2.tree.total == buf.tree.total and buf2.max_priority == 91.0
+
+
+def test_pack_roundtrip_with_food_distance():
+    env = PacmanEnv(config={"obs": {"food_distance": True, "steps_since_food": True}})
+    dec = GridDecoder("cpu", len(CHANNELS) + 1)
+    try:
+        obs, _ = env.reset(seed=1)
+        grids = [obs["grid"]]
+        for a in np.random.default_rng(1).integers(5, size=300):
+            obs, *_ = env.step(a)
+            grids.append(obs["grid"])
+    finally:
+        env.close()
+    packed = np.stack([pack_grid(g) for g in grids])
+    assert packed.shape[1] == 42
+    assert np.array_equal(dec(torch.as_tensor(packed)).numpy(), np.stack(grids))

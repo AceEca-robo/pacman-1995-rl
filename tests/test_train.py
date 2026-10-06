@@ -99,3 +99,27 @@ def test_best_metric():
     assert best_metric("mean_reward", res) == -38.0
     assert best_metric("reward", res) == best_metric("median_reward", res) == 60.0
     assert best_metric("score", res) == 3.0
+
+
+def test_train_and_evaluate_with_extra_obs(tmp_path):
+    cfg = tmp_path / "tiny_obs.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 2000, "eval_every": 1000,
+                                   "checkpoint_buffer": False,
+                                   "env_config": {"obs": {"food_distance": True,
+                                                          "steps_since_food": True}}}))
+    name = f"test-obs-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    try:
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "train.py"),
+                              "--run-name", name, "--config", str(cfg)],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "buffer 0.00 GB" not in out.stdout
+        ev = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "evaluate.py"),
+                             "--agent", "dqn", "--checkpoint", os.path.join(run_dir, "best.pt"),
+                             "--episodes", "1", "--epsilon", "0.05", "--results", ""],
+                            capture_output=True, text=True, timeout=300)
+        assert ev.returncode == 0, ev.stderr
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])

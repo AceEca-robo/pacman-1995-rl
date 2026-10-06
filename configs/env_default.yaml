@@ -30,6 +30,11 @@ actions: 5
 # 0 = off.
 hunger_limit: 0
 
+# Optional observation parts (off: the observation is as for dqn0..dqn4).
+obs:
+  food_distance: false    # grid channel 21: BFS steps to the nearest food / D_max (86)
+  steps_since_food: false # vec[3]: steps since the last dot/energizer / 200, clipped to 1
+
 # false: the ghosts never leave their house (game --no-ghosts), so pacman
 # cannot die. Diagnostics only.
 ghosts: true

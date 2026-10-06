@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.dqn import DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
-from env.pacman_env import PacmanEnv, load_env_config  # noqa: E402
+from env.pacman_env import PacmanEnv, load_env_config, obs_dims  # noqa: E402
 
 
 def load_config(path):
@@ -196,8 +196,9 @@ def main():
     # evaluation without shaping and hunger_limit, so eval rewards compare across runs
     eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False},
                     "hunger_limit": 0}
-    learner = DQNLearner(cfg, device, n_actions)
-    buffer = make_buffer(cfg)
+    n_channels, vec_dim = obs_dims(env_cfg)
+    learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
+    buffer = make_buffer(cfg, n_channels, vec_dim)
     rng = np.random.default_rng(seed)
     steps = n_updates = episodes = 0
     best = -np.inf

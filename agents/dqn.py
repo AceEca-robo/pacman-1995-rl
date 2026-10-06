@@ -3,7 +3,10 @@
 Replay storage: every grid plane of PacmanEnv is either 0/1 or a count/4
 (ghost planes), so a grid is stored bit-packed: one bit plane per binary
 channel and three per count channel, 35 planes x 759 cells -> 3325 bytes
-(the float32 grid is 63756 bytes). Decoding happens on the GPU per batch.
+(the float32 grid is 63756 bytes). The optional food-distance channel
+(env obs.food_distance) holds d / D_max with integer d <= D_max = 86 and is
+stored as 7 more bit planes of d (42 planes). Decoding happens on the GPU
+per batch.
 """
 
 import os
@@ -16,7 +19,7 @@ import torch.nn.functional as F
 import yaml
 
 from agents.base import Agent
-from env.pacman_env import CHANNELS, HEIGHT, ROOT, WIDTH
+from env.pacman_env import CHANNELS, HEIGHT, ROOT, WIDTH, d_max, obs_dims
 
 DEFAULT_CONFIG = os.path.join(ROOT, "configs", "dqn.yaml")
 N_ACTIONS = 5  # default; the env's "actions" (4 or 5) decides
@@ -25,7 +28,12 @@ COUNT_CH = [i for i, name in enumerate(CHANNELS) if name.startswith("ghost_")]  
 BINARY_CH = [i for i in range(len(CHANNELS)) if i not in COUNT_CH]
 COUNT_BITS = 3  # k in 0..4
 N_PLANES = len(BINARY_CH) + COUNT_BITS * len(COUNT_CH)
+DIST_BITS = 7  # food distance d in 0..D_max (86)
 PACKED = (CELLS + 7) // 8
+
+
+def n_planes(n_channels):
+    return N_PLANES + DIST_BITS * (n_channels - len(CHANNELS))
 
 
 def load_config(path=None):
@@ -36,11 +44,16 @@ def load_config(path=None):
 # --- observation packing ---------------------------------------------------
 
 def pack_grids(grids):
-    """float32 (B, C, H, W) grids -> uint8 (B, N_PLANES, PACKED)."""
-    flat = grids.reshape(len(grids), len(CHANNELS), CELLS)
+    """float32 (B, C, H, W) grids -> uint8 (B, n_planes(C), PACKED); C is 21,
+    or 22 with the food-distance channel last."""
+    c = grids.shape[1]
+    flat = grids.reshape(len(grids), c, CELLS)
     counts = np.rint(flat[:, COUNT_CH] * 4).astype(np.uint8)
     bits = [flat[:, BINARY_CH] > 0]
     bits += [(counts >> b) & 1 for b in range(COUNT_BITS)]
+    if c > len(CHANNELS):
+        dist = np.rint(flat[:, len(CHANNELS):] * d_max()).astype(np.uint8)
+        bits += [(dist >> b) & 1 for b in range(DIST_BITS)]
     return np.packbits(np.concatenate(bits, 1).astype(np.uint8), axis=-1)
 
 
@@ -50,9 +63,14 @@ def pack_grid(grid):
 
 
 class GridDecoder:
-    """uint8 (B, N_PLANES, PACKED) tensor -> float32 (B, C, H, W) on device."""
+    """uint8 (B, n_planes, PACKED) tensor -> float32 (B, C, H, W) on device."""
 
-    def __init__(self, device):
+    def __init__(self, device, n_channels=len(CHANNELS)):
+        self.n_channels = n_channels
+        self.dist = n_channels > len(CHANNELS)
+        if self.dist:
+            self.d_max = float(d_max())
+            self.dist_weights = torch.tensor([2.0 ** b for b in range(DIST_BITS)], device=device)
         self.shifts = torch.arange(7, -1, -1, dtype=torch.uint8, device=device)
         self.weights = torch.tensor([2.0 ** b / 4 for b in range(COUNT_BITS)], device=device)
         order = BINARY_CH + COUNT_CH  # channel of each decoded plane group
@@ -60,13 +78,16 @@ class GridDecoder:
 
     def __call__(self, packed):
         b = packed.shape[0]
-        bits = ((packed.unsqueeze(-1) >> self.shifts) & 1).reshape(b, N_PLANES, -1)[..., :CELLS]
-        bits = bits.float()
+        bits = ((packed.unsqueeze(-1) >> self.shifts) & 1).reshape(b, packed.shape[1], -1)
+        bits = bits[..., :CELLS].float()
         nb = len(BINARY_CH)
-        counts = bits[:, nb:].reshape(b, COUNT_BITS, len(COUNT_CH), CELLS)
+        counts = bits[:, nb:N_PLANES].reshape(b, COUNT_BITS, len(COUNT_CH), CELLS)
         counts = (counts * self.weights.view(1, -1, 1, 1)).sum(1)
         grid = torch.cat([bits[:, :nb], counts], 1)[:, self.inverse]
-        return grid.reshape(b, len(CHANNELS), HEIGHT, WIDTH)
+        if self.dist:  # same float32 division as the env: d / D_max
+            d = (bits[:, N_PLANES:] * self.dist_weights.view(1, -1, 1)).sum(1, keepdim=True)
+            grid = torch.cat([grid, d / self.d_max], 1)
+        return grid.reshape(b, self.n_channels, HEIGHT, WIDTH)
 
 
 # --- replay ----------------------------------------------------------------
@@ -74,10 +95,10 @@ class GridDecoder:
 class ReplayBuffer:
     """n-step transitions (s, a, R, s', done, discount) in numpy ring buffers."""
 
-    def __init__(self, capacity, vec_dim=3):
+    def __init__(self, capacity, vec_dim=3, planes=N_PLANES):
         self.capacity, self.size, self.pos = capacity, 0, 0
-        self.obs = np.zeros((capacity, N_PLANES, PACKED), np.uint8)
-        self.next_obs = np.zeros((capacity, N_PLANES, PACKED), np.uint8)
+        self.obs = np.zeros((capacity, planes, PACKED), np.uint8)
+        self.next_obs = np.zeros((capacity, planes, PACKED), np.uint8)
         self.vec = np.zeros((capacity, vec_dim), np.float32)
         self.next_vec = np.zeros((capacity, vec_dim), np.float32)
         self.act = np.zeros(capacity, np.uint8)
@@ -163,8 +184,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     new transitions get the current max priority, importance weights
     (N * P(i))^-beta normalized by the largest weight in the batch."""
 
-    def __init__(self, capacity, alpha, eps, vec_dim=3):
-        super().__init__(capacity, vec_dim)
+    def __init__(self, capacity, alpha, eps, vec_dim=3, planes=N_PLANES):
+        super().__init__(capacity, vec_dim, planes)
         self.alpha, self.eps = alpha, eps
         self.tree = SumTree(capacity)
         self.max_priority = 1.0
@@ -198,11 +219,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self.max_priority = float(d["max_priority"])
 
 
-def make_buffer(cfg):
+def make_buffer(cfg, n_channels=len(CHANNELS), vec_dim=3):
     per = cfg.get("per", {})
+    planes = n_planes(n_channels)
     if per.get("enabled"):
-        return PrioritizedReplayBuffer(cfg["buffer_size"], per["alpha"], per["eps"])
-    return ReplayBuffer(cfg["buffer_size"])
+        return PrioritizedReplayBuffer(cfg["buffer_size"], per["alpha"], per["eps"], vec_dim, planes)
+    return ReplayBuffer(cfg["buffer_size"], vec_dim, planes)
 
 
 class NStep:
@@ -233,15 +255,15 @@ class NStep:
 # --- network -----------------------------------------------------------------
 
 class QNetwork(nn.Module):
-    def __init__(self, cfg, n_actions=N_ACTIONS, vec_dim=3):
+    def __init__(self, cfg, n_actions=N_ACTIONS, vec_dim=3, in_channels=len(CHANNELS)):
         super().__init__()
-        layers, c = [], len(CHANNELS)
+        layers, c = [], in_channels
         for out, k, s in zip(cfg["conv_channels"], cfg["conv_kernels"], cfg["conv_strides"]):
             layers += [nn.Conv2d(c, out, k, s, padding=k // 2), nn.ReLU()]
             c = out
         self.conv = nn.Sequential(*layers, nn.Flatten())
         with torch.no_grad():
-            conv_out = self.conv(torch.zeros(1, len(CHANNELS), HEIGHT, WIDTH)).shape[1]
+            conv_out = self.conv(torch.zeros(1, in_channels, HEIGHT, WIDTH)).shape[1]
         self.vec = nn.Sequential(nn.Linear(vec_dim, cfg["vec_hidden"]), nn.ReLU())
         self.fc = nn.Sequential(nn.Linear(conv_out + cfg["vec_hidden"], cfg["hidden"]), nn.ReLU())
         self.value = nn.Linear(cfg["hidden"], 1)
@@ -261,19 +283,19 @@ class DQNLearner:
     the loss, online(s) and online(s') in one forward pass, no host syncs in
     update() (loss and Q come back as device tensors)."""
 
-    def __init__(self, cfg, device, n_actions=N_ACTIONS):
+    def __init__(self, cfg, device, n_actions=N_ACTIONS, n_channels=len(CHANNELS), vec_dim=3):
         self.cfg, self.device, self.n_actions = cfg, device, n_actions
         cuda = str(device).startswith("cuda")
         if cuda:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-        self.online = QNetwork(cfg["network"], n_actions).to(device)
-        self.target = QNetwork(cfg["network"], n_actions).to(device)
+        self.online = QNetwork(cfg["network"], n_actions, vec_dim, n_channels).to(device)
+        self.target = QNetwork(cfg["network"], n_actions, vec_dim, n_channels).to(device)
         self.target.load_state_dict(self.online.state_dict())
         self.target.requires_grad_(False)
         self.opt = torch.optim.Adam(self.online.parameters(), lr=cfg["lr"], eps=cfg["adam_eps"],
                                     fused=cuda)
-        self.decode = GridDecoder(device)
+        self.decode = GridDecoder(device, n_channels)
         self.amp = cuda and cfg.get("bf16", False)
         self._loss = torch.compile(self._loss_fn) if cfg.get("compile", False) else self._loss_fn
 
@@ -340,7 +362,12 @@ class DQNAgent(Agent):
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         ck = torch.load(checkpoint, map_location=device, weights_only=False)
         self.n_actions = ck.get("n_actions", N_ACTIONS)  # runs before dqn3 had 5
-        self.net = QNetwork(ck["config"]["network"], self.n_actions).to(device).eval()
+        env_cfg = ck.get("env_config") or {}
+        n_channels, vec_dim = obs_dims(env_cfg)
+        # what the env must be configured with to produce this agent's inputs
+        self._env_overrides = {"actions": self.n_actions, "obs": env_cfg.get("obs") or {}}
+        self.net = QNetwork(ck["config"]["network"], self.n_actions, vec_dim,
+                            n_channels).to(device).eval()
         self.net.load_state_dict(ck["learner"]["online"])
         self.device, self.epsilon = device, epsilon
         self.rng = np.random.default_rng(seed)

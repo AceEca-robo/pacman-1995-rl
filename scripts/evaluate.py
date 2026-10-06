@@ -80,7 +80,7 @@ def food_gaps(food_steps, length):
 def run(agent, label, episodes, seed, env_config, episodes_out=None):
     # the env must offer the agent's actions (4 or 5); shaping stays as in
     # env_config (off by default), so rewards compare across agents
-    env = PacmanEnv(config={**load_env_config(env_config), "actions": agent.n_actions})
+    env = PacmanEnv(config={**load_env_config(env_config), **agent.env_overrides})
     scores, rewards, lengths, max_levels, clean, truncs = [], [], [], [], [], []
     per_episode = []
     t0 = time.perf_counter()
