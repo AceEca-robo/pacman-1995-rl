@@ -246,6 +246,11 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
     pocket in 14 of 28 prefixes, seed 0's cells in 11 of 28, seed 2's in 0
     of 28. So seed 2 never saw its region as an endgame, but seed 0 did and
     still did not learn it; coverage is not the whole story.
+- 01:20 **Step 5**: README.md draft finished (results from docs/results.md,
+  maps, dqn8 GIF, what worked / did not, known problem, future work). Open
+  TODO: the author name for the authorship line. Nothing is training; the
+  night's runs are done (step 4 SUCCESS branch completed; per the plan no
+  further configs were started).
 
 ## Unclear points and how they were resolved (night 2)
 
@@ -271,3 +276,21 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   b13cbc3) but not recorded in docs/results.md, so the README says TODO
   until it is measured again and added there.
 
+
+## Ideas for later (night 2)
+
+(Not tried, as instructed.)
+
+- Endgame prefixes per agent: record openings from the agent's own games
+  (or the heuristic's) that stop with its own blind-spot cells still full,
+  so seeds 0 and 2 see their regions as endgames (seed 2's cells were in no
+  prefix at all).
+- dqn8 with eps 0.05 clears level 1 in 4% of games instead of 67%: check
+  whether a smaller eps (0.01) keeps the fixed-point escapes without
+  breaking the endgame, or randomness only when the observation repeats.
+- The endgame dot reward without prefixes (dqn8 had both; dqn7 shows that
+  prefixes alone do not clear the level, but the reward alone is untested).
+- Train the dqn8 recipe from scratch rather than as a fine-tune, and with
+  several training seeds from the same starting network.
+- Level 2+: dqn8 eats ~246 food per game, so it plays on into level 2 (a
+  different maze); nothing was measured there yet.

@@ -5,8 +5,8 @@ GPL-2+), the X11 game from the Debian package `pacman` (version 10-21). The
 game is not reimplemented: its C++ sources are compiled with a small bridge
 and driven as a gymnasium environment through a Unix socket.
 
-> Draft (2026-10-07). Numbers are taken from `docs/results.md`; where there
-> is no measured number yet, the text says TODO.
+> Draft (2026-10-07). Numbers are taken from `docs/results.md` and the
+> session logs `docs/overnight.md`; open points are marked TODO.
 
 ![training](docs/training.png)
 
@@ -24,8 +24,9 @@ and driven as a gymnasium environment through a Unix socket.
   all; a test checks that the state stream is byte-identical to the X11 mode.
   `--seed N`: deterministic games. `--no-ghosts`: ghosts stay in their house
   (diagnostics only).
-- Throughput: TODO (single env headless, `scripts/bench_env.py`; the
-  measurement from 2026-10-05 is in the git log only, not yet in
+- Throughput: a single headless env runs at about 32k steps/s with random
+  actions (`scripts/bench_env.py`, 2026-10-07, `docs/results.md`); DQN
+  training with 4 envs ran at 1.8-3.5k env steps/s (median 2.6k, dqn0,
   `docs/results.md`).
 - `env/pacman_env.py`: `Pacman1995-v0`, a gymnasium env that starts the game
   (headless by default, or in a window with `display=":0"`) and serves the
@@ -34,7 +35,8 @@ and driven as a gymnasium environment through a Unix socket.
 ## Install and run
 
 ```bash
-sudo apt install xutils-dev libx11-dev libncurses-dev   # xmkmf, X11 headers, curses
+sudo apt install build-essential xutils-dev libx11-dev libncurses-dev   # g++, xmkmf, X11, curses
+sudo apt install xvfb xdotool x11-apps   # tests on a virtual display, play.py --record (xwd)
 cd game && xmkmf && make && cd ..
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/python -m pytest
@@ -90,17 +92,25 @@ dots + energizers eaten per game, 172 on level 1. From `docs/results.md`
 | dqn7: dqn1 seed 1 fine-tuned on endgame prefixes, 5M | best_food.pt | 169.4 | 0% | 40.4 | 1760 |
 | **dqn8: dqn7 + endgame dot reward** | best_food.pt | **246.2** | **67%** | **214.8** | **5030** |
 | dqn8, eps 0.05 | best_food.pt | 159.5 | 4% | 102.4 | - |
-| dqn8 setup from dqn1 seeds 0, 1, 2 (mean +- std) | best_food.pt | TODO | TODO | TODO | TODO |
+| dqn8 setup from dqn1 seed 0 / seed 2 | best_food.pt | 153.9 / 103.2 | 0% / 0% | 67.1 / -40.8 | 1680 / 1395 |
+| dqn8 setup, 3 starting networks (mean +- std) | best_food.pt | 167.8 +- 59.2 | 22% (67 / 0 / 0) | 80.4 +- 104.8 | 2702 +- 1651 |
 
-Training curves: `docs/training.png`; evaluation curves: `docs/eval.png`.
+Training curves: `docs/training.png`; evaluation curves: `docs/eval.png`
+(the fine-tunes dqn7, dqn8, dqn8s0, dqn8s2 are plotted from their own step 0;
+they start from networks trained for 17.5-19.5M steps).
 
-Where level 1 is left unfinished (100 games each): dqn1 seed 1 never enters
-the bottom-right side loop and leaves its two dots in every game; seeds 0 and
-2 have never-visited regions elsewhere; the heuristic eats them.
+![eval](docs/eval.png)
 
-| heuristic | dqn1 seed 1, eps 0 |
-|---|---|
-| ![](docs/leftover_heuristic.png) | ![](docs/leftover_dqn1s1_eps0.png) |
+Where level 1 is left unfinished (`scripts/diag_endgame.py`, 100 games each):
+dqn1 seed 1 never enters the bottom-right side loop and leaves its two dots
+in every game; seeds 0 and 2 have never-visited regions of their own
+elsewhere; the heuristic eats all of them. After the endgame fine-tune
+(dqn8) the loop is eaten and no cell is left in every game; the same
+fine-tune from seeds 0 and 2 leaves their regions untouched.
+
+| heuristic | dqn1 seed 1, eps 0 | dqn8, eps 0 |
+|---|---|---|
+| ![](docs/leftover_heuristic.png) | ![](docs/leftover_dqn1s1_eps0.png) | ![](docs/leftover_dqn8_eps0.png) |
 
 dqn8 (best_food.pt, greedy), the first 400 ticks of seed 0 in real time
 (`scripts/play.py --record`, Xvfb); `docs/dqn1s1.gif` shows its starting
@@ -117,7 +127,6 @@ Worked:
   limit, the best mean reward (99.0 for dqn1 seed 1).
 - Choosing checkpoints by food eaten instead of mean reward, and by mean
   instead of median (a median hides games stuck until the step limit).
-
 - Clearing level 1 (dqn8): fine-tuning the best DQN with episodes that start
   near the end of level 1 (replayed heuristic openings with <= 15 food left,
   `data/endgame_prefixes.json`, half of the resets) **and** dots worth more
@@ -132,10 +141,14 @@ Did not work (each one seed unless noted, `docs/results.md`):
 - The endgame prefixes alone (dqn7): 169.4 food, level 1 never cleared.
 - eps 0.05 with dqn8: level 1 cleared in only 4% of games; the precise
   endgame does not tolerate random moves.
+- The same endgame fine-tune from dqn1 seeds 0 and 2 (dqn8s0, dqn8s2):
+  level 1 never cleared, food 153.9 and 103.2, their blind regions
+  unchanged. Seed 2's region was not in any recorded prefix; seed 0's was in
+  11 of 28 and still was not learned.
 
-Before dqn8 no agent cleared level 1. Seeds differ more than most changes
-tried: the same dqn1 config gives 101.5 to 168.8 food. Whether dqn8's result
-holds from the other seeds: TODO (dqn8s0, dqn8s2).
+So level 1 is cleared by one agent (dqn8, 67% of greedy games), not by the
+recipe in general: over its three starting networks the mean is 22%. Seeds
+differ more than most changes tried (dqn1: 101.5 to 168.8 food).
 
 ## Known problem: a fixed point of the greedy policy
 
@@ -144,19 +157,22 @@ Greedy agents stop and stand still, often next to food. Without ghosts
 some dozens of food items and stays until the step limit: when pacman stands
 the observation does not change, so the same action is chosen again. With
 ghosts their movement usually breaks the loop; eps 0.05 at evaluation
-removes the stuck games (`docs/results.md`, Diagnostics).
+removes the stuck games (`docs/results.md`, Diagnostics). dqn8 has the same
+problem: without ghosts it stops after 32 food items (eps 0).
 
 ## Future work
 
 From "Ideas for later" in `docs/overnight.md`:
-- at least 3 seeds per config: the seed spread is larger than the effects;
-- a little randomness as part of the policy, or sampling when the
-  observation repeats;
-- (done in dqn8: a reward that values the last dots more, with endgame
-  starts; it cleared the level)
+- endgame prefixes per agent, stopping with its own blind-spot cells still
+  full (seed 2's region was in no prefix);
+- the endgame dot reward without prefixes, the dqn8 recipe from scratch, and
+  several training seeds per starting network;
+- a small eps (0.01) or randomness only when the observation repeats: dqn8
+  clears the level in 67% of greedy games but 4% with eps 0.05;
+- at least 3 seeds per config: the seed spread is larger than most effects;
 - separate the effects of the dqn5 observation parts and of the shorter
-  epsilon schedule;
-- a separate seed range for checkpoint selection.
+  epsilon schedule; a separate seed range for checkpoint selection;
+- level 2 and later: dqn8 already plays into level 2, nothing measured there.
 
 ## Repository
 
