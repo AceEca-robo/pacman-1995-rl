@@ -28,6 +28,9 @@ import time
 
 import yaml
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pick_best_food import pick as pick_best_food  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(ROOT, ".venv", "bin", "python")
 RUNS = os.path.join(ROOT, "runs")
@@ -108,6 +111,9 @@ def evaluate(run, steps, episodes):
         log(f"{run}: evaluate.py failed at {steps}: {out.stderr.strip()[-500:]}")
         return
     log(f"{run}: eval @ {steps}: {out.stdout.strip().splitlines()[-1]}")
+    best = pick_best_food(run)
+    if best:
+        log(f"{run}: best_food.pt = {best[0]} steps, mean food {best[1]:.1f}")
 
 
 def plot(runs):
