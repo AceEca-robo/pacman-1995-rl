@@ -49,7 +49,7 @@ endgame_dot:
 # Endgame curriculum: with this probability a reset replays a recorded
 # opening from prefix_file (tools/record_prefixes.py: heuristic play until
 # <= 15 food left on level 1, no life lost) and starts the episode there.
-# info["prefix"] = the replayed game's seed. 0 = off; evaluation never uses it.
+# info["prefix"] = the replayed game's seed, -1 without. 0 = off; evaluation never uses it.
 prefix_prob: 0.0
 prefix_file: data/endgame_prefixes.json
 

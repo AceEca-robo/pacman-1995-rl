@@ -414,7 +414,7 @@ def test_prefix_reset_starts_in_the_endgame():
             st = e._state
             left = sum(r.count(".") + r.count("o") for r in st["grid"])
             assert left <= 15 and st["lives"] == 3 and st["level"] == 1
-            assert info["prefix"] is not None
+            assert info["prefix"] >= 0
             assert obs["grid"][CH["food"]].sum() + obs["grid"][CH["superfood"]].sum() == left
             seeds.add(info["prefix"])
             for _ in range(20):
@@ -433,7 +433,7 @@ def test_prefix_prob_zero_changes_nothing():
         e = PacmanEnv(config=cfg)
         try:
             obs, info = e.reset(seed=6)
-            assert info["prefix"] is None
+            assert info["prefix"] == -1
             out = [obs] + [e.step(a)[:4] for a in actions]
         finally:
             e.close()
@@ -465,3 +465,21 @@ def test_endgame_dot_reward_formula():
     # the formula itself: dot reward 1 * (1 + 20 / max(left, 1))
     for left, total in ((15, 1 + 20 / 15), (1, 21.0), (0, 21.0)):
         assert 1.0 * (1 + 20 / max(left, 1)) == pytest.approx(total)
+
+
+def test_prefix_info_in_a_vector_env():
+    """Mixed prefixed / plain resets must stack in gymnasium's vector env."""
+    import gymnasium as gym
+    v = gym.vector.SyncVectorEnv([lambda: PacmanEnv(config={"prefix_prob": 0.5,
+                                                            "hunger_limit": 3})] * 4,
+                                 autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+    try:
+        v.reset(seed=0)
+        seen = set()
+        for _ in range(60):
+            _, _, term, _, info = v.step(np.zeros(4, int))
+            if term.any():
+                seen.update(int(p) >= 0 for p, m in zip(info["prefix"], info["_prefix"]) if m)
+        assert seen == {True, False}
+    finally:
+        v.close()

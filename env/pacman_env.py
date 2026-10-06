@@ -306,7 +306,7 @@ class PacmanEnv(gym.Env):
             left = sum(r.count(".") + r.count("o") for r in self._state["grid"])
             if left != prefix["food_left"] or self._state["lives"] != 3:
                 raise RuntimeError(f"prefix replay of seed {prefix['seed']} diverged")
-            return self._after_reset(prefix["seed"])
+            return self._after_reset(int(prefix["seed"]))
         if seed is not None:
             if not (self._fresh and self._seed == seed):
                 self._restart_game(seed)
@@ -320,9 +320,11 @@ class PacmanEnv(gym.Env):
             # answering the final state is ignored by the game
             self._res["conn"].sendall(ACTIONS[4])
         self._state = self._recv()
-        return self._after_reset(None)
+        return self._after_reset(-1)
 
     def _after_reset(self, prefix_seed):
+        """prefix_seed: the replayed prefix's game seed, -1 without a prefix
+        (always an int: gymnasium's vector envs stack info values)."""
         self._steps = 0
         self._hungry = 0  # steps since pacman last ate a dot or an energizer
         self._phi = self._potential(self._state) if self._shaping else 0.0

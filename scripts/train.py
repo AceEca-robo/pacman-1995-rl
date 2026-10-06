@@ -96,7 +96,7 @@ class Collector:
             if ended:
                 ended_count += 1
                 # same-step autoreset: info holds the next episode's reset info
-                if "prefix" in info and info["_prefix"][i] and info["prefix"][i] is not None:
+                if "prefix" in info and info["_prefix"][i] and info["prefix"][i] >= 0:
                     self.prefixed += 1
                 hunger = bool(src["hunger"][i]) if "hunger" in src else False
                 self.ended += 1
