@@ -91,6 +91,23 @@ eps = 0, checkpoint `best_food.pt`).
 - 17:03 dqn1s1 at 17.6M (best_food.pt = 11M, 165.2 on seeds 0..19),
   dqn1s2 at 16.5M (best 11.5M, 101.0), both ~1.5k steps/s, no crash. Final
   evaluations set to start by themselves when each run finishes.
+- 17:40 dqn1s1 finished (no crash); best_food.pt = 19.5M (169.3 on seeds
+  0..19). 100 games eps 0: **mean food 168.8 of 172** (by the criteria this
+  is SUCCESS, also 168.7 on seeds 20..99), but **level 1 cleared 0%**, mean
+  reward 56.1, 20% stuck. eps 0.05: food 159.4, mean reward 99.0 (the best
+  mean reward of all runs), none stuck.
+- 17:45 Where the last dots stay (dqn1s1 best_food.pt, seeds 0..9, fewest
+  dots left in each game): 2, 4, 5, 2, 2, 2, 2, 2, 2, 2. In all 10 games the
+  same two dots are left: (25, 19) and (27, 19), in the bottom-right pocket
+  of the maze. A systematic blind spot, not chance.
+- 17:48 dqn1s2 finished (no crash); best_food.pt = 18.5M. 100 games eps 0:
+  food 101.5, mean reward -28.9, 6% stuck: FAILURE. It never got past ~100
+  food after 2.5M.
+- 17:50 Final: summary table in docs/results.md ("## Summary of all runs"),
+  docs/training.png and docs/eval.png with all runs. dqn1 over 3 seeds
+  (best_food.pt, 100 games, eps 0): food 140.6 +- 28.5, mean reward
+  23.4 +- 37.4, median score 1668 +- 157, level 1 cleared 0% in every seed.
+  Nothing is training any more.
 
 ## Ideas for later
 
@@ -119,3 +136,7 @@ eps = 0, checkpoint `best_food.pt`).
 - Train the end of the level directly: start some episodes from boards with
   few dots left (needs a game option to remove dots), since that is the part
   no agent learned.
+
+- The two dots at (25, 19) and (27, 19) that dqn1s1 never eats: check
+  whether the agent ever visits that pocket in training (state visitation
+  counts), and whether episodes starting there would fix it.
