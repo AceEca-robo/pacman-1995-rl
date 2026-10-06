@@ -221,6 +221,21 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
 - 23:59 **Step 4, SUCCESS branch**: dqn8's config fine-tuned from dqn1 seed 0
   (dqn8s0) and seed 2 (dqn8s2) best_food.pt, in parallel, 5M steps each,
   supervisor started first. Disk 29 GB free, GPU 15 MB used.
+- 00:58-01:07 **Step 4 results** (no crash; both runs dipped to 1.39-1.46k
+  steps/s at times, 3 supervisor slow notes; no new runs were pending).
+  100 games, eps 0, no prefixes:
+  - dqn8s0 (from dqn1 seed 0, best_food.pt = 5.0M): FAILURE, food 153.9
+    (start: 151.6), level 1 0%, reward 67.1, 6% stuck; eps 0.05: 143.4 / 0%.
+  - dqn8s2 (from dqn1 seed 2, best_food.pt = 4.5M): FAILURE, food 103.2
+    (start: 101.5), level 1 0%, reward -40.8, 15% stuck; eps 0.05: 102.5 / 0%.
+  - Neither cleared level 1 in any supervisor evaluation either.
+  - dqn8 setup over the three starting networks (seeds 0, 1, 2): food
+    167.8 +- 59.2, level 1 cleared 67% / 0% / 0% (mean 22%). The recipe
+    worked only from seed 1, whose blind spot was the pocket the prefixes
+    happen to cover; seeds 0 and 2 miss other regions (step 1).
+- 01:07 Throughput measured on the idle machine and added to
+  docs/results.md: single env 32.4k steps/s (39k on 2026-10-05 with the
+  smaller observation of the time).
 
 ## Unclear points and how they were resolved (night 2)
 
