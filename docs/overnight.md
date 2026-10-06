@@ -246,7 +246,7 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
     pocket in 14 of 28 prefixes, seed 0's cells in 11 of 28, seed 2's in 0
     of 28. So seed 2 never saw its region as an endgame, but seed 0 did and
     still did not learn it; coverage is not the whole story.
-- 01:20 **Step 5**: README.md draft finished (results from docs/results.md,
+- 01:14 **Step 5**: README.md draft finished (results from docs/results.md,
   maps, dqn8 GIF, what worked / did not, known problem, future work). Open
   TODO: the author name for the authorship line. Nothing is training; the
   night's runs are done (step 4 SUCCESS branch completed; per the plan no
