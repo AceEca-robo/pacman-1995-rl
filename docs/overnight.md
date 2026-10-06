@@ -187,6 +187,15 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   5M steps, eps 0.1 -> 0.05 over 1M, lr 5e-5) and dqn8
   (`configs/dqn_endgame_bonus.yaml`: dqn7 + endgame dot reward k = 20).
   Disk 30 GB free, GPU 15 MB used before the launch.
+- 22:50 **Crash, my bug.** dqn7 crashed at 0.2M steps, before its first
+  checkpoint: `info["prefix"]` was None after plain resets and an int after
+  prefixed ones, and gymnasium's SyncVectorEnv cannot stack both. The
+  supervisor's one `--resume` failed at once (no checkpoint yet), so it left
+  dqn7 down as designed. dqn8 had the same bug waiting.
+- 22:52 Fixed (`prefix` = -1 without a prefix; a test with mixed resets in a
+  vector env; 57 tests pass), both runs and the supervisor restarted from
+  scratch with the same configs. The failed attempts are kept as
+  `runs/dqn7_crashed`, `runs/dqn8_crashed`; about 3 minutes of training lost.
 
 ## Unclear points and how they were resolved (night 2)
 
@@ -202,6 +211,9 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
 - README "patch of ~12 lines": the real size is 63 added / 4 removed lines
   in 10 original files (mostly argument parsing in arg.cc) plus the new
   rlbridge.cc/.h (157 lines); the README says that.
+- dqn7's crash was a code bug before any checkpoint existed, so "one
+  --resume per crash" could not apply. Conservative choice: fix, test and
+  restart both runs from scratch (nothing to lose), and say so here.
 - README throughput "39k steps/s": measured on 2026-10-05 (git log, commit
   b13cbc3) but not recorded in docs/results.md, so the README says TODO
   until it is measured again and added there.
