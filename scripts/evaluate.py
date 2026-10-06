@@ -155,15 +155,20 @@ def update_results(path, res):
             text = text[:text.index("\n## ")]
         for line in text.splitlines():
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if line.startswith("| ") and line.strip() != HEADER and cells[0].split()[0] in AGENTS:
+            if line.startswith("| ") and line.strip() != HEADER and cells[0] and cells[0] != "---" \
+                    and not set(cells[0]) <= set("-"):
                 rows[cells[0]] = line
     rows[res["agent"]] = row(res)
-    order = lambda label: (AGENTS.index(label.split()[0]), label)  # noqa: E731
-    with open(path, "w") as f:
-        f.write(RESULTS_INTRO + HEADER + "\n" + RULE + "\n")
-        for label in sorted(rows, key=order):
-            f.write(rows[label] + "\n")
-        f.write(tail)
+    def order(label):
+        kind = label.split()[0]
+        return (AGENTS.index(kind) if kind in AGENTS else len(AGENTS), label)
+    # build everything first, then replace the file in one step: a failure
+    # here must not leave a truncated results file
+    text = (RESULTS_INTRO + HEADER + "\n" + RULE + "\n"
+            + "".join(rows[label] + "\n" for label in sorted(rows, key=order)) + tail)
+    with open(path + ".tmp", "w") as f:
+        f.write(text)
+    os.replace(path + ".tmp", path)
 
 
 def main():

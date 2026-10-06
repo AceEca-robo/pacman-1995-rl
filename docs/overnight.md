@@ -51,6 +51,16 @@ eps = 0, checkpoint `best_food.pt`).
   (`configs/dqn_fooddist_n5.yaml`). Decision for a case the plan does not
   name: if dqn6 is SUCCESS or PARTIAL, seeds 1 and 2 are run for dqn6 (as in
   the other branches); only FAILURE leads to seeds 1 and 2 of dqn1.
+- 13:05 **Incident (my bug), fixed.** The first, failed run of
+  `final_eval.py` for dqn5 (row label without the agent type) made
+  `evaluate.py` crash while rewriting docs/results.md: it had already opened
+  the file for writing, so the file was left with only its header. That
+  truncated file went into commit cbf55c7. Restored from c6e0be7 (all 76
+  earlier rows and the Notes / Diagnostics / hunger sections) plus the 4 dqn5
+  rows; `evaluate.py` now builds the whole file first and replaces it
+  atomically, accepts any row label, and a test checks that rows and "## "
+  sections survive an update. The summary table (`scripts/summary_table.py`)
+  is a "## Summary of all runs" section at the end of results.md.
 
 ## Ideas for later
 

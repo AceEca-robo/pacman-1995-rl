@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Summary table of all runs' final 100-game evaluations (seeds 0..99, eps 0,
-no shaping/hunger) into docs/results.md, between the summary markers.
+no shaping/hunger) as the section "## Summary of all runs" of docs/results.md
+(replaced on each run; a "## " section after the table, which evaluate.py keeps).
 
     python scripts/summary_table.py
 
@@ -19,7 +20,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS = os.path.join(ROOT, "runs")
 RESULTS = os.path.join(ROOT, "docs", "results.md")
-BEGIN, END = "<!-- summary:begin -->", "<!-- summary:end -->"
+HEADING = "## Summary of all runs"
 
 EARLIER = [  # (run, checkpoint, what changed, per-game file)
     ("dqn0", "best.pt (4.75M)", "baseline DQN, 5M", "night_final/final_dqn0_100.jsonl"),
@@ -65,7 +66,7 @@ def best_food_steps(run):
 
 
 def main():
-    lines = [BEGIN, "## Summary of all runs", "",
+    lines = [HEADING, "",
              "Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, "
              "eps 0, no shaping or hunger_limit (dqn5 on: best_food.pt, the checkpoint with "
              "the most food in the supervisor's 20-game evaluations). Food = dots + "
@@ -98,15 +99,16 @@ def main():
                                   f"{np.std([n[k] for n in ns]):.1f}"
                                   for k in ("food", "reward", "score"))
                       + f", level 1 cleared {np.mean([n['level1'] for n in ns]):.0%}"]
-    lines.append(END)
-    block = "\n".join(lines)
+    block = "\n".join(lines) + "\n"
+    # a "## " section after the evaluate.py table: evaluate.py keeps those
     with open(RESULTS) as f:
         text = f.read()
-    if BEGIN in text:
-        text = text[:text.index(BEGIN)] + block + text[text.index(END) + len(END):]
-    else:  # right after the intro, before the big table
-        cut = text.index("| agent |")
-        text = text[:cut] + block + "\n\n## All evaluations\n\n" + text[cut:]
+    if HEADING in text:
+        start = text.index(HEADING)
+        nxt = text.find("\n## ", start + 1)
+        text = text[:start] + block + (text[nxt + 1:] if nxt >= 0 else "")
+    else:
+        text = text.rstrip("\n") + "\n\n" + block
     with open(RESULTS, "w") as f:
         f.write(text)
     print(block)
