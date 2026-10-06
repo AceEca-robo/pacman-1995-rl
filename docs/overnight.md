@@ -36,18 +36,18 @@ eps = 0, checkpoint `best_food.pt`).
   slowly after the plateau: 121 (6.5M) .. 127 (10M). best_food.pt = 10M
   (126.9 on seeds 0..19). Evaluations at 8M, 9.5M, 10M had 10-20% of games
   stuck until the 10000-step limit. Final evaluation started.
-- 12:50 **dqn5 final evaluation (best_food.pt = 10M), verdict FAILURE.**
+- 12:42 **dqn5 final evaluation (best_food.pt = 10M), verdict FAILURE.**
   100 games eps 0: mean food 127.4, level 1 cleared 0%, mean reward 20.4,
   median score 1950, 20% of games stuck until 10000 steps. Seeds 20..99
   only: food 127.5, same verdict. eps 0.05: food 125.6, reward 67.0, no game
   stuck. Without ghosts it stops eating after ~102 (eps 0) / ~113 (eps 0.05)
   food items and stays until the limit.
-- 12:55 FAILURE branch, step 1: the food-distance channel checked by hand in
+- 12:44 FAILURE branch, step 1: the food-distance channel checked by hand in
   3 states of a dqn5 game (start, 120 and 60 food left) against the BFS of
   the heuristic agent (`agents/heuristic_agent.py` `_Graph`, an independent
   implementation): 0 mismatches over all 759 cells each time; printouts in
   `runs/dqn5_channel_check.txt`. The channel is correct, so no rerun of dqn5.
-- 12:57 FAILURE branch, step 2: dqn6 = dqn5 + n_step 5 + gamma 0.995, 10M
+- 12:45 FAILURE branch, step 2: dqn6 = dqn5 + n_step 5 + gamma 0.995, 10M
   (`configs/dqn_fooddist_n5.yaml`). Decision for a case the plan does not
   name: if dqn6 is SUCCESS or PARTIAL, seeds 1 and 2 are run for dqn6 (as in
   the other branches); only FAILURE leads to seeds 1 and 2 of dqn1.
