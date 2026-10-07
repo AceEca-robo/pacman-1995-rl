@@ -5,8 +5,9 @@ GPL-2+), the X11 game from the Debian package `pacman` (version 10-21). The
 game is not reimplemented: its C++ sources are compiled with a small bridge
 and driven as a gymnasium environment through a Unix socket.
 
-> Draft (2026-10-07). Numbers are taken from `docs/results.md` and the
-> session logs `docs/overnight.md`; open points are marked TODO.
+> v0.1 (2026-10-07): the first agent that clears level 1 (dqn8, 67% of
+> greedy games). Numbers are taken from `docs/results.md` and the session
+> logs `docs/overnight.md`.
 
 ![training](docs/training.png)
 
@@ -35,6 +36,7 @@ and driven as a gymnasium environment through a Unix socket.
 ## Install and run
 
 ```bash
+git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
 sudo apt install build-essential xutils-dev libx11-dev libncurses-dev   # g++, xmkmf, X11, curses
 sudo apt install xvfb xdotool x11-apps   # tests on a virtual display, play.py --record (xwd)
 cd game && xmkmf && make && cd ..
@@ -55,6 +57,13 @@ installed as the CUDA 13.0 build (`2.14.1+cu130`) from the PyTorch index.
 .venv/bin/python scripts/train.py --config configs/dqn_long.yaml --seed 1 --run-name dqn1s1
 .venv/bin/python scripts/evaluate.py --agent dqn --checkpoint runs/dqn1s1/best_food.pt --episodes 100
 ```
+
+Trained checkpoints are not in the repository (`runs/` is ignored); the two
+from this release are attached to the GitHub release
+[v0.1](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.1):
+`dqn8_best_food.pt` (clears level 1 in 67% of greedy games) and
+`dqn1s1_best_food.pt` (its starting point). Put them anywhere and pass the
+path with `--checkpoint`.
 
 All hyperparameters live in `configs/*.yaml`. `scripts/supervisor.py` watches
 runs (evaluations every 500k steps, one restart after a crash),
@@ -150,7 +159,21 @@ So level 1 is cleared by one agent (dqn8, 67% of greedy games), not by the
 recipe in general: over its three starting networks the mean is 22%. Seeds
 differ more than most changes tried (dqn1: 101.5 to 168.8 food).
 
-## Known problem: a fixed point of the greedy policy
+## Known limitations
+
+**Only level 1 is learned.** Training and evaluation use level 1 only
+(evaluation scores and food counts include whatever happens after it, but
+nothing was trained for it). The game has 16 different mazes
+(`boards[LEVELS][...]` in `game/board.h`, `LEVELS 16` in `game/pac.h`):
+level n is played on maze n, and from level 17 on a random one of the 16
+(`Gamedata::setboardlevel`, `game/gamedata.cc`). The level 2 maze differs
+from level 1 in 23 cells of walls and passages, so a level-1 route does not
+carry over. Seen on screen and reproduced (dqn8, seed 0, greedy): it clears
+level 1 at step 518 (score 4790), eats 137 of 172 food items on level 2,
+stops eating after step 826, loses its remaining lives and the game ends at
+step 941 with score 6220 and 35 food items left on level 2.
+
+### A fixed point of the greedy policy
 
 Greedy agents stop and stand still, often next to food. Without ghosts
 (`--no-ghosts`, `configs/env_noghosts.yaml`) every DQN stops for good after
@@ -193,5 +216,4 @@ tests/     pytest
 The game is pacman 1.0 (c) 1995 Roar Thronaes, GPL-2+ (`game/COPYING`,
 `game/Copyright`, from the Debian package `pacman` 10-21). This repository is
 distributed under the GPL-2.0-or-later as well (`LICENSE`).
-RL bridge, environment and agents: ace8ecar-source (TODO: author name as it
-should appear), written with Claude Code.
+RL bridge, environment and agents: AceEca-robo, written with Claude Code.
