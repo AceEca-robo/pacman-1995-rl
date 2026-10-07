@@ -305,6 +305,22 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
 ## Chronology (2026-10-07)
 
 - 14:50 Start. Disk 21 GB free, GPU 15 MB used, nothing running.
+- 14:52 **Step 1, dqn8's lost games** (`scripts/diag_failures.py`,
+  best_food.pt, eps 0, seeds 0..99; `docs/dqn8_failures.png`,
+  `runs/diag/failures_dqn8.json`): 67 cleared, **32 died** (all lives lost on
+  level 1), **1 stuck** (seed 90: 3 food left, 9377 steps without food).
+  - Every life was lost by meeting a ghost in normal state (distance 0); the
+    death cells are spread over the maze (192 lives lost on level 1 in all
+    games, at most 6 in one cell, (9, 11)).
+  - The deaths come late: food left at the last death median 7, <= 15 in 25
+    of the 32 died games, <= 4 in 15 of them. Even the cleared games lose
+    lives (94 in 67 games; only 6 cleared without a death).
+  - Food left in >= 5 failed games: yes, e.g. (7,13) in 20, (3,3) in 16,
+    (23,5) in 12, (29,3) in 11, the row (13..19, 3) in 6-8. These are where
+    the agent was going when the last life went, not never-visited cells:
+    only one failed game ended stuck.
+  - **Conclusion: the main cause is death, not blind spots.** So dqn10 =
+    dqn9 + PER (alpha 0.6, beta 0.4 -> 1.0), per the plan.
 
 ## Unclear points and decisions (2026-10-07)
 
