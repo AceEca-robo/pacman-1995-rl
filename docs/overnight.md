@@ -432,3 +432,11 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   2M steps, in parallel.
 - 22:44 dqn10 (9.0M) on all mazes: 90% on maze 1, 0% on the 15 others, never
   clears level 2 after level 1 (mean 0.84 levels from level 1).
+- 23:08 Smoke test done (2M steps each, both runs at the same time): standard
+  width 1194 steps/s on average, wide 1134 steps/s, **wide 5% slower** (limit
+  25%), so mm1 and mm2 use the wide network (`configs/dqn_mm_wide.yaml`). At
+  2M neither clears a level (evaluation from level 1: 17 vs 26 food per game).
+- 23:09 **Step 4 started**: mm1 (`configs/dqn_mm1.yaml`, start_level
+  random:1-16) and mm2 (`configs/dqn_mm2.yaml`, random:1-4 / 1-8 from 10M /
+  1-16 from 20M), seed 0 each, supervisor (`--every 5000000`, its rows go to
+  `runs/mm_sv_results.md`, not results.md). Disk 25 GB free, GPU 776 MB.

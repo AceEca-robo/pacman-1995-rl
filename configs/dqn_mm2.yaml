@@ -1,0 +1,8 @@
+# mm2: dqn_mm_wide with a maze curriculum: random 1..4 for the first 10M
+# steps, 1..8 until 20M, 1..16 after that.
+base: dqn_mm_wide.yaml
+eval_every: 1000000
+start_level_schedule:
+  - [0, random:1-4]
+  - [10000000, random:1-8]
+  - [20000000, random:1-16]
