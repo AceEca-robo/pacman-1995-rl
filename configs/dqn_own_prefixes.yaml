@@ -1,0 +1,16 @@
+# dqn9: fine-tune dqn8/best_food.pt on endgame prefixes from dqn8's own
+# greedy games (env seeds 2000..2599, data/dqn8_prefixes.json); otherwise
+# dqn8's env (endgame dot reward k 20, prefix_prob 0.5).
+base: dqn_endgame_bonus.yaml
+init_checkpoint: runs/dqn8/best_food.pt
+total_steps: 5000000
+epsilon_start: 0.05
+epsilon_end: 0.02
+epsilon_steps: 1000000
+lr: 0.00003
+env_config:
+  prefix_prob: 0.5
+  prefix_file: data/dqn8_prefixes.json
+  endgame_dot:
+    enabled: true
+    k: 20

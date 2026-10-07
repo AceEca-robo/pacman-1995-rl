@@ -37,6 +37,7 @@ RUNS = os.path.join(ROOT, "runs")
 LOG = os.path.join(RUNS, "supervisor.log")
 STATE = os.path.join(RUNS, "supervisor_state.json")
 RESULTS = os.path.join(ROOT, "docs", "results.md")
+EVAL_SEED = 0  # first seed of the supervisor's evaluation games (--eval-seed)
 PLOT_DIR = os.path.join(ROOT, "docs")
 PLOT_RUNS = ["dqn0", "dqn2"]  # finished runs kept on docs/eval.png for reference
 
@@ -103,7 +104,7 @@ def evaluate(run, steps, episodes):
     label = f"{algo} {run}@{steps / 1e6:05.2f}M"
     out = subprocess.run(
         [PY, os.path.join(ROOT, "scripts", "evaluate.py"), "--agent", algo, "--checkpoint", ck,
-         "--episodes", str(episodes), "--seed", "0", "--label", label,
+         "--episodes", str(episodes), "--seed", str(EVAL_SEED), "--label", label,
          "--episodes-out", os.path.join(RUNS, run, f"sv_eval_{steps}.jsonl"),
          "--results", RESULTS],
         capture_output=True, text=True, cwd=ROOT)
@@ -150,20 +151,22 @@ def recent_speed(text):
 
 
 def main():
-    global LOG, STATE, RESULTS, PLOT_DIR
+    global LOG, STATE, RESULTS, PLOT_DIR, EVAL_SEED
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("runs", nargs="+")
     p.add_argument("--every", type=int, default=500_000)
     p.add_argument("--episodes", type=int, default=20)
     p.add_argument("--poll", type=float, default=15.0, help="seconds between checks")
     p.add_argument("--min-speed", type=int, default=1500)
+    p.add_argument("--eval-seed", type=int, default=0,
+                   help="first seed of the evaluation games (keep apart from the final eval)")
     p.add_argument("--results", default=RESULTS, help="markdown table evaluate.py updates")
     p.add_argument("--plot-dir", default=PLOT_DIR, help="where eval.png goes")
     p.add_argument("--log-dir", default=RUNS, help="supervisor.log and supervisor_state.json")
     args = p.parse_args()
     LOG = os.path.join(args.log_dir, "supervisor.log")
     STATE = os.path.join(args.log_dir, "supervisor_state.json")
-    RESULTS, PLOT_DIR = args.results, args.plot_dir
+    RESULTS, PLOT_DIR, EVAL_SEED = args.results, args.plot_dir, args.eval_seed
 
     state = {}
     if os.path.exists(STATE):
@@ -179,7 +182,7 @@ def main():
         os.replace(STATE + ".tmp", STATE)
 
     log(f"supervisor started for {', '.join(args.runs)}: eval every {args.every} steps, "
-        f"{args.episodes} episodes")
+        f"{args.episodes} episodes on seeds {EVAL_SEED}..{EVAL_SEED + args.episodes - 1}")
     save()
     while any(state[r]["status"] == "running" for r in args.runs):
         for run in args.runs:

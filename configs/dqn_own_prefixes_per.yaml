@@ -1,0 +1,7 @@
+# dqn10: dqn9 + prioritized replay (main cause of dqn8's lost games: deaths).
+base: dqn_own_prefixes.yaml
+per:
+  enabled: true
+  alpha: 0.6
+  beta_start: 0.4
+  beta_end: 1.0
