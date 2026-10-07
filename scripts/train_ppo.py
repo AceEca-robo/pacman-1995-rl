@@ -195,6 +195,7 @@ def train(cfg, seed, run_dir, resume=False, env_id=None, device=None, quiet=Fals
                     "median_score": float(np.median([r["score"] for r in res])),
                     "mean_length": float(np.mean([r["length"] for r in res])),
                     "level1_cleared": float(np.mean([r["level"] >= 2 for r in res])),
+                    "mean_food": float(np.mean([r["food"] for r in res])),
                 }
                 for k, v in summary.items():
                     if k != "steps":

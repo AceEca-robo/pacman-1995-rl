@@ -45,7 +45,7 @@ network:
 
 eval_every: 250000
 eval_episodes: 20
-eval_seed: 1000000          # eval episode i uses env seed eval_seed + i
-best_metric: mean_reward    # mean eval reward; or median_reward (dqn0..dqn3b used it), median_score
+eval_seed: 1000             # eval episode i uses env seed eval_seed + i (1000..1019: kept apart from the final evaluation on 0..99)
+best_metric: level1_cleared # rule since v0.2: share of eval games clearing level 1, ties by mean food; or mean_reward (dqn4..dqn10), median_reward (dqn0..dqn3b), median_score
 checkpoint_buffer: true     # save the replay buffer with checkpoints (~3.3 GB)
 log_every: 10000            # env steps between scalar logs

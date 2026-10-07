@@ -129,34 +129,43 @@ def warm_start(collector, cfg):
 def evaluate(learner, envs, cfg):
     """Greedy episodes over a fixed seed set, the envs stepping in a batch."""
     seeds = list(range(cfg["eval_seed"], cfg["eval_seed"] + cfg["eval_episodes"]))
-    results, live = [], []  # live: [env, obs, seed, reward, length, max level]
+    results, live = [], []  # live: [env, obs, seed, reward, length, max level, food]
     for env in envs:
         if seeds:
             s = seeds.pop(0)
             obs, info = env.reset(seed=s)
-            live.append([env, obs, s, 0.0, 0, info["level"]])
+            live.append([env, obs, s, 0.0, 0, info["level"], 0])
     while live:
         q = learner.q_values(pack_grids(np.stack([e[1]["grid"] for e in live])),
                              np.stack([e[1]["vec"] for e in live]))
         for e, a in zip(list(live), q.argmax(1)):
             obs, r, term, trunc, info = e[0].step(a)
             e[1], e[3], e[4], e[5] = obs, e[3] + r, e[4] + 1, max(e[5], info["level"])
+            e[6] += info["events"]["eaten_dot"] + info["events"]["eaten_energizer"]
             if term or trunc:
                 results.append({"seed": e[2], "reward": e[3], "score": info["score"],
-                                "length": e[4], "level": e[5]})
+                                "length": e[4], "level": e[5], "food": e[6]})
                 if seeds:
                     e[2] = seeds.pop(0)
                     e[1], info = e[0].reset(seed=e[2])
-                    e[3], e[4], e[5] = 0.0, 0, info["level"]
+                    e[3], e[4], e[5], e[6] = 0.0, 0, info["level"], 0
                 else:
                     live.remove(e)
     return sorted(results, key=lambda x: x["seed"])
 
 
 def best_metric(name, results):
-    """Value to pick best.pt by. "mean_reward" (default since dqn4: a median
-    ignores games stuck until the step limit while they are under half),
-    "median_reward" / "median_score"; old configs say "reward" / "score"."""
+    """Value to pick best.pt by (higher is better).
+    "level1_cleared" (the rule since v0.2): share of eval games that cleared
+    level 1, ties broken by mean food eaten; returned as
+    share * 1000 + mean food / 1000, which orders lexicographically (one game
+    changes the share term by >= 1000 / episodes, food / 1000 stays < 1).
+    "mean_reward" (dqn4..dqn10: a median ignores games stuck until the step
+    limit while they are under half), "median_reward" / "median_score"; old
+    configs say "reward" / "score"."""
+    if name == "level1_cleared":
+        share = float(np.mean([r["level"] >= 2 for r in results]))
+        return share * 1000 + float(np.mean([r["food"] for r in results])) / 1000
     name = {"reward": "median_reward", "score": "median_score"}.get(name, name)
     stat, key = name.split("_")
     values = [r[key] for r in results]
@@ -331,6 +340,7 @@ def main():
                     "median_score": float(np.median([r["score"] for r in res])),
                     "mean_length": float(np.mean([r["length"] for r in res])),
                     "level1_cleared": float(np.mean([r["level"] >= 2 for r in res])),
+                    "mean_food": float(np.mean([r["food"] for r in res])),
                 }
                 for k, v in summary.items():
                     if k != "steps":

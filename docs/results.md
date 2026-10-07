@@ -389,6 +389,10 @@ games, no prefixes). Target: level 1 cleared >= 85% (PARTIAL >= 75%).
   games about +-3.6 points), so the target is met only with that rule and
   only at the edge.
 - With eps 0.05 all of them clear level 1 in 12-13% of games only.
+- Decision after this session: the checkpoint rule from v0.2 on is level 1
+  clears on seeds 1000..1019 with mean food as the second key
+  (`best_metric: level1_cleared`); by that rule dqn10's checkpoint is 9.0M,
+  85%.
 
 ## Summary of all runs
 

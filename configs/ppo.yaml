@@ -27,6 +27,6 @@ network:                    # same trunk as configs/dqn.yaml
 
 eval_every: 250000
 eval_episodes: 20
-eval_seed: 1000000
-best_metric: mean_reward
+eval_seed: 1000             # 1000..1019, apart from the final evaluation on 0..99
+best_metric: level1_cleared # rule since v0.2 (see configs/dqn.yaml)
 log_every: 10000

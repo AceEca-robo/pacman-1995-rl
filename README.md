@@ -10,8 +10,8 @@ level 2, whose maze differs from level 1 in 23 cells.
 
 ![dqn8 playing](docs/dqn8.gif)
 
-> v0.2 (2026-10-07): dqn10 clears level 1 in 81% of greedy games (85% with
-> the checkpoint picked by level clears); v0.1: dqn8, 67%. Numbers are taken from `docs/results.md` and the session
+> v0.2 (2026-10-07): dqn10 clears level 1 in 85% of greedy games; v0.1:
+> dqn8, 67%. Numbers are taken from `docs/results.md` and the session
 > logs `docs/overnight.md`.
 
 ## How the game became an environment
@@ -69,8 +69,8 @@ installed as the CUDA 13.0 build (`2.14.1+cu130`) from the PyTorch index.
 Trained checkpoints are not in the repository (`runs/` is ignored); they are
 attached to the GitHub releases:
 [v0.2](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.2):
-`dqn10_best_food.pt` (81% of level 1 clears, picked by food) and
-`dqn10_ck9M.pt` (85%, picked by level clears);
+`dqn10_ck9M.pt` (85% of level 1 clears; the v0.2 checkpoint by the rule
+below) and `dqn10_best_food.pt` (81%, picked by food as before v0.2);
 [v0.1](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.1):
 `dqn8_best_food.pt` (67%) and `dqn1s1_best_food.pt` (its starting point).
 Put them anywhere and pass the path with `--checkpoint`.
@@ -97,7 +97,14 @@ reward based on the score would mostly teach ghost chains.
 ## Results
 
 Final evaluation: 100 games, seeds 0..99, greedy (eps 0), no shaping; food =
-dots + energizers eaten per game, 172 on level 1. From `docs/results.md`
+dots + energizers eaten per game, 172 on level 1.
+
+**Checkpoint rule (v0.2+):** the checkpoint with the highest share of games
+clearing level 1 on seeds 1000..1019 (20 greedy games, disjoint from the final
+seeds 0..99), mean food as the second key (`best_metric: level1_cleared`,
+`eval_seed: 1000` in `configs/dqn.yaml`). Before v0.2 the most food on the
+selection games (`best_food.pt`) was used, which stopped tracking level
+clears once the agents ate into level 2. From `docs/results.md`
 ("Summary of all runs"):
 
 | agent / run | checkpoint | mean food | level 1 cleared | mean reward | median score |
@@ -114,8 +121,8 @@ dots + energizers eaten per game, 172 on level 1. From `docs/results.md`
 | dqn8 setup from dqn1 seed 0 / seed 2 | best_food.pt | 153.9 / 103.2 | 0% / 0% | 67.1 / -40.8 | 1680 / 1395 |
 | dqn8 setup, 3 starting networks (mean +- std) | best_food.pt | 167.8 +- 59.2 | 22% (67 / 0 / 0) | 80.4 +- 104.8 | 2702 +- 1651 |
 | dqn9: dqn8 fine-tuned on its own endgame openings | best_food.pt | 274.4 | 79% | 255.3 | 6050 |
-| dqn10: dqn9 + prioritized replay, 10M | best_food.pt (5.0M) | 284.1 | 81% | 267.0 | 6335 |
-| **dqn10, checkpoint picked by level 1 clears** | ck 9.0M | **301.4** | **85%** | **280.7** | **6432** |
+| **dqn10: dqn9 + prioritized replay, 10M** | 9.0M (rule v0.2+) | **301.4** | **85%** | **280.7** | **6432** |
+| dqn10, picked by food (rule before v0.2) | 5.0M | 284.1 | 81% | 267.0 | 6335 |
 
 Training curves (`docs/training.png`) and evaluation curves
 (`docs/eval.png`); the fine-tunes dqn7, dqn8, dqn8s0, dqn8s2 are plotted from
@@ -149,7 +156,7 @@ Worked:
   limit, the best mean reward (99.0 for dqn1 seed 1).
 - Choosing checkpoints by food eaten instead of mean reward, and by mean
   instead of median (a median hides games stuck until the step limit).
-- Pushing level 1 clears from 67% to 81-85% (dqn9, dqn10): dqn8's lost
+- Pushing level 1 clears from 67% to 85% (dqn9, dqn10): dqn8's lost
   games were deaths late in the level, not blind spots
   (`docs/dqn8_failures.png`); fine-tuning it on endgame openings from its
   own games (seeds disjoint from the evaluation) and then adding

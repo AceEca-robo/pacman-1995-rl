@@ -37,7 +37,7 @@ RUNS = os.path.join(ROOT, "runs")
 LOG = os.path.join(RUNS, "supervisor.log")
 STATE = os.path.join(RUNS, "supervisor_state.json")
 RESULTS = os.path.join(ROOT, "docs", "results.md")
-EVAL_SEED = 0  # first seed of the supervisor's evaluation games (--eval-seed)
+EVAL_SEED = 1000  # first seed of the supervisor's evaluation games (--eval-seed)
 PLOT_DIR = os.path.join(ROOT, "docs")
 PLOT_RUNS = ["dqn0", "dqn2"]  # finished runs kept on docs/eval.png for reference
 
@@ -158,7 +158,7 @@ def main():
     p.add_argument("--episodes", type=int, default=20)
     p.add_argument("--poll", type=float, default=15.0, help="seconds between checks")
     p.add_argument("--min-speed", type=int, default=1500)
-    p.add_argument("--eval-seed", type=int, default=0,
+    p.add_argument("--eval-seed", type=int, default=1000,
                    help="first seed of the evaluation games (keep apart from the final eval)")
     p.add_argument("--results", default=RESULTS, help="markdown table evaluate.py updates")
     p.add_argument("--plot-dir", default=PLOT_DIR, help="where eval.png goes")

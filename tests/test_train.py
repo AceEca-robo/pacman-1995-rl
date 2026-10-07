@@ -99,6 +99,12 @@ def test_best_metric():
     assert best_metric("mean_reward", res) == -38.0
     assert best_metric("reward", res) == best_metric("median_reward", res) == 60.0
     assert best_metric("score", res) == 3.0
+    # level1_cleared: the share of games past level 1 first, mean food breaks ties
+    a = [{"level": 2, "food": 180}, {"level": 1, "food": 170}]
+    b = [{"level": 2, "food": 300}, {"level": 1, "food": 160}]   # same share, more food
+    c = [{"level": 2, "food": 175}, {"level": 2, "food": 175}]   # higher share, less food
+    assert best_metric("level1_cleared", b) > best_metric("level1_cleared", a)
+    assert best_metric("level1_cleared", c) > best_metric("level1_cleared", b)
 
 
 def test_train_and_evaluate_with_extra_obs(tmp_path):
@@ -171,5 +177,8 @@ def test_resume_extend_steps(tmp_path):
             assert json.loads(f.readlines()[-1])["steps"] == 4000
         with open(os.path.join(run_dir, "config.yaml")) as f:
             assert yaml.safe_load(f)["total_steps"] == 4000
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            last = json.loads(f.readlines()[-1])
+        assert "mean_food" in last and all("food" in e for e in last["episodes"])
     finally:
         subprocess.run(["rm", "-rf", run_dir])

@@ -359,6 +359,12 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
   by the food rule; 85% is reached only when the checkpoint is picked by
   level clears, and only at the threshold (+-3.6 points on 100 games). The
   seed 1 / seed 2 repeats were not started (see decisions).
+- 17:18 **Decision (user): the checkpoint rule is level 1 clears on seeds
+  1000..1019, food the second key**, from v0.2 on; dqn10 = 9.0M, 85%. No
+  seed 1 / seed 2 repeats. Fixed in code: `best_metric: level1_cleared`
+  (train.py, train_ppo.py; evaluations now count food per game),
+  `eval_seed: 1000` in configs/dqn.yaml and ppo.yaml, supervisor default
+  `--eval-seed 1000`; README states the rule.
 
 ## Unclear points and decisions (2026-10-07)
 
