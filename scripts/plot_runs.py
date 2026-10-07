@@ -7,6 +7,9 @@ Writes <out-dir>/training.png (episode reward and score over env steps,
 rolling median over --smooth episodes) and <out-dir>/eval.png (median eval
 reward, median eval score and share of eval episodes clearing level 1 at
 each checkpoint). Baselines from docs/results.md are drawn as dashed lines.
+--which levels writes <out-dir>/eval_levels.png instead (multi-maze runs:
+mean levels cleared per eval game from level 1, level 1 clears, and levels
+cleared per training episode, rolling mean over --smooth episodes).
 """
 
 import argparse
@@ -72,7 +75,7 @@ def main():
     p.add_argument("runs", nargs="+", help="run names under runs/")
     p.add_argument("--out-dir", default=os.path.join(ROOT, "docs"))
     p.add_argument("--smooth", type=int, default=200, help="episodes in the rolling median")
-    p.add_argument("--which", choices=("both", "training", "eval"), default="both")
+    p.add_argument("--which", choices=("both", "training", "eval", "levels"), default="both")
     args = p.parse_args()
 
     data = {r: load_scalars(os.path.join(ROOT, "runs", r)) for r in args.runs}
@@ -84,6 +87,8 @@ def main():
         written.append(plot_training(data, baselines, args))
     if args.which in ("both", "eval"):
         written.append(plot_eval(data, baselines, args))
+    if args.which == "levels":
+        written.append(plot_levels(data, args))
     print("wrote", *written)
 
 
@@ -134,6 +139,37 @@ def plot_eval(data, baselines, args):
         ax.legend(fontsize=8)
     fig.tight_layout()
     path = os.path.join(args.out_dir, "eval.png")
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    return path
+
+
+def plot_levels(data, args):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
+    panels = (("eval/mean_levels_cleared", "Eval: mean levels cleared per game from level 1"),
+              ("eval/level1_cleared", "Eval: games clearing level 1"),
+              ("episode/levels_cleared", "Training episodes: levels cleared (rolling mean)"))
+    for ax, (tag, title) in zip(axes, panels):
+        for run, sc in data.items():
+            if tag not in sc:
+                continue
+            steps, values = sc[tag]
+            if tag.startswith("episode/"):
+                window = min(args.smooth, len(values)) or 1
+                mean = np.convolve(values, np.ones(window) / window, mode="valid")
+                ax.plot(steps[window - 1:], mean, linewidth=1.6, label=run)
+            else:
+                ax.plot(steps, values, marker="o", markersize=3, label=run)
+        if tag == "eval/level1_cleared":
+            ax.set_ylim(-0.05, 1.05)
+            ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel("env steps")
+        ax.xaxis.set_major_formatter(matplotlib.ticker.EngFormatter())
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+    fig.tight_layout()
+    path = os.path.join(args.out_dir, "eval_levels.png")
     fig.savefig(path, dpi=120)
     plt.close(fig)
     return path
