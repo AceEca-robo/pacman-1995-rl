@@ -452,3 +452,10 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   maze 1 (98-106 food at 3-5M) but its games stretch to 2500 ticks at 5M
   (wandering without food); mm1 110 food at 5M in short games (deaths).
   Disk 18 GB free, GPU 776 MB.
+- 01:43 mm1 8.8M, mm2 9.1M. Selection evals: 0 levels cleared at every point
+  so far; food per game from level 1: mm1 110-121 (5-8M), mm2 106-110
+  (5-9M, games 1700-2500 ticks). Training episodes (TensorBoard, last 1M
+  steps): not one cleared level in 1654 (mm1) / 940 (mm2) episodes, on any
+  start maze. As expected from earlier from-scratch runs on maze 1 alone
+  (dqn0/dqn1: 0% level 1; level clears came only with prefixes and
+  fine-tuning in dqn7-dqn10). Disk 18 GB free.
