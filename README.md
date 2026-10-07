@@ -66,12 +66,14 @@ installed as the CUDA 13.0 build (`2.14.1+cu130`) from the PyTorch index.
 .venv/bin/python scripts/evaluate.py --agent dqn --checkpoint runs/dqn1s1/best_food.pt --episodes 100
 ```
 
-Trained checkpoints are not in the repository (`runs/` is ignored); the two
-from this release are attached to the GitHub release
+Trained checkpoints are not in the repository (`runs/` is ignored); they are
+attached to the GitHub releases:
+[v0.2](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.2):
+`dqn10_best_food.pt` (81% of level 1 clears, picked by food) and
+`dqn10_ck9M.pt` (85%, picked by level clears);
 [v0.1](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.1):
-`dqn8_best_food.pt` (clears level 1 in 67% of greedy games) and
-`dqn1s1_best_food.pt` (its starting point). Put them anywhere and pass the
-path with `--checkpoint`.
+`dqn8_best_food.pt` (67%) and `dqn1s1_best_food.pt` (its starting point).
+Put them anywhere and pass the path with `--checkpoint`.
 
 All hyperparameters live in `configs/*.yaml`. `scripts/supervisor.py` watches
 runs (evaluations every 500k steps, one restart after a crash),
