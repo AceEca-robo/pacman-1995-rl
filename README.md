@@ -10,8 +10,8 @@ level 2, whose maze differs from level 1 in 23 cells.
 
 ![dqn8 playing](docs/dqn8.gif)
 
-> v0.1 (2026-10-07): the first agent that clears level 1 (dqn8, 67% of
-> greedy games). Numbers are taken from `docs/results.md` and the session
+> v0.2 (2026-10-07): dqn10 clears level 1 in 81% of greedy games (85% with
+> the checkpoint picked by level clears); v0.1: dqn8, 67%. Numbers are taken from `docs/results.md` and the session
 > logs `docs/overnight.md`.
 
 ## How the game became an environment
@@ -111,6 +111,9 @@ dots + energizers eaten per game, 172 on level 1. From `docs/results.md`
 | dqn8, eps 0.05 | best_food.pt | 159.5 | 4% | 102.4 | - |
 | dqn8 setup from dqn1 seed 0 / seed 2 | best_food.pt | 153.9 / 103.2 | 0% / 0% | 67.1 / -40.8 | 1680 / 1395 |
 | dqn8 setup, 3 starting networks (mean +- std) | best_food.pt | 167.8 +- 59.2 | 22% (67 / 0 / 0) | 80.4 +- 104.8 | 2702 +- 1651 |
+| dqn9: dqn8 fine-tuned on its own endgame openings | best_food.pt | 274.4 | 79% | 255.3 | 6050 |
+| dqn10: dqn9 + prioritized replay, 10M | best_food.pt (5.0M) | 284.1 | 81% | 267.0 | 6335 |
+| **dqn10, checkpoint picked by level 1 clears** | ck 9.0M | **301.4** | **85%** | **280.7** | **6432** |
 
 Training curves (`docs/training.png`) and evaluation curves
 (`docs/eval.png`); the fine-tunes dqn7, dqn8, dqn8s0, dqn8s2 are plotted from
@@ -144,6 +147,12 @@ Worked:
   limit, the best mean reward (99.0 for dqn1 seed 1).
 - Choosing checkpoints by food eaten instead of mean reward, and by mean
   instead of median (a median hides games stuck until the step limit).
+- Pushing level 1 clears from 67% to 81-85% (dqn9, dqn10): dqn8's lost
+  games were deaths late in the level, not blind spots
+  (`docs/dqn8_failures.png`); fine-tuning it on endgame openings from its
+  own games (seeds disjoint from the evaluation) and then adding
+  prioritized replay. Checkpoints are picked on seeds 1000..1019 and
+  evaluated on 0..99.
 - Clearing level 1 (dqn8): fine-tuning the best DQN with episodes that start
   near the end of level 1 (replayed heuristic openings with <= 15 food left,
   `data/endgame_prefixes.json`, half of the resets) **and** dots worth more

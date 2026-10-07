@@ -345,6 +345,20 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
   dqn10, so step 3 = continue dqn10 with --resume for 5M more.
   `train.py --resume --extend-steps N` added (raises the run's total_steps;
   tested), since a plain --resume of a finished run does nothing.
+- 16:04 **Step 3**: dqn10 resumed from 5.0M with --extend-steps 5000000
+  (supervisor kept its evaluated points). Finished 16:52, no crash.
+  Selection evaluations 5.5..10M: level 1 cleared 60, 85, 80, 85, 85, 75,
+  90, **95 (9.0M)**, 80, 85%; mean food at most 304.9, so best_food.pt stayed
+  at 5.0M (307.1).
+- 16:54 Official final (best_food.pt rule): unchanged, the same 5.0M
+  checkpoint, **81% -> PARTIAL after the extra 5M; per the plan: stop.**
+- 16:56 Extra, labelled separately: dqn10's 9.0M checkpoint (best level 1
+  clears on the selection seeds 1000..1019) on seeds 0..99: **85%** (84% on
+  20..99), food 301.4, reward 280.7, 3% stuck; eps 0.05: 13%.
+- Conclusion: own-game endgame prefixes (+ PER) moved dqn8 from 67% to 79-81%
+  by the food rule; 85% is reached only when the checkpoint is picked by
+  level clears, and only at the threshold (+-3.6 points on 100 games). The
+  seed 1 / seed 2 repeats were not started (see decisions).
 
 ## Unclear points and decisions (2026-10-07)
 
@@ -367,3 +381,12 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
   best_food.pt); the replay buffer was not saved (checkpoint_buffer false),
   so it refills for learning_starts (20k steps) and PER priorities start
   fresh; epsilon stays at 0.02 (its schedule ended at 1M).
+
+- Checkpoint rule vs target: best_food.pt (most food) was the rule, but the
+  target is level clears and food stopped tracking them once the agent eats
+  into level 2 (more food also comes from playing on). The level-picked 9.0M
+  checkpoint is reported separately and released next to the rule's pick;
+  which rule counts is for the user to decide.
+- Step 3 says "if one reached >= 85%, repeat the fine-tune with seeds 1 and
+  2". By the rule in force none did (81%), so the conservative reading was to
+  stop; the repeats (2 x 10M, about 2 hours) were not started.

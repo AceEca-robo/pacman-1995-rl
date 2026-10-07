@@ -19,10 +19,10 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | dqn dqn1/best_median.pt | 100 | 0..99 | 49.1 | 70.1 | 1688 | 1580 | 3180 | 0% | 0% | 2924 | 15% | 95.2 | af91590 |
 | dqn dqn1/best_median.pt, 50 games | 50 | 0..49 | 46.0 | 67.3 | 1724 | 1590 | 3180 | 0% | 0% | 3104 | 16% | 95.4 | a5cfce0 |
 | dqn dqn1/best_median.pt, no ghosts | 50 | 0..49 | -143.0 | -143.0 | 530 | 530 | 530 | 0% | 0% | 10000 | 100% | 257.8 | a5cfce0 |
-| dqn dqn10 (5M)/best_food.pt, eps 0 | 100 | 0..99 | 267.0 | 309.7 | 5522 | 6335 | 9425 | 81% | 26% | 874 | 0% | 30.9 | 582175c |
-| dqn dqn10 (5M)/best_food.pt, eps 0.05 | 100 | 0..99 | 113.7 | 101.0 | 2157 | 1685 | 6565 | 12% | 0% | 483 | 0% | 17.5 | 582175c |
-| dqn dqn10 (5M)/best_food.pt, no ghosts, eps 0 | 3 | 0..2 | -150.0 | -150.0 | 460 | 460 | 460 | 0% | 0% | 10000 | 100% | 9.6 | 582175c |
-| dqn dqn10 (5M)/best_food.pt, no ghosts, eps 0.05 | 20 | 0..19 | -64.5 | -99.0 | 1194 | 930 | 3020 | 15% | 15% | 10000 | 100% | 60.7 | 582175c |
+| dqn dqn10/best_food.pt, eps 0 | 100 | 0..99 | 267.0 | 309.7 | 5522 | 6335 | 9425 | 81% | 26% | 874 | 0% | 31.2 | 0f9d66e |
+| dqn dqn10/best_food.pt, eps 0.05 | 100 | 0..99 | 113.7 | 101.0 | 2157 | 1685 | 6565 | 12% | 0% | 483 | 0% | 17.6 | 0f9d66e |
+| dqn dqn10/best_food.pt, no ghosts, eps 0 | 3 | 0..2 | -150.0 | -150.0 | 460 | 460 | 460 | 0% | 0% | 10000 | 100% | 9.7 | 0f9d66e |
+| dqn dqn10/best_food.pt, no ghosts, eps 0.05 | 20 | 0..19 | -64.5 | -99.0 | 1194 | 930 | 3020 | 15% | 15% | 10000 | 100% | 62.2 | 0f9d66e |
 | dqn dqn10@00.50M | 20 | 1000..1019 | 193.1 | 163.7 | 3680 | 2455 | 7255 | 50% | 0% | 766 | 0% | 13.5 | 582175c |
 | dqn dqn10@01.00M | 20 | 1000..1019 | 165.9 | 113.2 | 3178 | 2000 | 7010 | 35% | 0% | 684 | 0% | 12.7 | 582175c |
 | dqn dqn10@01.50M | 20 | 1000..1019 | 234.5 | 273.8 | 4782 | 5495 | 7515 | 75% | 0% | 840 | 0% | 14.7 | 582175c |
@@ -33,6 +33,20 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | dqn dqn10@04.00M | 20 | 1000..1019 | 235.1 | 299.3 | 4738 | 5968 | 6760 | 65% | 15% | 821 | 0% | 14.8 | 582175c |
 | dqn dqn10@04.50M | 20 | 1000..1019 | 265.9 | 308.9 | 5419 | 6162 | 7545 | 80% | 25% | 939 | 0% | 10.6 | 582175c |
 | dqn dqn10@05.00M | 20 | 1000..1019 | 297.3 | 310.3 | 6297 | 6385 | 7740 | 95% | 20% | 1010 | 0% | 7.2 | 582175c |
+| dqn dqn10@05.50M | 20 | 1000..1019 | 224.9 | 288.4 | 4545 | 5732 | 6805 | 60% | 25% | 817 | 0% | 9.1 | 0f9d66e |
+| dqn dqn10@06.00M | 20 | 1000..1019 | 271.8 | 311.0 | 5758 | 6225 | 7870 | 85% | 10% | 890 | 0% | 9.9 | 0f9d66e |
+| dqn dqn10@06.50M | 20 | 1000..1019 | 258.2 | 297.6 | 5371 | 6175 | 7430 | 80% | 20% | 879 | 0% | 9.7 | 0f9d66e |
+| dqn dqn10@07.00M | 20 | 1000..1019 | 284.0 | 314.9 | 5770 | 6292 | 7690 | 85% | 20% | 1049 | 0% | 11.8 | 0f9d66e |
+| dqn dqn10@07.50M | 20 | 1000..1019 | 262.5 | 303.7 | 5592 | 6238 | 6860 | 85% | 15% | 1415 | 5% | 15.3 | 0f9d66e |
+| dqn dqn10@08.00M | 20 | 1000..1019 | 251.9 | 304.6 | 5311 | 6245 | 7250 | 75% | 10% | 1305 | 5% | 14.7 | 0f9d66e |
+| dqn dqn10@08.50M | 20 | 1000..1019 | 290.0 | 315.9 | 6044 | 6465 | 7270 | 90% | 25% | 978 | 0% | 10.7 | 0f9d66e |
+| dqn dqn10@09.00M | 20 | 1000..1019 | 298.5 | 310.3 | 6392 | 6520 | 10155 | 95% | 0% | 908 | 0% | 9.9 | 0f9d66e |
+| dqn dqn10@09.50M | 20 | 1000..1019 | 266.3 | 313.1 | 5604 | 6378 | 7635 | 80% | 30% | 1399 | 5% | 15.4 | 0f9d66e |
+| dqn dqn10@10.00M | 20 | 1000..1019 | 274.9 | 316.5 | 5989 | 6510 | 8750 | 85% | 15% | 1393 | 5% | 9.7 | 0f9d66e |
+| dqn dqn10/ck_9000000.pt (level pick), eps 0 | 100 | 0..99 | 280.7 | 316.9 | 5932 | 6432 | 9360 | 85% | 20% | 1281 | 3% | 44.8 | 0f9d66e |
+| dqn dqn10/ck_9000000.pt (level pick), eps 0.05 | 100 | 0..99 | 114.6 | 97.0 | 2184 | 1645 | 6895 | 13% | 0% | 468 | 0% | 16.8 | 0f9d66e |
+| dqn dqn10/ck_9000000.pt (level pick), no ghosts, eps 0 | 3 | 0..2 | -137.0 | -137.0 | 570 | 570 | 570 | 0% | 0% | 10000 | 100% | 9.5 | 0f9d66e |
+| dqn dqn10/ck_9000000.pt (level pick), no ghosts, eps 0.05 | 20 | 0..19 | -101.5 | -119.5 | 906 | 725 | 1670 | 0% | 0% | 10000 | 100% | 64.2 | 0f9d66e |
 | dqn dqn1@08.00M | 20 | 0..19 | 58.7 | 63.8 | 1606 | 1480 | 2880 | 0% | 0% | 1634 | 0% | 35.1 | cbc1d8a |
 | dqn dqn1@08.50M | 20 | 0..19 | 59.2 | 63.8 | 1552 | 1475 | 2430 | 0% | 0% | 1584 | 0% | 32.1 | af91590 |
 | dqn dqn1@09.00M | 20 | 0..19 | 55.5 | 65.2 | 1620 | 1535 | 2410 | 0% | 0% | 1991 | 0% | 39.5 | af91590 |
@@ -352,6 +366,30 @@ PPO is our own implementation (`agents/ppo.py`): 8 envs x 128 steps,
 0.01, lr 2.5e-4 annealed to 0, the learning signal divided by the running
 std of the discounted return.
 
+## dqn8 to >= 85% (2026-10-07)
+
+Fine-tunes of dqn8/best_food.pt, 5M steps each, eps 0.05 -> 0.02, lr 3e-5,
+prefix_prob 0.5 with prefixes from dqn8's own greedy games (env seeds
+2000..2599, 189 kept), dqn8's endgame dot reward. Checkpoints picked on seeds
+1000..1019 (supervisor, 20 games), final evaluation on seeds 0..99 (100 greedy
+games, no prefixes). Target: level 1 cleared >= 85% (PARTIAL >= 75%).
+
+| run | checkpoint | level 1 cleared | on seeds 20..99 | mean food | mean reward | stuck | eps 0.05: level 1 |
+|---|---|---|---|---|---|---|---|
+| dqn8 (start) | best_food.pt (3.5M) | 67% | 66% | 246.2 | 214.8 | 1% | 4% |
+| dqn9 (own prefixes) | best_food.pt (5.0M) | 79% | 79% | 274.4 | 255.3 | 0% | 12% |
+| dqn10 (own prefixes + PER), 5M + 5M | best_food.pt (5.0M; unchanged after 10M) | 81% | 81% | 284.1 | 267.0 | 0% | 12% |
+| dqn10, picked by level 1 clears | ck_9000000.pt (9.0M; 95% on seeds 1000..1019) | 85% | 84% | 301.4 | 280.7 | 3% | 13% |
+
+- dqn8's 33 lost games (`docs/dqn8_failures.png`): 32 deaths, 1 stuck; the
+  deaths come late (<= 15 food left at the last death in 25 of 32).
+- By the rule in force (best_food.pt = most food on the selection seeds)
+  the result is 81%, PARTIAL. The 9.0M checkpoint, picked by level 1 clears
+  on the same disjoint selection seeds, reaches 85% (sampling error on 100
+  games about +-3.6 points), so the target is met only with that rule and
+  only at the edge.
+- With eps 0.05 all of them clear level 1 in 12-13% of games only.
+
 ## Summary of all runs
 
 Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0, no shaping or hunger_limit (dqn5 on: best_food.pt, the checkpoint with the most food in the supervisor's 20-game evaluations). Food = dots + energizers eaten per game (172 on level 1). Stuck = games that hit the 10000-step limit. Last column: the same checkpoint with eps 0.05.
@@ -365,8 +403,8 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | dqn4 | best.pt (5.0M) | + hunger_limit 200, 4 actions | 112.9 | 0% | 43.0 | 1285 | 2450 | 0% | 172 | - |
 | ppo0 | best.pt (2.0M) | PPO, hunger_limit 200, 4 actions | 99.8 | 0% | 35.7 | 1020 | 1330 | 0% | 6 | - |
 | dqn1 | best_food.pt (17.5M) | 20M steps, eps over 3M; seed 0, picked by food | 151.6 | 0% | 42.9 | 1680 | 2980 | 16% | 1190 | 146.4 / 85.4 / 0% |
-| dqn10 | best_food.pt (5.0M) | dqn9 + PER (alpha 0.6, beta 0.4 -> 1) | 284.1 | 81% | 267.0 | 6335 | 9425 | 0% | 10 | 166.6 / 113.7 / 12% |
-| dqn10_5M | best_food.pt (5.0M) | dqn9 + PER, the first 5M (before --resume) | 284.1 | 81% | 267.0 | 6335 | 9425 | 0% | 10 | 166.6 / 113.7 / 12% |
+| dqn10 | best_food.pt (5.0M) | dqn9 + PER (alpha 0.6, beta 0.4 -> 1), 5M + 5M (--resume) | 284.1 | 81% | 267.0 | 6335 | 9425 | 0% | 10 | 166.6 / 113.7 / 12% |
+| dqn10_9M | ck_9000000.pt (9.0M, level pick) | dqn10's 9.0M checkpoint, picked by level 1 clears on seeds 1000..1019 | 301.4 | 85% | 280.7 | 6432 | 9360 | 3% | 10 | 166.9 / 114.6 / 13% |
 | dqn1s1 | best_food.pt (19.5M) | dqn1 setup, seed 1 | 168.8 | 0% | 56.1 | 1855 | 4690 | 20% | 488 | 159.4 / 99.0 / 0% |
 | dqn1s2 | best_food.pt (18.5M) | dqn1 setup, seed 2 | 101.5 | 0% | -28.9 | 1470 | 4030 | 6% | 3622 | 101.2 / 26.5 / 0% |
 | dqn5 | best_food.pt (10.0M) | dqn1 + food-distance channel + steps since food, 10M | 127.4 | 0% | 20.4 | 1950 | 7480 | 20% | 602 | 125.6 / 67.0 / 0% |

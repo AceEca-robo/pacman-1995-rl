@@ -37,8 +37,8 @@ LATER = {  # run -> what changed (checkpoint: best_food.pt)
     "dqn7": "fine-tune of dqn1 seed 1 on endgame prefixes, 5M",
     "dqn8": "dqn7 + endgame dot reward (k 20); from dqn1 seed 1",
     "dqn9": "fine-tune of dqn8 on its own endgame prefixes, 5M",
-    "dqn10": "dqn9 + PER (alpha 0.6, beta 0.4 -> 1)",
-    "dqn10_5M": "dqn9 + PER, the first 5M (before --resume)",
+    "dqn10": "dqn9 + PER (alpha 0.6, beta 0.4 -> 1), 5M + 5M (--resume)",
+    "dqn10_9M": "dqn10's 9.0M checkpoint, picked by level 1 clears on seeds 1000..1019",
 }
 
 
@@ -95,6 +95,8 @@ def main():
                     else f"{base} setup, seed {run[len(base) + 1:]}")
         steps = best_food_steps(run)
         ck = f"best_food.pt ({steps / 1e6:.1f}M)" if steps else "best_food.pt"
+        if run == "dqn10_9M":  # a copy of dqn10/ck_9000000.pt, not picked by food
+            ck = "ck_9000000.pt (9.0M, level pick)"
         n = nums(load(os.path.join(RUNS, run, "final_eps0.jsonl")))
         p005 = os.path.join(RUNS, run, "final_eps005.jsonl")
         n005 = nums(load(p005)) if os.path.exists(p005) else None
