@@ -294,3 +294,24 @@ best_food.pt, 100-game evaluations with eps 0 and 0.05).
   several training seeds from the same starting network.
 - Level 2+: dqn8 eats ~246 food per game, so it plays on into level 2 (a
   different maze); nothing was measured there yet.
+
+# Session 2026-10-07 14:50: dqn8 from 67% to >= 85% of level 1 clears
+
+Goal: level 1 cleared in >= 85% of 100 greedy games (PARTIAL: >= 75%).
+Checkpoints are picked on seeds 1000..1019 (supervisor evaluations, 20
+games), final evaluations on seeds 0..99, so the two never overlap. Rules
+as before (<= 2 runs in parallel, game/ untouched, a commit per step).
+
+## Chronology (2026-10-07)
+
+- 14:50 Start. Disk 21 GB free, GPU 15 MB used, nothing running.
+
+## Unclear points and decisions (2026-10-07)
+
+- Overlap found in the night-2 setup: the heuristic prefixes were recorded
+  on env seeds 0..99, the same seeds as the final evaluations, so dqn8's
+  training started some episodes from openings of the evaluation games'
+  seeds. The games diverge once the agent's moves differ (ghosts react to
+  pacman, the game's random numbers are drawn every tick), so this is weak,
+  but it is not a clean split. New prefixes in this session are recorded on
+  env seeds 2000 and up, disjoint from 0..99 and 1000..1019.
