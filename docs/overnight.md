@@ -321,6 +321,15 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
     only one failed game ended stuck.
   - **Conclusion: the main cause is death, not blind spots.** So dqn10 =
     dqn9 + PER (alpha 0.6, beta 0.4 -> 1.0), per the plan.
+- 14:54 `tools/record_prefixes.py --checkpoint`: dqn8's own greedy games on
+  env seeds 2000..2599 up to <= 15 food left on level 1, no life lost: 189 of
+  600 kept (411 lost a life first), 362..577 steps, `data/dqn8_prefixes.json`;
+  replays checked (15 food, 3 lives).
+- 14:56 **Step 2 started**: supervisor (dqn9, dqn10; evaluations on seeds
+  1000..1019), dqn9 (`configs/dqn_own_prefixes.yaml`) and dqn10
+  (`configs/dqn_own_prefixes_per.yaml`, + PER alpha 0.6, beta 0.4 -> 1.0).
+  Both: from dqn8/best_food.pt, 5M steps, eps 0.05 -> 0.02 over 1M, lr 3e-5,
+  prefix_prob 0.5 with dqn8's prefixes. Disk 21 GB free, GPU 15 MB.
 
 ## Unclear points and decisions (2026-10-07)
 
@@ -331,3 +340,11 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
   pacman, the game's random numbers are drawn every tick), so this is weak,
   but it is not a clean split. New prefixes in this session are recorded on
   env seeds 2000 and up, disjoint from 0..99 and 1000..1019.
+- dqn9/dqn10 keep dqn8's endgame dot reward (k 20): they fine-tune dqn8 in
+  its own environment, only the prefixes (and PER for dqn10) change.
+- "eps 0.05 -> 0.02" without a length: decayed over the first 1M steps, as
+  the night-2 fine-tunes did with 0.1 -> 0.05.
+- dqn8's prefixes keep only games without a lost life (as for the heuristic
+  prefixes; PacmanEnv checks 3 lives after a replay). That keeps 189 of 600
+  and leaves out exactly the games where dqn8 dies early, which may matter
+  given that deaths are the main cause.
