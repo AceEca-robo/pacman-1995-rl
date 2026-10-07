@@ -440,3 +440,15 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   random:1-16) and mm2 (`configs/dqn_mm2.yaml`, random:1-4 / 1-8 from 10M /
   1-16 from 20M), seed 0 each, supervisor (`--every 5000000`, its rows go to
   `runs/mm_sv_results.md`, not results.md). Disk 25 GB free, GPU 776 MB.
+- 23:41 mm1 1.9M, mm2 2.0M steps; speed fell from ~1.2k to ~950 steps/s per
+  run (each training process holds one core at ~90%, load average 3 of 20
+  CPUs, GPU 74%: the Python loop is the limit, not contention). At this pace
+  30M ends around 07:30-07:45, later than the ~5-6 h in the plan. Plan: no
+  restart; if the runs are not done by ~06:45, the final evaluation runs on
+  their best.pt at that point (labelled with its step count) and is repeated
+  if they finish in time. Disk 18 GB free (replay buffers saved, 3.3 GB each).
+- 00:42 mm1 5.3M, mm2 5.5M (~950-990 steps/s; projected end of 30M ~07:50).
+  Selection evals so far: no level cleared yet. mm2 (mazes 1-4) eats more on
+  maze 1 (98-106 food at 3-5M) but its games stretch to 2500 ticks at 5M
+  (wandering without food); mm1 110 food at 5M in short games (deaths).
+  Disk 18 GB free, GPU 776 MB.
