@@ -1,10 +1,11 @@
-# pacman-rl
-Цель: обучить RL-агента играть в оригинальную игру pacman 1.0 (1995, Roar Thronaes, GPL-2+).
-- game/ — исходники игры. Правки только минимальные, каждая помечена "// RL bridge". Windows-ветки (MSWIN) не трогать.
-- Сборка игры: cd game && xmkmf && make. Нужны build-essential, xutils-dev (xmkmf), libx11-dev, libncurses-dev. Артефакты сборки в .gitignore.
-- env/ — gymnasium-обёртка, общается с игрой через Unix-сокет.
-- agents/, scripts/, configs/ — обучение. Все гиперпараметры только в configs/*.yaml.
-- tools/ — вспомогательные утилиты (демо-клиент, запись префиксов), data/ — записанные данные (префиксы концовок), docs/ — результаты и журналы, tests/ — pytest.
-- runs/ — прогоны и чекпоинты, в git не попадают (.gitignore); чекпоинты для публикации — только через GitHub release.
-- Python 3.10+, окружение .venv. Перед коммитом: pytest. Обучение дольше 10 минут — только в tmux.
-- Публичный репозиторий: github.com/AceEca-robo/pacman-1995-rl, ветка main. Коммиты — с адресом AceEca-robo@users.noreply.github.com (стоит в git config проекта).
+# pacman-1995-rl
+Goal: train an RL agent to play the original pacman 1.0 (1995, Roar Thronaes, GPL-2+).
+- game/ — the game's sources. Only minimal changes, each marked "// RL bridge". Do not touch the Windows (MSWIN) branches.
+- Building the game: cd game && xmkmf && make. Needs build-essential, xutils-dev (xmkmf), libx11-dev, libncurses-dev. Build artifacts are in .gitignore.
+- env/ — the gymnasium wrapper; talks to the game over a Unix socket.
+- agents/, scripts/, configs/ — training. All hyperparameters only in configs/*.yaml.
+- tools/ — helper utilities (demo client, prefix recording), data/ — recorded data (endgame prefixes), docs/ — results and logs, tests/ — pytest.
+- docs/overnight.md — the experiment log: chronology, decisions, unclear points and "Ideas for later"; each session adds a dated section. docs/results.md — the results tables (evaluate.py rows and the summary of all runs).
+- runs/ — runs and checkpoints, not in git (.gitignore); checkpoints are published only through GitHub releases.
+- Python 3.10+, environment .venv. Run pytest before committing. Training longer than 10 minutes only in tmux.
+- Public repository: github.com/AceEca-robo/pacman-1995-rl, branch main. Commits use AceEca-robo@users.noreply.github.com (set in the project's git config).
