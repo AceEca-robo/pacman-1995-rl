@@ -459,3 +459,10 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   start maze. As expected from earlier from-scratch runs on maze 1 alone
   (dqn0/dqn1: 0% level 1; level clears came only with prefixes and
   fine-tuning in dqn7-dqn10). Disk 18 GB free.
+- 02:44-02:55 Probe (not the final evaluation): levels suite on both runs'
+  best.pt at that time (11.0M each; seeds 0..99 / 0..19 per level, 5 CPU
+  workers each, ~8 and ~10 min; training slowed to ~880 steps/s meanwhile).
+  Both clear 0% on all 16 mazes. Food per game by start maze: mm1 81-130 on
+  every maze (even); mm2 107-126 on mazes 1-4, 29-62 on 5-8 (1M steps of
+  training there so far), 8-18 on the unseen 9-16, the same "does not play"
+  pattern as dqn10 off maze 1. JSON: `runs/levels/mm*_11M_probe.json`.
