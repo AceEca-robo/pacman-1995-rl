@@ -35,7 +35,7 @@ def display():
 
 
 class Game:
-    def __init__(self, display, tmp_path, seed=1, name="game", headless=False):
+    def __init__(self, display, tmp_path, seed=1, name="game", headless=False, args=()):
         path = str(tmp_path / f"{name}.sock")
         self.srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.srv.bind(path)
@@ -47,7 +47,7 @@ class Game:
             env.pop("DISPLAY")
             extra = ["--headless"]
         self.proc = subprocess.Popen(
-            [GAME, "--rl", path, "--fast", "--seed", str(seed)] + extra, env=env)
+            [GAME, "--rl", path, "--fast", "--seed", str(seed)] + extra + list(args), env=env)
         self.conn, _ = self.srv.accept()
         self.rfile = self.conn.makefile("rb")
 
@@ -124,3 +124,33 @@ def test_headless_needs_rl():
     env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
     r = subprocess.run([GAME, "--headless"], env=env, capture_output=True, timeout=10)
     assert r.returncode == 1 and b"--rl" in r.stderr
+
+
+def test_level_needs_rl():
+    env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
+    r = subprocess.run([GAME, "--level", "3"], env=env, capture_output=True, timeout=10)
+    assert r.returncode == 1 and b"--rl" in r.stderr
+
+
+def test_level_flag(display, tmp_path):
+    """--level n starts on level n (maze n) and stays there after a game over."""
+    from env.pacman_env import maze_layouts
+    g = Game(display, tmp_path, headless=True, args=["--level", "7"])
+    states = play(g, 20000)
+    g.close()
+    layout = [r.replace(".", " ").replace("o", " ") for r in states[0]["grid"]]
+    assert layout == maze_layouts()[6]
+    assert states[0]["level"] == 7
+    overs = [i for i, st in enumerate(states[:-1]) if st["done"]]
+    assert overs, "random play should lose a game in 20000 ticks"
+    after = states[overs[0] + 1]
+    assert (after["level"], after["lives"], after["score"]) == (7, 3, 0)
+
+
+def test_level_1_flag_changes_nothing(display, tmp_path):
+    runs = []
+    for i, args in enumerate(([], ["--level", "1"])):
+        g = Game(display, tmp_path, name=f"l{i}", headless=True, args=args)
+        runs.append(play(g, 3000))
+        g.close()
+    assert runs[0] == runs[1]

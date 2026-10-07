@@ -118,6 +118,7 @@ done=0; 			//means not done
 while (!done) { 		//while not done
 
  da->start(); 			//total initialization of the gamedata
+ if (Argument::start_level) da->setlevel(Argument::start_level);	// RL bridge: --level
 u->write(1,8,da->getlives(),8);
 u->write(1,11,da->getlevel(),8);
 u->write(1,14,da->getbonus(),8);
@@ -233,6 +234,7 @@ if (!da->eatenall()) { 		//if not all food eaten
  for(i=0;i<4;i++,timing(0)); 	//wait a sec or something
  u->write(1,20,"         "); 	//then write nothing
  da->start(); 			//reset gamedata
+ if (Argument::start_level) da->setlevel(Argument::start_level);	// RL bridge: --level
  u->write(1,8,da->getlives(),8);
  u->write(1,11,da->getlevel(),8);
  u->write(1,14,da->getbonus(),8);

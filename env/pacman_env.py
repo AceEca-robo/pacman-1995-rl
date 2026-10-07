@@ -133,6 +133,20 @@ def food_distance_field(cells, nbrs):
     return dist
 
 
+def parse_start_level(spec):
+    """start_level config value -> (lo, hi): an int n gives (n, n),
+    "random:a-b" a level drawn uniformly from a..b at each reset."""
+    if isinstance(spec, str) and spec.startswith("random:"):
+        lo, hi = (int(x) for x in spec[len("random:"):].split("-"))
+    elif isinstance(spec, (int, np.integer)) and not isinstance(spec, bool):
+        lo = hi = int(spec)
+    else:
+        raise ValueError(f"start_level must be an int or 'random:a-b', not {spec!r}")
+    if not 1 <= lo <= hi:
+        raise ValueError(f"start_level {spec!r}: need 1 <= a <= b")
+    return lo, hi
+
+
 def load_env_config(config):
     """Full env config: configs/env_default.yaml updated by config (a path,
     a dict of overrides or None)."""
@@ -201,6 +215,7 @@ class PacmanEnv(gym.Env):
         self._hunger_limit = self.cfg.get("hunger_limit") or 0
         endgame = self.cfg.get("endgame_dot") or {}
         self._endgame_k = endgame.get("k", 0.0) if endgame.get("enabled") else 0.0
+        self._levels = parse_start_level(self.cfg.get("start_level", 1))
         self._prefix_prob = self.cfg.get("prefix_prob") or 0.0
         self._prefixes = []
         if self._prefix_prob:
@@ -232,11 +247,11 @@ class PacmanEnv(gym.Env):
         self._binary = os.path.join(ROOT, self.cfg["game"]["binary"])
         self._state = None   # last state received
         self._steps = 0
-        self._start_game(seed)
+        self._start_game(seed, self._levels[0])
 
     # --- processes -------------------------------------------------------
 
-    def _start_game(self, seed):
+    def _start_game(self, seed, level):
         tmp = tempfile.mkdtemp(prefix="pacman-env-")
         path = os.path.join(tmp, "game.sock")
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -252,6 +267,8 @@ class PacmanEnv(gym.Env):
                 cmd.append("--fast")
             if not self.cfg.get("ghosts", True):
                 cmd.append("--no-ghosts")
+            if level != 1:
+                cmd += ["--level", str(level)]
             env = dict(os.environ)
             if self._display is None:
                 cmd.append("--headless")
@@ -274,11 +291,12 @@ class PacmanEnv(gym.Env):
         self._res["conn"] = conn
         self._res["rfile"] = conn.makefile("rb")
         self._seed = seed
+        self._level = level  # the process's start level (also after its game overs)
         self._fresh = True   # no state read from this process yet
 
-    def _restart_game(self, seed):
+    def _restart_game(self, seed, level):
         _stop_game(self._res)
-        self._start_game(seed)
+        self._start_game(seed, level)
 
     def _recv(self):
         line = self._res["rfile"].readline()
@@ -290,15 +308,21 @@ class PacmanEnv(gym.Env):
     # --- gym API ---------------------------------------------------------
 
     def reset(self, *, seed=None, options=None):
+        """options={"start_level": n or "random:a-b"} overrides the config's
+        start_level for this reset."""
         super().reset(seed=seed)
+        spec = (options or {}).get("start_level")
+        lo, hi = parse_start_level(spec) if spec is not None else self._levels
+        level = lo if lo == hi else int(self.np_random.integers(lo, hi + 1))
         prefix = None
         if self._prefix_prob and self.np_random.random() < self._prefix_prob:
             prefix = self._prefixes[int(self.np_random.integers(len(self._prefixes)))]
         if prefix is not None:
             # replay a recorded opening of its game (same seed, same actions:
             # the game is deterministic), then hand over the position
-            if not (self._fresh and self._seed == prefix["seed"]):
-                self._restart_game(prefix["seed"])
+            # prefixes are level 1 openings
+            if not (self._fresh and self._seed == prefix["seed"] and self._level == 1):
+                self._restart_game(prefix["seed"], 1)
             self._state = self._recv()
             for a in prefix["actions"]:
                 self._res["conn"].sendall(ACTIONS[a])
@@ -308,19 +332,24 @@ class PacmanEnv(gym.Env):
                 raise RuntimeError(f"prefix replay of seed {prefix['seed']} diverged")
             return self._after_reset(int(prefix["seed"]))
         if seed is not None:
-            if not (self._fresh and self._seed == seed):
-                self._restart_game(seed)
-        elif not self._fresh and not (self._state and self._state["done"]):
-            # also after a hunger termination
-            # mid-game (truncated or reset early): the game cannot be reset
-            # from outside, start a new process
-            self._restart_game(int(self.np_random.integers(2**31 - 1)))
+            if not (self._fresh and self._seed == seed and self._level == level):
+                self._restart_game(seed, level)
+        elif level != self._level or (
+                not self._fresh and not (self._state and self._state["done"])):
+            # another start level, or mid-game (truncated, reset early, also
+            # after a hunger termination): the game cannot be reset from
+            # outside, start a new process
+            self._restart_game(int(self.np_random.integers(2**31 - 1)), level)
         if not self._fresh:
             # after done the game starts a new one by itself; the action
             # answering the final state is ignored by the game
             self._res["conn"].sendall(ACTIONS[4])
         self._state = self._recv()
         return self._after_reset(-1)
+
+    def set_start_level(self, spec):
+        """New start_level (int or "random:a-b") from the next reset on."""
+        self._levels = parse_start_level(spec)
 
     def _after_reset(self, prefix_seed):
         """prefix_seed: the replayed prefix's game seed, -1 without a prefix

@@ -483,3 +483,69 @@ def test_prefix_info_in_a_vector_env():
         assert seen == {True, False}
     finally:
         v.close()
+
+
+def board_of(env):
+    return [r.replace(".", " ").replace("o", " ") for r in env._state["grid"]]
+
+
+def test_start_level_fixed():
+    e = PacmanEnv(config={"start_level": 5})
+    try:
+        _, info = e.reset(seed=0)
+        assert (info["level"], info["lives"]) == (5, 3)
+        assert board_of(e) == maze_layouts()[4]
+        obs, *_ = e.step(0)
+        assert obs["vec"][2] == pytest.approx(5 / 16)
+        # options override the config for one reset
+        _, info = e.reset(seed=0, options={"start_level": 12})
+        assert info["level"] == 12 and board_of(e) == maze_layouts()[11]
+    finally:
+        e.close()
+
+
+def test_start_level_random_range_and_seeded():
+    e = PacmanEnv(config={"start_level": "random:2-4", "max_episode_steps": 2})
+    try:
+        seen = []
+        for i in range(30):
+            _, info = e.reset(seed=100 + i)
+            seen.append(info["level"])
+            assert board_of(e) == maze_layouts()[info["level"] - 1]
+        assert set(seen) == {2, 3, 4}
+        again = [e.reset(seed=100 + i)[1]["level"] for i in range(30)]
+        assert again == seen
+        # unseeded resets (as in training) also draw levels
+        e.reset(seed=0)
+        levels = set()
+        for _ in range(20):
+            e.step(4)
+            e.step(4)  # truncated
+            levels.add(e.reset()[1]["level"])
+        assert levels <= {2, 3, 4} and len(levels) > 1
+    finally:
+        e.close()
+
+
+def test_start_level_kept_after_game_over():
+    e = PacmanEnv(config={"start_level": 9})
+    try:
+        e.reset(seed=4)
+        e.action_space.seed(4)
+        for _ in range(20000):
+            *_, term, trunc, info = e.step(e.action_space.sample())
+            if term:
+                break
+        assert term
+        game = e._res["game"].pid
+        _, info = e.reset()
+        assert e._res["game"].pid == game  # the game restarted by itself
+        assert (info["level"], info["lives"], info["score"]) == (9, 3, 0)
+    finally:
+        e.close()
+
+
+def test_start_level_bad_values():
+    for bad in (0, "random:5-2", "random:0-3", "level3", 2.5, True):
+        with pytest.raises(ValueError):
+            PacmanEnv(config={"start_level": bad})

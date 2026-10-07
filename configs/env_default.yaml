@@ -53,6 +53,13 @@ endgame_dot:
 prefix_prob: 0.0
 prefix_file: data/endgame_prefixes.json
 
+# Level the game starts on (game --level): an int (1 = the original game),
+# or "random:a-b" for a level drawn uniformly from a..b at every reset (a new
+# game process when the level changes). Levels 1..16 are the 16 mazes; after
+# a game over the game restarts on the same level. Overridable per reset
+# with reset(options={"start_level": ...}). Prefix replays always use level 1.
+start_level: 1
+
 # Steps (game ticks) before truncated=True; null = no limit.
 max_episode_steps: 10000
 
