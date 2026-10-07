@@ -330,6 +330,21 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
   (`configs/dqn_own_prefixes_per.yaml`, + PER alpha 0.6, beta 0.4 -> 1.0).
   Both: from dqn8/best_food.pt, 5M steps, eps 0.05 -> 0.02 over 1M, lr 3e-5,
   prefix_prob 0.5 with dqn8's prefixes. Disk 21 GB free, GPU 15 MB.
+- 15:47 dqn9 finished (no crash). Supervisor evaluations (seeds 1000..1019):
+  level 1 cleared 70, 45, 55, 65, 85, 70, 60, 85, 70, 85% at 0.5..5M;
+  best_food.pt = 5.0M (291.4 food).
+- 15:57 **dqn9 final, 100 games, seeds 0..99: level 1 cleared 79%** (79% on
+  seeds 20..99), food 274.4, reward 255.3, median score 6050, none stuck.
+  eps 0.05: 12%. Without ghosts it still stops (86 food, eps 0).
+- 16:0x dqn10 finished (no crash; 5 supervisor notes of 1.28-1.41k steps/s:
+  PER is slower, nothing else was waiting). Evaluations: 50, 35, 75, 80, 70,
+  90, 65, 80, .. % ; best_food.pt = 5.0M (307.1 food).
+  **dqn10 final: level 1 cleared 81%** (81% on seeds 20..99), food 284.1,
+  reward 267.0, median score 6335, none stuck; eps 0.05: 12%.
+- **Step 2 verdict: both PARTIAL** (79%, 81%: >= 75%, < 85%). The best is
+  dqn10, so step 3 = continue dqn10 with --resume for 5M more.
+  `train.py --resume --extend-steps N` added (raises the run's total_steps;
+  tested), since a plain --resume of a finished run does nothing.
 
 ## Unclear points and decisions (2026-10-07)
 
@@ -348,3 +363,7 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
   prefixes; PacmanEnv checks 3 lives after a replay). That keeps 189 of 600
   and leaves out exactly the games where dqn8 dies early, which may matter
   given that deaths are the main cause.
+- Step 3 continuation of dqn10: from its last checkpoint (5.0M, also its
+  best_food.pt); the replay buffer was not saved (checkpoint_buffer false),
+  so it refills for learning_starts (20k steps) and PER priorities start
+  fresh; epsilon stays at 0.02 (its schedule ended at 1M).

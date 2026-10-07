@@ -150,3 +150,26 @@ def test_finetune_from_checkpoint_with_prefixes(tmp_path):
     finally:
         for d in dirs:
             subprocess.run(["rm", "-rf", d])
+
+
+def test_resume_extend_steps(tmp_path):
+    cfg = tmp_path / "tiny_ext.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 2000, "eval_every": 1000,
+                                   "checkpoint_buffer": False}))
+    name = f"test-ext-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name]
+    try:
+        assert subprocess.run(cmd + ["--config", str(cfg)], capture_output=True,
+                              timeout=300).returncode == 0
+        out = subprocess.run(cmd + ["--resume", "--extend-steps", "2000"], capture_output=True,
+                             text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "total_steps extended to 4000" in out.stdout
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            assert json.loads(f.readlines()[-1])["steps"] == 4000
+        with open(os.path.join(run_dir, "config.yaml")) as f:
+            assert yaml.safe_load(f)["total_steps"] == 4000
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])

@@ -180,6 +180,8 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--run-name", required=True)
     p.add_argument("--resume", action="store_true", help="continue runs/<run-name>/checkpoint.pt")
+    p.add_argument("--extend-steps", type=int, default=0,
+                   help="with --resume: add this many steps to the run's total_steps")
     args = p.parse_args()
 
     run_dir = os.path.join(ROOT, "runs", args.run_name)
@@ -192,6 +194,12 @@ def main():
         cfg, seed = ck["config"], ck["seed"]
         # options added after the run started keep their defaults (off)
         cfg = {**load_config(os.path.join(ROOT, "configs", "dqn.yaml")), **cfg}
+        if args.extend_steps:
+            # continue a finished run: more steps, everything else as it was
+            cfg["total_steps"] += args.extend_steps
+            with open(os.path.join(run_dir, "config.yaml"), "w") as f:
+                yaml.safe_dump(cfg, f)
+            print(f"total_steps extended to {cfg['total_steps']}")
     else:
         if os.path.exists(ck_path):
             sys.exit(f"{run_dir} already has a checkpoint; use --resume or another --run-name")
