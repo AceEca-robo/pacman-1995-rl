@@ -396,3 +396,39 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
 - Step 3 says "if one reached >= 85%, repeat the fine-tune with seeds 1 and
   2". By the rule in force none did (81%), so the conservative reading was to
   stop; the repeats (2 x 10M, about 2 hours) were not started.
+
+# Session 2026-10-07 22:32: v0.3, all 16 mazes
+
+Goal: an agent that plays on all 16 mazes and clears levels in a row.
+Rules as before (<= 2 runs in parallel, this log, a commit per step, disk and
+GPU checked, one --resume per crash). Checkpoints picked by mean levels
+cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
+0..99.
+
+## Chronology (2026-10-07/08)
+
+- 22:32 Start. Disk 25 GB free, GPU 15 MB used, nothing running.
+- 22:36 **Step 1**: `game/pacman --level N` (arg.cc/arg.h: parsed and taken
+  out of the arguments like --seed; needs --rl; pac.cc: after both
+  `da->start()` calls, `da->setlevel(N)`, i.e. level and boardlevel by
+  `Gamedata::setboardlevel`). 9 lines, all "// RL bridge"; without --level
+  nothing changes (tested: --level 1 gives the same 3000 states as no flag).
+  Env: `start_level` (int or "random:a-b", drawn from the env's np_random at
+  each reset, a new game process when the level changes; after a game over
+  the game restarts on the same level), `reset(options={"start_level": ..})`,
+  `set_start_level()`. Prefix replays always use level 1. Tests in
+  test_rlbridge.py/test_env.py.
+- 22:38 **Step 3** (done before step 2, which uses it): `evaluate.py
+  --levels out.json` (games from level 1 + games from each of the 16 levels,
+  in parallel CPU processes, games cut at 30000 ticks); train.py:
+  `best_metric: levels_cleared` (mean levels cleared, ties by food; the
+  evaluation always starts on level 1), `eval_max_episode_steps`,
+  `start_level_schedule` (curriculum). The old `run()` gives the same
+  heuristic row as before (100 games, identical numbers).
+- 22:39 **Step 2**: heuristic, 50 games per level: 56-92%, no maze under
+  30%; from level 1 median 1, mean 1.58 levels (table in results.md).
+- 22:39 Width smoke test started: `dqn_mm_smoke` (standard width) and
+  `dqn_mm_smoke_wide` (64,128,128 channels, FC 1024), each mm1's setup for
+  2M steps, in parallel.
+- 22:44 dqn10 (9.0M) on all mazes: 90% on maze 1, 0% on the 15 others, never
+  clears level 2 after level 1 (mean 0.84 levels from level 1).

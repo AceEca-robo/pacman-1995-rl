@@ -438,3 +438,61 @@ training running (load average ~2):
 
 (On 2026-10-05, with the 8-channel observation of the time, a single env did
 about 39k steps/s; the observation has grown since.)
+
+## Multi-maze (v0.3, 2026-10-07)
+
+The game has 16 mazes, one per level (level n > 16: a random one of them).
+`game/pacman --level N` (RL bridge) starts a game on level N; the env's
+`start_level` (an int or `random:a-b`) passes it. `scripts/evaluate.py
+--levels` plays games from level 1 (levels cleared per game until game over,
+cut at 30000 ticks) and games started on each level (share that clears the
+start level). Selection metric since v0.3: mean levels cleared per game from
+level 1 on seeds 1000..1019; final numbers on seeds 0..99 (per level: seeds
+0..19, heuristic: 0..49). JSON: `runs/levels/*.json`; table:
+`scripts/levels_report.py`.
+
+### Step 2: the heuristic on each maze
+
+Heuristic agent (`configs/heuristic.yaml`), 50 games per start level (seeds
+0..49) and 100 games from level 1 (seeds 0..99):
+
+| agent | from level 1: mean / median / max levels cleared | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 | min |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 1.58 / 1 / 6 | 80% | 84% | 78% | 84% | 88% | 86% | 80% | 92% | 70% | 84% | 72% | 80% | 60% | 78% | 56% | 86% | 56% |
+
+- No maze is "hard" by the < 30% rule: the lowest are 15 (56%), 13 (60%),
+  9 (70%) and 11 (72%).
+- Levels in a row from level 1: median 1, mean 1.58; distribution of
+  levels cleared over the 100 games: 0: 18, 1: 35, 2: 29, 3: 10, 4: 6, 5: 1,
+  6: 1.
+- What differs between the mazes (`scripts/maze_stats.py`): every maze has
+  the same food (168 dots + 4 energizers = 172) and no dead ends; ghost speed
+  does not change with the level (the level only picks the board,
+  `Gamedata::setboardlevel`). The mazes differ in shape: junctions in the
+  part pacman can reach go from 58 (maze 1) down to 24-32 in mazes 10-16,
+  and the farthest cell from pacman's start from 33-39 steps (mazes 1-6, 8,
+  10) to 52-66 (7, 11-16). The two weakest mazes for the heuristic, 13 and
+  15, are among the long-corridor ones (24 and 32 junctions, 57 and 63
+  steps), but 14 and 16 are just as long and do fine (78%, 86%), so shape
+  explains only part of it (50 games: +-6-7 points).
+
+| maze | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| junctions | 58 | 54 | 56 | 44 | 46 | 54 | 36 | 42 | 44 | 32 | 28 | 36 | 24 | 26 | 32 | 26 |
+| farthest from start | 34 | 33 | 33 | 33 | 39 | 37 | 54 | 37 | 42 | 34 | 53 | 52 | 57 | 52 | 63 | 66 |
+| reachable cells | 377 | 374 | 374 | 368 | 368 | 372 | 363 | 366 | 366 | 361 | 358 | 362 | 357 | 359 | 362 | 359 |
+
+### dqn10 (v0.2) on all mazes
+
+dqn10's 9.0M checkpoint (trained on maze 1 only), 100 games from level 1
+(seeds 0..99), 20 per start level (seeds 0..19):
+
+| agent | from level 1: mean / median / max levels cleared | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 | min |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| dqn10 (9.0M) | 0.84 / 1 / 1 | 90% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+
+It clears maze 1 and nothing else: it never clears level 2 after level 1, and
+clears none of the other 15 mazes when started on them.
+On maze 2 it eats 165 of 172 food per game on average (and still never
+finishes it); on mazes 3-16 it eats 3-40 food and loses its three lives
+within 94-259 ticks: outside mazes 1-2 it does not play at all.
