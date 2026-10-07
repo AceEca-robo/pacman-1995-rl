@@ -1,0 +1,4 @@
+# Width smoke test: dqn_mm (mm1's setup), 2M steps, standard width.
+base: dqn_mm.yaml
+total_steps: 2000000
+checkpoint_buffer: false

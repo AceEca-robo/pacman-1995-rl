@@ -1,0 +1,22 @@
+# v0.3 multi-maze base (mm1, mm2): DQN from scratch on all 16 mazes.
+# 30M steps, epsilon 1.0 -> 0.05 over 3M, PER, dqn8's endgame dot reward
+# (k 20), no prefixes. Checkpoints are picked by mean levels cleared per game
+# from level 1 on eval seeds 1000..1019 (games cut at 30000 ticks).
+base: dqn.yaml
+total_steps: 30000000
+epsilon_steps: 3000000
+per:
+  enabled: true
+  alpha: 0.6
+  beta_start: 0.4
+  beta_end: 1.0
+best_metric: levels_cleared
+eval_every: 500000
+eval_max_episode_steps: 30000
+checkpoint_buffer: true
+env_config:
+  start_level: random:1-16
+  prefix_prob: 0.0
+  endgame_dot:
+    enabled: true
+    k: 20

@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.dqn import DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
-from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims  # noqa: E402
+from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims, parse_start_level  # noqa: E402
 
 
 def load_config(path):
@@ -45,6 +45,17 @@ def epsilon(cfg, steps):
     return cfg["epsilon_start"] + frac * (cfg["epsilon_end"] - cfg["epsilon_start"])
 
 
+def start_level_at(cfg, steps):
+    """The training envs' start_level at this step: the last entry of
+    cfg["start_level_schedule"] ([[from_step, spec], ...]) whose from_step
+    <= steps; None without a schedule (the env config's start_level)."""
+    spec = None
+    for from_step, s in cfg.get("start_level_schedule") or []:
+        if steps >= from_step:
+            spec = s
+    return spec
+
+
 def per_beta(cfg, steps):
     per = cfg["per"]
     frac = min(1.0, steps / (per["beta_steps"] or cfg["total_steps"]))
@@ -58,12 +69,13 @@ class Collector:
     def __init__(self, envs, cfg, buffer, writer, seed):
         self.envs, self.buffer, self.writer = envs, buffer, writer
         self.n = envs.num_envs
-        self.obs, _ = envs.reset(seed=seed)
+        self.obs, info = envs.reset(seed=seed)
         self.cur = pack_grids(self.obs["grid"])
         self.nsteps = [NStep(cfg["n_step"], cfg["gamma"]) for _ in range(self.n)]
         self.ep_reward = np.zeros(self.n)
         self.ep_len = np.zeros(self.n, int)
-        self.ep_level = np.ones(self.n, int)
+        self.ep_start = np.array(info["level"], int)  # start level of the running episodes
+        self.ep_level = self.ep_start.copy()
         self.ended = self.hungry = 0  # episodes ended / ended by hunger_limit, since last read
         cells = cfg.get("track_cells") or []
         self.track = (np.array([c[0] for c in cells]), np.array([c[1] for c in cells])) \
@@ -106,7 +118,11 @@ class Collector:
                 self.writer.add_scalar(f"{prefix}/score", src["score"][i], log_step)
                 self.writer.add_scalar(f"{prefix}/length", self.ep_len[i], log_step)
                 self.writer.add_scalar(f"{prefix}/level_reached", self.ep_level[i], log_step)
-                self.ep_reward[i], self.ep_len[i], self.ep_level[i] = 0.0, 0, info["level"][i]
+                self.writer.add_scalar(f"{prefix}/start_level", self.ep_start[i], log_step)
+                self.writer.add_scalar(f"{prefix}/levels_cleared",
+                                       self.ep_level[i] - self.ep_start[i], log_step)
+                self.ep_reward[i], self.ep_len[i] = 0.0, 0
+                self.ep_start[i] = self.ep_level[i] = info["level"][i]
         self.cur, self.obs = packed_next, nobs
         return ended_count
 
@@ -129,12 +145,12 @@ def warm_start(collector, cfg):
 def evaluate(learner, envs, cfg):
     """Greedy episodes over a fixed seed set, the envs stepping in a batch."""
     seeds = list(range(cfg["eval_seed"], cfg["eval_seed"] + cfg["eval_episodes"]))
-    results, live = [], []  # live: [env, obs, seed, reward, length, max level, food]
+    results, live = [], []  # live: [env, obs, seed, reward, length, max level, food, start]
     for env in envs:
         if seeds:
             s = seeds.pop(0)
             obs, info = env.reset(seed=s)
-            live.append([env, obs, s, 0.0, 0, info["level"], 0])
+            live.append([env, obs, s, 0.0, 0, info["level"], 0, info["level"]])
     while live:
         q = learner.q_values(pack_grids(np.stack([e[1]["grid"] for e in live])),
                              np.stack([e[1]["vec"] for e in live]))
@@ -144,11 +160,12 @@ def evaluate(learner, envs, cfg):
             e[6] += info["events"]["eaten_dot"] + info["events"]["eaten_energizer"]
             if term or trunc:
                 results.append({"seed": e[2], "reward": e[3], "score": info["score"],
-                                "length": e[4], "level": e[5], "food": e[6]})
+                                "length": e[4], "level": e[5], "food": e[6],
+                                "levels_cleared": e[5] - e[7]})
                 if seeds:
                     e[2] = seeds.pop(0)
                     e[1], info = e[0].reset(seed=e[2])
-                    e[3], e[4], e[5], e[6] = 0.0, 0, info["level"], 0
+                    e[3], e[4], e[5], e[6], e[7] = 0.0, 0, info["level"], 0, info["level"]
                 else:
                     live.remove(e)
     return sorted(results, key=lambda x: x["seed"])
@@ -162,7 +179,15 @@ def best_metric(name, results):
     changes the share term by >= 1000 / episodes, food / 1000 stays < 1).
     "mean_reward" (dqn4..dqn10: a median ignores games stuck until the step
     limit while they are under half), "median_reward" / "median_score"; old
-    configs say "reward" / "score"."""
+    configs say "reward" / "score".
+    "levels_cleared" (the rule since v0.3): mean levels cleared per eval game
+    (evaluation starts on level 1), ties by mean food; returned as
+    mean * 1e5 + mean food / 1000 (one game changes the mean by >= 1 /
+    episodes, i.e. the first term by >= 1e5 / episodes, food / 1000 stays
+    far below that)."""
+    if name == "levels_cleared":
+        mean = float(np.mean([r["levels_cleared"] for r in results]))
+        return mean * 1e5 + float(np.mean([r["food"] for r in results])) / 1000
     if name == "level1_cleared":
         share = float(np.mean([r["level"] >= 2 for r in results]))
         return share * 1000 + float(np.mean([r["food"] for r in results])) / 1000
@@ -222,8 +247,12 @@ def main():
     n_actions = env_cfg["actions"]
     # evaluation without shaping, hunger_limit, prefixes or the endgame dot
     # bonus, so eval rewards compare across runs
+    # (and always from level 1, so levels cleared compare too)
     eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False},
-                    "hunger_limit": 0, "prefix_prob": 0.0, "endgame_dot": {"enabled": False}}
+                    "hunger_limit": 0, "prefix_prob": 0.0, "endgame_dot": {"enabled": False},
+                    "start_level": 1}
+    if cfg.get("eval_max_episode_steps"):
+        eval_env_cfg["max_episode_steps"] = cfg["eval_max_episode_steps"]
     n_channels, vec_dim = obs_dims(env_cfg)
     learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
     buffer = make_buffer(cfg, n_channels, vec_dim)
@@ -253,6 +282,13 @@ def main():
     writer = SummaryWriter(run_dir, purge_step=steps if ck else None)
 
     n = cfg["num_envs"]
+    level_spec = start_level_at(cfg, steps)
+    if level_spec is not None:
+        parse_start_level(level_spec)  # fail now, not hours later
+        env_cfg = {**env_cfg, "start_level": level_spec}
+        for _, spec in cfg["start_level_schedule"]:
+            parse_start_level(spec)
+        print(f"start_level {level_spec}")
     make = lambda: PacmanEnv(config=env_cfg)  # noqa: E731
     envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
     eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(n)]
@@ -281,6 +317,12 @@ def main():
                 actions[greedy] = q.argmax(1)
             episodes += col.step(actions, steps)
             steps += n
+            spec = start_level_at(cfg, steps)
+            if spec != level_spec:  # curriculum: from the envs' next reset on
+                level_spec = spec
+                envs.call("set_start_level", spec)
+                writer.add_text("train/start_level", str(spec), steps)
+                print(f"{steps:>9} steps  start_level {spec}", flush=True)
 
             # after a resume without a saved buffer, refill it first
             if steps >= cfg["learning_starts"] and buffer.size >= min_buffer:
@@ -341,6 +383,8 @@ def main():
                     "mean_length": float(np.mean([r["length"] for r in res])),
                     "level1_cleared": float(np.mean([r["level"] >= 2 for r in res])),
                     "mean_food": float(np.mean([r["food"] for r in res])),
+                    "mean_levels_cleared": float(np.mean([r["levels_cleared"] for r in res])),
+                    "median_levels_cleared": float(np.median([r["levels_cleared"] for r in res])),
                 }
                 for k, v in summary.items():
                     if k != "steps":

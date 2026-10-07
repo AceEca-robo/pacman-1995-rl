@@ -182,3 +182,43 @@ def test_resume_extend_steps(tmp_path):
         assert "mean_food" in last and all("food" in e for e in last["episodes"])
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_best_metric_levels_cleared():
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from train import best_metric
+    a = [{"levels_cleared": 1, "food": 900}, {"levels_cleared": 0, "food": 100}]
+    b = [{"levels_cleared": 1, "food": 950}, {"levels_cleared": 0, "food": 100}]  # more food
+    c = [{"levels_cleared": 1, "food": 300}, {"levels_cleared": 1, "food": 300}]  # more levels
+    assert best_metric("levels_cleared", b) > best_metric("levels_cleared", a)
+    assert best_metric("levels_cleared", c) > best_metric("levels_cleared", b)
+
+
+def test_start_level_schedule(tmp_path):
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from train import start_level_at
+    sched = {"start_level_schedule": [[0, "random:1-4"], [100, "random:1-8"], [200, 5]]}
+    assert start_level_at({}, 50) is None
+    assert [start_level_at(sched, s) for s in (0, 99, 100, 199, 200, 10**9)] == \
+        ["random:1-4", "random:1-4", "random:1-8", "random:1-8", 5, 5]
+    # a tiny run through the schedule: the switch is logged, evals count levels
+    cfg = tmp_path / "tiny_levels.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 4000, "best_metric": "levels_cleared",
+                                   "eval_max_episode_steps": 300,
+                                   "start_level_schedule": [[0, "random:2-3"], [2000, 7]]}))
+    name = f"test-levels-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    try:
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "train.py"),
+                              "--run-name", name, "--config", str(cfg)],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "start_level random:2-3" in out.stdout
+        assert re.search(r"2000 steps  start_level 7", out.stdout), out.stdout
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            evals = [json.loads(line) for line in f]
+        assert all("mean_levels_cleared" in e for e in evals)
+        assert all(g["levels_cleared"] == g["level"] - 1 for e in evals for g in e["episodes"])
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])

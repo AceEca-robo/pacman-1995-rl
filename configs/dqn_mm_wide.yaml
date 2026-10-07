@@ -1,0 +1,6 @@
+# dqn_mm with a twice as wide network (smoke test 2026-10-07: used if it is
+# at most 25% slower than the dqn.yaml width).
+base: dqn_mm.yaml
+network:
+  conv_channels: [64, 128, 128]
+  hidden: 1024

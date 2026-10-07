@@ -1,0 +1,4 @@
+# Width smoke test: dqn_mm_wide (64,128,128 channels, FC 1024), 2M steps.
+base: dqn_mm_wide.yaml
+total_steps: 2000000
+checkpoint_buffer: false
