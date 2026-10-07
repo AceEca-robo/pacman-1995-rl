@@ -19,10 +19,10 @@ Reward is the env's event reward (see docs/observation.md), score the game's.
 | dqn dqn1/best_median.pt | 100 | 0..99 | 49.1 | 70.1 | 1688 | 1580 | 3180 | 0% | 0% | 2924 | 15% | 95.2 | af91590 |
 | dqn dqn1/best_median.pt, 50 games | 50 | 0..49 | 46.0 | 67.3 | 1724 | 1590 | 3180 | 0% | 0% | 3104 | 16% | 95.4 | a5cfce0 |
 | dqn dqn1/best_median.pt, no ghosts | 50 | 0..49 | -143.0 | -143.0 | 530 | 530 | 530 | 0% | 0% | 10000 | 100% | 257.8 | a5cfce0 |
-| dqn dqn10/best_food.pt, eps 0 | 100 | 0..99 | 267.0 | 309.7 | 5522 | 6335 | 9425 | 81% | 26% | 874 | 0% | 30.9 | 582175c |
-| dqn dqn10/best_food.pt, eps 0.05 | 100 | 0..99 | 113.7 | 101.0 | 2157 | 1685 | 6565 | 12% | 0% | 483 | 0% | 17.5 | 582175c |
-| dqn dqn10/best_food.pt, no ghosts, eps 0 | 3 | 0..2 | -150.0 | -150.0 | 460 | 460 | 460 | 0% | 0% | 10000 | 100% | 9.6 | 582175c |
-| dqn dqn10/best_food.pt, no ghosts, eps 0.05 | 20 | 0..19 | -64.5 | -99.0 | 1194 | 930 | 3020 | 15% | 15% | 10000 | 100% | 60.7 | 582175c |
+| dqn dqn10 (5M)/best_food.pt, eps 0 | 100 | 0..99 | 267.0 | 309.7 | 5522 | 6335 | 9425 | 81% | 26% | 874 | 0% | 30.9 | 582175c |
+| dqn dqn10 (5M)/best_food.pt, eps 0.05 | 100 | 0..99 | 113.7 | 101.0 | 2157 | 1685 | 6565 | 12% | 0% | 483 | 0% | 17.5 | 582175c |
+| dqn dqn10 (5M)/best_food.pt, no ghosts, eps 0 | 3 | 0..2 | -150.0 | -150.0 | 460 | 460 | 460 | 0% | 0% | 10000 | 100% | 9.6 | 582175c |
+| dqn dqn10 (5M)/best_food.pt, no ghosts, eps 0.05 | 20 | 0..19 | -64.5 | -99.0 | 1194 | 930 | 3020 | 15% | 15% | 10000 | 100% | 60.7 | 582175c |
 | dqn dqn10@00.50M | 20 | 1000..1019 | 193.1 | 163.7 | 3680 | 2455 | 7255 | 50% | 0% | 766 | 0% | 13.5 | 582175c |
 | dqn dqn10@01.00M | 20 | 1000..1019 | 165.9 | 113.2 | 3178 | 2000 | 7010 | 35% | 0% | 684 | 0% | 12.7 | 582175c |
 | dqn dqn10@01.50M | 20 | 1000..1019 | 234.5 | 273.8 | 4782 | 5495 | 7515 | 75% | 0% | 840 | 0% | 14.7 | 582175c |
@@ -365,6 +365,8 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | dqn4 | best.pt (5.0M) | + hunger_limit 200, 4 actions | 112.9 | 0% | 43.0 | 1285 | 2450 | 0% | 172 | - |
 | ppo0 | best.pt (2.0M) | PPO, hunger_limit 200, 4 actions | 99.8 | 0% | 35.7 | 1020 | 1330 | 0% | 6 | - |
 | dqn1 | best_food.pt (17.5M) | 20M steps, eps over 3M; seed 0, picked by food | 151.6 | 0% | 42.9 | 1680 | 2980 | 16% | 1190 | 146.4 / 85.4 / 0% |
+| dqn10 | best_food.pt (5.0M) | dqn9 + PER (alpha 0.6, beta 0.4 -> 1) | 284.1 | 81% | 267.0 | 6335 | 9425 | 0% | 10 | 166.6 / 113.7 / 12% |
+| dqn10_5M | best_food.pt (5.0M) | dqn9 + PER, the first 5M (before --resume) | 284.1 | 81% | 267.0 | 6335 | 9425 | 0% | 10 | 166.6 / 113.7 / 12% |
 | dqn1s1 | best_food.pt (19.5M) | dqn1 setup, seed 1 | 168.8 | 0% | 56.1 | 1855 | 4690 | 20% | 488 | 159.4 / 99.0 / 0% |
 | dqn1s2 | best_food.pt (18.5M) | dqn1 setup, seed 2 | 101.5 | 0% | -28.9 | 1470 | 4030 | 6% | 3622 | 101.2 / 26.5 / 0% |
 | dqn5 | best_food.pt (10.0M) | dqn1 + food-distance channel + steps since food, 10M | 127.4 | 0% | 20.4 | 1950 | 7480 | 20% | 602 | 125.6 / 67.0 / 0% |
@@ -373,6 +375,7 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | dqn8 | best_food.pt (3.5M) | dqn7 + endgame dot reward (k 20); from dqn1 seed 1 | 246.2 | 67% | 214.8 | 5030 | 8775 | 1% | 12 | 159.5 / 102.4 / 4% |
 | dqn8s0 | best_food.pt (5.0M) | dqn8 setup, from dqn1 seed 0 | 153.9 | 0% | 67.1 | 1680 | 2490 | 6% | 578 | 143.4 / 85.4 / 0% |
 | dqn8s2 | best_food.pt (4.5M) | dqn8 setup, from dqn1 seed 2 | 103.2 | 0% | -40.8 | 1395 | 5090 | 15% | 4342 | 102.5 / 28.9 / 0% |
+| dqn9 | best_food.pt (5.0M) | fine-tune of dqn8 on its own endgame prefixes, 5M | 274.4 | 79% | 255.3 | 6050 | 8075 | 0% | 10 | 171.8 / 118.6 / 12% |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%
 

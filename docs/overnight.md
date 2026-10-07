@@ -336,7 +336,7 @@ as before (<= 2 runs in parallel, game/ untouched, a commit per step).
 - 15:57 **dqn9 final, 100 games, seeds 0..99: level 1 cleared 79%** (79% on
   seeds 20..99), food 274.4, reward 255.3, median score 6050, none stuck.
   eps 0.05: 12%. Without ghosts it still stops (86 food, eps 0).
-- 16:0x dqn10 finished (no crash; 5 supervisor notes of 1.28-1.41k steps/s:
+- 15:59 dqn10 finished (no crash; 5 supervisor notes of 1.28-1.41k steps/s:
   PER is slower, nothing else was waiting). Evaluations: 50, 35, 75, 80, 70,
   90, 65, 80, .. % ; best_food.pt = 5.0M (307.1 food).
   **dqn10 final: level 1 cleared 81%** (81% on seeds 20..99), food 284.1,

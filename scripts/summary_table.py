@@ -36,6 +36,9 @@ LATER = {  # run -> what changed (checkpoint: best_food.pt)
     "dqn6": "dqn5 + n_step 5, gamma 0.995",
     "dqn7": "fine-tune of dqn1 seed 1 on endgame prefixes, 5M",
     "dqn8": "dqn7 + endgame dot reward (k 20); from dqn1 seed 1",
+    "dqn9": "fine-tune of dqn8 on its own endgame prefixes, 5M",
+    "dqn10": "dqn9 + PER (alpha 0.6, beta 0.4 -> 1)",
+    "dqn10_5M": "dqn9 + PER, the first 5M (before --resume)",
 }
 
 
