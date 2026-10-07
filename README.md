@@ -1,15 +1,18 @@
-# pacman-rl
+# pacman-1995-rl
 
 Reinforcement learning on the **original pacman 1.0** (1995, Roar Thronaes,
 GPL-2+), the X11 game from the Debian package `pacman` (version 10-21). The
 game is not reimplemented: its C++ sources are compiled with a small bridge
-and driven as a gymnasium environment through a Unix socket.
+and driven as a gymnasium environment through a Unix socket. The main lesson
+about generalization: the agents learn a route through one maze, and the game
+has 16 different mazes, so the best agent, which clears level 1, stalls on
+level 2, whose maze differs from level 1 in 23 cells.
+
+![dqn8 playing](docs/dqn8.gif)
 
 > v0.1 (2026-10-07): the first agent that clears level 1 (dqn8, 67% of
 > greedy games). Numbers are taken from `docs/results.md` and the session
 > logs `docs/overnight.md`.
-
-![training](docs/training.png)
 
 ## How the game became an environment
 
@@ -34,6 +37,11 @@ and driven as a gymnasium environment through a Unix socket.
   socket.
 
 ## Install and run
+
+Requirements: Linux with X11 libraries, Python 3.10+. A GPU is optional: on
+CPU evaluation and play work the same and training is slower (about 435 env
+steps/s in a short check with the GPU hidden, against 1.8-3.5k with an
+RTX 4060 laptop GPU).
 
 ```bash
 git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
@@ -104,9 +112,11 @@ dots + energizers eaten per game, 172 on level 1. From `docs/results.md`
 | dqn8 setup from dqn1 seed 0 / seed 2 | best_food.pt | 153.9 / 103.2 | 0% / 0% | 67.1 / -40.8 | 1680 / 1395 |
 | dqn8 setup, 3 starting networks (mean +- std) | best_food.pt | 167.8 +- 59.2 | 22% (67 / 0 / 0) | 80.4 +- 104.8 | 2702 +- 1651 |
 
-Training curves: `docs/training.png`; evaluation curves: `docs/eval.png`
-(the fine-tunes dqn7, dqn8, dqn8s0, dqn8s2 are plotted from their own step 0;
-they start from networks trained for 17.5-19.5M steps).
+Training curves (`docs/training.png`) and evaluation curves
+(`docs/eval.png`); the fine-tunes dqn7, dqn8, dqn8s0, dqn8s2 are plotted from
+their own step 0, they start from networks trained for 17.5-19.5M steps:
+
+![training](docs/training.png)
 
 ![eval](docs/eval.png)
 
@@ -121,11 +131,9 @@ fine-tune from seeds 0 and 2 leaves their regions untouched.
 |---|---|---|
 | ![](docs/leftover_heuristic.png) | ![](docs/leftover_dqn1s1_eps0.png) | ![](docs/leftover_dqn8_eps0.png) |
 
-dqn8 (best_food.pt, greedy), the first 400 ticks of seed 0 in real time
-(`scripts/play.py --record`, Xvfb); `docs/dqn1s1.gif` shows its starting
-point, dqn1 seed 1:
-
-![dqn8 playing](docs/dqn8.gif)
+The GIF at the top is dqn8 (best_food.pt, greedy), the first 400 ticks of
+seed 0 in real time (`scripts/play.py --record`, Xvfb); `docs/dqn1s1.gif`
+shows its starting point, dqn1 seed 1.
 
 ## What worked, what did not
 
