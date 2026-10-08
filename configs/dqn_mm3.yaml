@@ -1,0 +1,16 @@
+# mm3: fine-tune mm1's best.pt (27.0M, best by the selection rule) with
+# endgame prefixes on all 16 mazes (heuristic, <= 15 food left, no life lost,
+# 25 per maze, seeds 3000+: data/endgame_prefixes_all.json), as dqn7 -> dqn10
+# did on maze 1. 10M steps, eps 0.05 -> 0.02 over 1M, lr 3e-5, PER;
+# resets without a prefix start on a random maze 1..16.
+base: dqn_mm_wide.yaml
+init_checkpoint: runs/mm1/best_27000000.pt
+total_steps: 10000000
+epsilon_start: 0.05
+epsilon_end: 0.02
+epsilon_steps: 1000000
+lr: 0.00003
+eval_every: 500000
+env_config:
+  prefix_prob: 0.5
+  prefix_file: data/endgame_prefixes_all.json

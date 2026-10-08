@@ -549,3 +549,25 @@ def test_start_level_bad_values():
     for bad in (0, "random:5-2", "random:0-3", "level3", 2.5, True):
         with pytest.raises(ValueError):
             PacmanEnv(config={"start_level": bad})
+
+
+def test_prefix_on_its_own_level(tmp_path):
+    """A prefix with a "level" is replayed on that level (game --level)."""
+    from tools.record_prefixes import record
+    kept, _ = record(range(3000, 3040), 15, level=7, keep=1)
+    assert kept and kept[0]["level"] == 7
+    path = tmp_path / "p.json"
+    path.write_text(__import__("json").dumps({"n_actions": 5, "prefixes": kept}))
+    e = PacmanEnv(config={"prefix_prob": 1.0, "prefix_file": str(path), "start_level": 3})
+    try:
+        for i in range(2):
+            obs, info = e.reset(seed=i)
+            st = e._state
+            assert st["level"] == 7 and info["prefix"] == kept[0]["seed"]
+            assert sum(r.count(".") + r.count("o") for r in st["grid"]) == kept[0]["food_left"]
+            assert board_of(e) == maze_layouts()[6]
+        # without prefixes the env goes back to its own start level
+        e._prefix_prob = 0.0
+        assert e.reset(seed=5)[1]["level"] == 3
+    finally:
+        e.close()

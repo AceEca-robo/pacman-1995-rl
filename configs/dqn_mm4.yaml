@@ -1,0 +1,4 @@
+# mm4: mm3 with prefix_prob 0.7.
+base: dqn_mm3.yaml
+env_config:
+  prefix_prob: 0.7

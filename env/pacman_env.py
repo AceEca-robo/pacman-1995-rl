@@ -320,15 +320,17 @@ class PacmanEnv(gym.Env):
         if prefix is not None:
             # replay a recorded opening of its game (same seed, same actions:
             # the game is deterministic), then hand over the position
-            # prefixes are level 1 openings
-            if not (self._fresh and self._seed == prefix["seed"] and self._level == 1):
-                self._restart_game(prefix["seed"], 1)
+            # a prefix is an opening of its level (level 1 if the file has none)
+            plevel = int(prefix.get("level", 1))
+            if not (self._fresh and self._seed == prefix["seed"] and self._level == plevel):
+                self._restart_game(prefix["seed"], plevel)
             self._state = self._recv()
             for a in prefix["actions"]:
                 self._res["conn"].sendall(ACTIONS[a])
                 self._state = self._recv()
             left = sum(r.count(".") + r.count("o") for r in self._state["grid"])
-            if left != prefix["food_left"] or self._state["lives"] != 3:
+            if left != prefix["food_left"] or self._state["lives"] != 3 \
+                    or self._state["level"] != plevel:
                 raise RuntimeError(f"prefix replay of seed {prefix['seed']} diverged")
             return self._after_reset(int(prefix["seed"]))
         if seed is not None:
