@@ -1,0 +1,21 @@
+# v0.3 as "four mazes": DQN from scratch with every reset on a random maze of
+# 1..4 (wide network, PER, endgame dot reward k 20), death -50, 30% of resets
+# replay a heuristic endgame prefix of mazes 1..4 (<= 15 food left, 3 lives;
+# data/endgame_prefixes_1to4.json, the levels 1..4 part of
+# endgame_prefixes_all.json). eps 1.0 -> 0.05 over 5M.
+# Eval every 2M: 20 games from level 1 (selection: mean levels cleared,
+# seeds 1000..1019, cut at 30000 ticks) and 20 games started on each of
+# mazes 1..4 (stopped once the maze is cleared).
+base: dqn_mm_wide.yaml
+total_steps: 60000000
+epsilon_steps: 5000000
+eval_every: 2000000
+eval_levels: [1, 2, 3, 4]
+eval_level_episodes: 20
+eval_envs: 20
+env_config:
+  start_level: random:1-4
+  prefix_prob: 0.3
+  prefix_file: data/endgame_prefixes_1to4.json
+  reward:
+    death: -50.0

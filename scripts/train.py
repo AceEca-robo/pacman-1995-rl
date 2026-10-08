@@ -142,15 +142,33 @@ def warm_start(collector, cfg):
           f"({time.perf_counter() - t0:.0f} s)", flush=True)
 
 
+def eval_tasks(cfg):
+    """(seed, start level, stop at the first level up) per eval game:
+    eval_episodes games from level 1 (to game over or eval_max_episode_steps),
+    then eval_level_episodes games started on each of cfg["eval_levels"],
+    stopped once the start maze is cleared (same seeds)."""
+    seeds = range(cfg["eval_seed"], cfg["eval_seed"] + cfg["eval_episodes"])
+    tasks = [(s, 1, False) for s in seeds]
+    k = cfg.get("eval_level_episodes") or cfg["eval_episodes"]
+    for lv in cfg.get("eval_levels") or []:
+        tasks += [(s, lv, True) for s in range(cfg["eval_seed"], cfg["eval_seed"] + k)]
+    return tasks
+
+
 def evaluate(learner, envs, cfg):
-    """Greedy episodes over a fixed seed set, the envs stepping in a batch."""
-    seeds = list(range(cfg["eval_seed"], cfg["eval_seed"] + cfg["eval_episodes"]))
-    results, live = [], []  # live: [env, obs, seed, reward, length, max level, food, start]
+    """Greedy episodes over a fixed seed set (eval_tasks), the envs stepping
+    in a batch. Results of the level-1 games come first (sorted by seed),
+    then the per-maze games ("maze" set, sorted by maze and seed)."""
+    tasks = eval_tasks(cfg)
+    results, live = [], []  # live: [env, obs, task, reward, length, max level, food, start]
+
+    def start(env, task):
+        obs, info = env.reset(seed=task[0], options={"start_level": task[1]})
+        return [env, obs, task, 0.0, 0, info["level"], 0, info["level"]]
+
     for env in envs:
-        if seeds:
-            s = seeds.pop(0)
-            obs, info = env.reset(seed=s)
-            live.append([env, obs, s, 0.0, 0, info["level"], 0, info["level"]])
+        if tasks:
+            live.append(start(env, tasks.pop(0)))
     while live:
         q = learner.q_values(pack_grids(np.stack([e[1]["grid"] for e in live])),
                              np.stack([e[1]["vec"] for e in live]))
@@ -158,17 +176,19 @@ def evaluate(learner, envs, cfg):
             obs, r, term, trunc, info = e[0].step(a)
             e[1], e[3], e[4], e[5] = obs, e[3] + r, e[4] + 1, max(e[5], info["level"])
             e[6] += info["events"]["eaten_dot"] + info["events"]["eaten_energizer"]
-            if term or trunc:
-                results.append({"seed": e[2], "reward": e[3], "score": info["score"],
-                                "length": e[4], "level": e[5], "food": e[6],
-                                "levels_cleared": e[5] - e[7]})
-                if seeds:
-                    e[2] = seeds.pop(0)
-                    e[1], info = e[0].reset(seed=e[2])
-                    e[3], e[4], e[5], e[6], e[7] = 0.0, 0, info["level"], 0, info["level"]
+            seed, level, stop = e[2]
+            if term or trunc or (stop and e[5] > e[7]):
+                res = {"seed": seed, "reward": e[3], "score": info["score"],
+                       "length": e[4], "level": e[5], "food": e[6],
+                       "levels_cleared": e[5] - e[7]}
+                if stop:
+                    res["maze"] = level
+                results.append(res)
+                if tasks:
+                    e[:] = start(e[0], tasks.pop(0))
                 else:
                     live.remove(e)
-    return sorted(results, key=lambda x: x["seed"])
+    return sorted(results, key=lambda x: (x.get("maze", 0), x["seed"]))
 
 
 def best_metric(name, results):
@@ -291,7 +311,7 @@ def main():
         print(f"start_level {level_spec}")
     make = lambda: PacmanEnv(config=env_cfg)  # noqa: E731
     envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
-    eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(n)]
+    eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(cfg.get("eval_envs") or n)]
     # a resumed run must not replay the same games
     col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps)
     if not ck and cfg["warm_start"]:
@@ -373,7 +393,8 @@ def main():
 
             if steps >= next_eval or steps >= cfg["total_steps"]:
                 t0 = time.perf_counter()
-                res = evaluate(learner, eval_envs, cfg)
+                all_res = evaluate(learner, eval_envs, cfg)
+                res = [r for r in all_res if "maze" not in r]  # games from level 1
                 metric = best_metric(cfg["best_metric"], res)
                 summary = {
                     "steps": steps,
@@ -386,11 +407,14 @@ def main():
                     "mean_levels_cleared": float(np.mean([r["levels_cleared"] for r in res])),
                     "median_levels_cleared": float(np.median([r["levels_cleared"] for r in res])),
                 }
+                for lv in cfg.get("eval_levels") or []:
+                    summary[f"maze{lv}_cleared"] = float(np.mean(
+                        [r["levels_cleared"] >= 1 for r in all_res if r.get("maze") == lv]))
                 for k, v in summary.items():
                     if k != "steps":
                         writer.add_scalar(f"eval/{k}", v, steps)
                 with open(os.path.join(run_dir, "evals.jsonl"), "a") as f:
-                    f.write(json.dumps({**summary, "episodes": res}) + "\n")
+                    f.write(json.dumps({**summary, "episodes": all_res}) + "\n")
                 print(f"eval @ {steps}: " + ", ".join(f"{k} {v:.2f}" for k, v in summary.items()
                                                        if k != "steps")
                       + f"  ({time.perf_counter() - t0:.0f} s)", flush=True)

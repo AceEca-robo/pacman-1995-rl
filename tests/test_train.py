@@ -222,3 +222,29 @@ def test_start_level_schedule(tmp_path):
         assert all(g["levels_cleared"] == g["level"] - 1 for e in evals for g in e["episodes"])
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_eval_levels(tmp_path):
+    """eval_levels adds games started on each listed maze (stopped at the
+    first level up) and a maze<N>_cleared share per maze to the eval summary."""
+    cfg = tmp_path / "tiny_levels.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 2000, "eval_levels": [2, 3],
+                                   "eval_level_episodes": 2, "eval_envs": 3,
+                                   "eval_max_episode_steps": 300}))
+    name = f"test-eval-levels-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    try:
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "train.py"),
+                              "--run-name", name, "--config", str(cfg)],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            ev = json.loads(f.readline())
+        assert "maze2_cleared" in ev and "maze3_cleared" in ev
+        eps = ev["episodes"]
+        assert [e.get("maze") for e in eps] == [None, None, 2, 2, 3, 3]
+        assert [e["seed"] for e in eps] == [1000, 1001] * 3
+        assert all(e["level"] >= e.get("maze", 1) for e in eps)  # started on its maze
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])
