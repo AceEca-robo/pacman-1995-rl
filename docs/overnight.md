@@ -636,3 +636,50 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   per run) is the limit.
 - mm3's games from level 1 run long (3300 ticks, 7% over 10000): it learned
   to survive by wandering; hunger_limit could push it back to food.
+
+# Night session 2026-10-08/09: training speed (stage A), v0.3 as four mazes (stage B)
+
+## Chronology (2026-10-08/09)
+
+- 22:20 Start. The four `runs/mm*/buffer.npz` deleted (13.4 GB; disk 19 GB
+  free), GPU 15 MB. CLAUDE.md: answer the user in Russian, code / docs /
+  commits in English. The plan's stage A deadline (~22:00) had already
+  passed at the start; see the decisions below.
+- 22:23 train.py: per-maze eval games (`eval_levels`, `eval_level_episodes`,
+  `eval_envs`); `configs/dqn_v03.yaml`; `data/endgame_prefixes_1to4.json`
+  (the 100 prefixes of mazes 1..4 from endgame_prefixes_all.json). A hedge
+  run of stage B with the old code (SyncVectorEnv x4) started (v03s0, later
+  renamed `runs/v03_hedge_sync`), to be replaced if stage A pays off.
+- 22:25 **Stage A, profile** (`scripts/profile_train.py`, wide network,
+  4 envs, train_every 16, batch 64): per iteration of 4 env steps the update
+  (amortized) 1.7 ms (41%), the batched greedy forward pass 1.2 ms (29%; it
+  is already one call for all envs), env step 0.7-0.9 ms (20%), n-step +
+  buffer add 0.4 ms (10%), PER sampling 0.03 ms, obs packing 0.08 ms.
+  One update is 5-7 ms wall, ~4.1 ms of GPU time (torch profiler: the fused
+  Adam step over the 7.5M parameters, 7.1M of them in the 6976x1024 fc
+  layer, is 0.9 ms by itself -- memory bound; it scales linearly with batch
+  size: 64 -> 6 ms, 128 -> 11 ms). Raw env throughput (bench_env.py, random
+  actions): one env 23k steps/s, sync x4 11.7k, async x8 13.7k, async x16
+  16.3k -- the envs are not the limit.
+  Note: the first profiles and the async8 smoke ran next to the hedge run
+  (`pgrep -f` matched the tmux server instead of the trainer, so SIGSTOP
+  paused tmux, not training); from the async16 smoke on the hedge was really
+  paused (SIGSTOP on the trainer's pid).
+- 22:31-23:22 **Stage A, smoke tests** (`configs/dqn_v03_speed_*.yaml`,
+  dqn_v03 for 1M steps, mean steps/s of the log lines from 300k on):
+
+  | variant | steps/s | vs baseline |
+  |---|---|---|
+  | SyncVectorEnv x4, updates in the loop (baseline; hedge run's first lines) | ~1,360 | 1.00 |
+  | + batched buffer add (`add_batch`), AsyncVectorEnv x8 (shared memory) | 1,261 (contended) | 0.93 |
+  | AsyncVectorEnv x16 | 1,542 | 1.13 |
+  | x16 + learner thread (`async_learner`) | 2,166 (stopped at 470k) | 1.59 |
+  | x16 + learner thread, PER priorities deferred by one update, acting on its own CUDA stream | **2,567** | **1.89** |
+  | same + `fast_learner` (no-grad online(s'), cudnn.benchmark, bf16 acting) | 2,464 | 1.81 |
+
+  With the learner thread the GPU runs at ~40-85% and the trainer process
+  at ~125% CPU: the acting loop and the learner share one interpreter (GIL).
+  The next lever would be the learner in its own process (replay buffer and
+  PER tree in shared memory, weights pushed back to the actor), a larger
+  change; with the stage's deadline long past, stage A stopped at ~2.5k
+  (target 4k not reached, >= 2k).

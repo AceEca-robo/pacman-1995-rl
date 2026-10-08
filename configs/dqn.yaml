@@ -1,7 +1,11 @@
 # Double + Dueling DQN, n-step (agents/dqn.py, scripts/train.py).
 # All step counts are env steps summed over the vector envs.
 total_steps: 5000000
-num_envs: 4                 # SyncVectorEnv copies
+num_envs: 4                 # vector env copies
+vector_env: sync            # sync: SyncVectorEnv (deterministic); async: AsyncVectorEnv, one process per copy, shared memory
+async_learner: false        # gradient steps in a thread next to acting (scripts/train.py BackgroundLearner); not deterministic
+async_max_lag: 4            # async_learner: acting waits while more updates than this are pending
+fast_learner: false         # async_learner runs: online(s') in a no-grad pass, cudnn.benchmark, bf16 acting forward passes
 env_config: null            # null = configs/env_default.yaml
 
 buffer_size: 500000

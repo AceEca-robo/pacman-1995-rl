@@ -9,6 +9,7 @@ stored as 7 more bit planes of d (42 planes). Decoding happens on the GPU
 per batch.
 """
 
+import contextlib
 import os
 from collections import deque
 
@@ -117,6 +118,21 @@ class ReplayBuffer:
         self.pos = (i + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
+    def add_batch(self, transitions):
+        """Several add() at once (same result as adding them one by one);
+        returns the slots written."""
+        k = len(transitions)
+        if not k:
+            return np.zeros(0, np.int64)
+        idx = (self.pos + np.arange(k)) % self.capacity
+        for name, col in zip(("obs", "vec", "act", "ret", "next_obs", "next_vec", "discount"),
+                             zip(*transitions)):
+            # a batch longer than the buffer: the last write to a slot wins, as with add()
+            getattr(self, name)[idx] = np.asarray(col)
+        self.pos = int((self.pos + k) % self.capacity)
+        self.size = min(self.size + k, self.capacity)
+        return idx
+
     def sample(self, rng, batch, beta=None):
         """Returns (transitions, indices, importance weights); weights are 1 here."""
         idx = rng.integers(self.size, size=batch)
@@ -194,6 +210,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         i = self.pos
         super().add(*transition)
         self.tree.set([i], self.max_priority)
+
+    def add_batch(self, transitions):
+        idx = super().add_batch(transitions)
+        if len(idx):
+            self.tree.set(np.unique(idx), self.max_priority)
+        return idx
 
     def sample(self, rng, batch, beta=0.4):
         total = self.tree.total
@@ -298,6 +320,27 @@ class DQNLearner:
         self.decode = GridDecoder(device, n_channels)
         self.amp = cuda and cfg.get("bf16", False)
         self._loss = torch.compile(self._loss_fn) if cfg.get("compile", False) else self._loss_fn
+        # set by train.py's BackgroundLearner: forward passes for acting and
+        # optimizer steps (in another thread) do not interleave
+        self.lock = contextlib.nullcontext()
+        self.act_stream = None  # enable_actor_stream()
+        # cfg "fast_learner" (async_learner runs): online(s') in its own
+        # no-grad pass (same math, ~5% less GPU time), cudnn autotuning (not
+        # bitwise reproducible), bf16 forward passes for acting
+        self.fast = bool(cfg.get("fast_learner")) and cuda
+        if self.fast:
+            torch.backends.cudnn.benchmark = True
+
+    def enable_actor_stream(self):
+        """q_values() on its own high-priority CUDA stream, so acting does not
+        queue behind the learner's kernels (async_learner). Events keep a
+        forward pass and an optimizer step from overlapping on the GPU: the
+        forward waits for the last step enqueued before it, the next step for
+        the last forward enqueued before it (both enqueued under self.lock)."""
+        if not str(self.device).startswith("cuda"):
+            return
+        self.act_stream = torch.cuda.Stream(priority=-1)
+        self._act_done, self._step_done = torch.cuda.Event(), torch.cuda.Event()
 
     def _t(self, x, dtype=None):
         return torch.as_tensor(x, device=self.device, dtype=dtype)
@@ -307,7 +350,17 @@ class DQNLearner:
         """packed: uint8 (B, N_PLANES, PACKED) numpy; returns numpy (B, n_actions).
         Plain fp32: entering torch.autocast costs ~0.1 ms (torch.cuda.is_available()
         on every enter), more than this tiny forward pass."""
-        return self.online(self.decode(self._t(packed)), self._t(vecs)).cpu().numpy()
+        if self.act_stream is None:
+            with self.lock:
+                q = self.online(self.decode(self._t(packed)), self._t(vecs))
+            return q.cpu().numpy()
+        with torch.cuda.stream(self.act_stream):
+            with self.lock:
+                self.act_stream.wait_event(self._step_done)
+                with torch.autocast("cuda", torch.bfloat16, enabled=self.fast):
+                    q = self.online(self.decode(self._t(packed)), self._t(vecs)).float()
+                self._act_done.record(self.act_stream)
+            return q.cpu().numpy()
 
     def _loss_fn(self, obs2, vec2, act, ret, discount, weights):
         """obs2/vec2: s and s' stacked; returns (importance-weighted Huber loss,
@@ -315,14 +368,19 @@ class DQNLearner:
         n = act.shape[0]
         x = self.decode(obs2)
         with torch.autocast("cuda", torch.bfloat16, enabled=self.amp):
-            q_both = self.online(x, vec2)
+            if self.fast:  # online(s') without autograd: backward only through s
+                q_all = self.online(x[:n], vec2[:n])
+                with torch.no_grad():
+                    q_next = self.online(x[n:], vec2[n:])
+            else:
+                q_both = self.online(x, vec2)
+                q_all, q_next = q_both[:n], q_both[n:]
             with torch.no_grad():
                 q_target = self.target(x[n:], vec2[n:])
-        q_both, q_target = q_both.float(), q_target.float()
-        q_all = q_both[:n]
+        q_all, q_next, q_target = q_all.float(), q_next.float(), q_target.float()
         q = q_all.gather(1, act[:, None]).squeeze(1)
         with torch.no_grad():
-            best = q_both[n:].argmax(1, keepdim=True)  # double DQN: online picks
+            best = q_next.argmax(1, keepdim=True)  # double DQN: online picks
             target = ret + discount * q_target.gather(1, best).squeeze(1)
         loss = (weights * F.smooth_l1_loss(q, target, reduction="none")).mean()
         return loss, q_all.detach().max(1).values.mean(), (q.detach() - target).abs()
@@ -337,7 +395,12 @@ class DQNLearner:
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.online.parameters(), self.cfg["grad_clip"], foreach=True)
-        self.opt.step()
+        with self.lock:
+            if self.act_stream is not None:
+                torch.cuda.current_stream().wait_event(self._act_done)
+            self.opt.step()
+            if self.act_stream is not None:
+                self._step_done.record()
         return loss.detach(), mean_q, td
 
     def sync_target(self):

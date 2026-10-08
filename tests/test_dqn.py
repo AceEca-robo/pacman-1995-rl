@@ -106,3 +106,29 @@ def test_pack_roundtrip_with_food_distance():
     packed = np.stack([pack_grid(g) for g in grids])
     assert packed.shape[1] == 42
     assert np.array_equal(dec(torch.as_tensor(packed)).numpy(), np.stack(grids))
+
+
+def test_add_batch_matches_add():
+    """add_batch == add one by one, wrap-around and PER priorities included."""
+    from agents.dqn import N_PLANES, PACKED, PrioritizedReplayBuffer, ReplayBuffer
+    rng = np.random.default_rng(0)
+    trs = [(rng.integers(0, 256, (N_PLANES, PACKED), dtype=np.uint8), rng.random(3),
+            i % 5, float(i), rng.integers(0, 256, (N_PLANES, PACKED), dtype=np.uint8),
+            rng.random(3), 0.97) for i in range(23)]
+    for make in (lambda: ReplayBuffer(10), lambda: PrioritizedReplayBuffer(10, 0.6, 1e-6)):
+        a, b = make(), make()
+        for t in trs[:7]:
+            a.add(*t)
+        b.add_batch(trs[:7])
+        if hasattr(a, "tree"):
+            a.update_priorities([1, 2], [3.0, 0.5])
+            b.update_priorities([1, 2], [3.0, 0.5])
+        for t in trs[7:]:
+            a.add(*t)
+        b.add_batch(trs[7:12])
+        b.add_batch(trs[12:])
+        assert (a.size, a.pos) == (b.size, b.pos)
+        for k in a.ARRAYS:
+            assert np.array_equal(getattr(a, k), getattr(b, k)), k
+        if hasattr(a, "tree"):
+            assert np.array_equal(a.tree.tree, b.tree.tree)

@@ -10,9 +10,12 @@ values it overrides.
 """
 
 import argparse
+import contextlib
+import functools
 import json
 import os
 import sys
+import threading
 import time
 
 import gymnasium as gym
@@ -66,8 +69,9 @@ class Collector:
     """Steps the vector env, turns steps into n-step transitions in the
     buffer and logs finished episodes."""
 
-    def __init__(self, envs, cfg, buffer, writer, seed):
+    def __init__(self, envs, cfg, buffer, writer, seed, lock=None):
         self.envs, self.buffer, self.writer = envs, buffer, writer
+        self.lock = lock or contextlib.nullcontext()  # guards the buffer (async_learner)
         self.n = envs.num_envs
         self.obs, info = envs.reset(seed=seed)
         self.cur = pack_grids(self.obs["grid"])
@@ -91,6 +95,7 @@ class Collector:
         nobs, rew, term, trunc, info = self.envs.step(actions)
         packed_next = pack_grids(nobs["grid"])
         ended_count = 0
+        new = []  # this step's finished n-step transitions, added in one batch
         for i in range(self.n):
             ended = term[i] or trunc[i]
             if ended:  # nobs holds the next episode's first obs
@@ -98,9 +103,8 @@ class Collector:
                 last_vec = info["final_obs"][i]["vec"]
             else:
                 last_packed, last_vec = packed_next[i], nobs["vec"][i]
-            for t in self.nsteps[i].push(self.cur[i], obs["vec"][i], actions[i], rew[i],
-                                         last_packed, last_vec, term[i], ended):
-                self.buffer.add(*t)
+            new += self.nsteps[i].push(self.cur[i], obs["vec"][i], actions[i], rew[i],
+                                       last_packed, last_vec, term[i], ended)
             self.ep_reward[i] += rew[i]
             self.ep_len[i] += 1
             src = info["final_info"] if ended else info
@@ -123,8 +127,134 @@ class Collector:
                                        self.ep_level[i] - self.ep_start[i], log_step)
                 self.ep_reward[i], self.ep_len[i] = 0.0, 0
                 self.ep_start[i] = self.ep_level[i] = info["level"][i]
+        self.add(new)
         self.cur, self.obs = packed_next, nobs
         return ended_count
+
+    def add(self, transitions):
+        with self.lock:
+            self.buffer.add_batch(transitions)
+
+
+class BackgroundLearner(threading.Thread):
+    """async_learner: gradient steps in a thread next to the acting loop.
+    The acting loop hands out update credit (env steps / train_every, as in
+    the synchronous loop) and blocks while more than async_max_lag updates
+    are pending, so the replay ratio stays that of train_every. The buffer
+    is shared under buffer_lock; the learner's lock keeps the acting loop's
+    forward passes from reading the weights in the middle of an optimizer
+    step. Target syncs run in this thread between updates. Not deterministic
+    (thread timing decides which transitions each update samples)."""
+
+    def __init__(self, learner, buffer, cfg, rng):
+        super().__init__(daemon=True)
+        self.learner, self.buffer, self.cfg, self.rng = learner, buffer, cfg, rng
+        self.per = cfg["per"]["enabled"]
+        self.max_lag = cfg.get("async_max_lag") or 4
+        self.buffer_lock = threading.Lock()
+        learner.lock = threading.Lock()
+        learner.enable_actor_stream()
+        self.cv = threading.Condition()
+        self.credit, self.beta, self.busy, self.sync_pending = 0.0, None, False, False
+        self.stopping, self.error = False, None
+        self.n_updates, self.losses, self.qs = 0, [], []
+
+    def give(self, credit, beta):
+        with self.cv:
+            self.credit += credit
+            self.beta = beta
+            self.cv.notify_all()
+            while self.credit >= self.max_lag + 1 and self.error is None:
+                self.cv.wait()
+        self.check()
+
+    def request_target_sync(self):
+        with self.cv:
+            self.sync_pending = True
+            self.cv.notify_all()
+
+    def drain(self):
+        """Wait until every whole update handed out so far is done and the
+        thread is idle (before evaluating / saving)."""
+        with self.cv:
+            while (self.credit >= 1 or self.busy or self.sync_pending) and self.error is None:
+                self.cv.wait()
+        self.check()
+
+    def take_stats(self):
+        with self.cv:
+            losses, qs, self.losses, self.qs = self.losses, self.qs, [], []
+            return losses, qs, self.n_updates
+
+    def check(self):
+        if self.error is not None:
+            raise RuntimeError("learner thread failed") from self.error
+
+    def stop(self):
+        with self.cv:
+            self.stopping = True
+            self.cv.notify_all()
+        self.join()
+
+    def _flush(self):
+        """Apply the previous update's priorities (deferred by one update, so
+        launching an update overlaps the GPU finishing the one before)."""
+        if self.pending is not None:
+            idx, td, done = self.pending
+            self.pending = None
+            if done is not None:
+                done.synchronize()
+            if self.per:
+                with self.buffer_lock:
+                    self.buffer.update_priorities(idx, td.numpy())
+
+    def run(self):
+        cuda = str(self.learner.device).startswith("cuda")
+        self.pending = None
+        try:
+            while True:
+                with self.cv:
+                    idle = not self.stopping and self.credit < 1 and not self.sync_pending
+                if idle:
+                    self._flush()
+                with self.cv:
+                    while not self.stopping and self.credit < 1 and not self.sync_pending:
+                        self.cv.wait()
+                    if self.stopping:
+                        return
+                    sync, update, beta = self.sync_pending, self.credit >= 1, self.beta
+                    self.sync_pending, self.busy = False, True
+                if sync:
+                    self.learner.sync_target()
+                if update:
+                    with self.buffer_lock:
+                        batch, idx, weights = self.buffer.sample(self.rng, self.cfg["batch_size"], beta)
+                    loss, mq, td = self.learner.update(batch, weights)
+                    if cuda:
+                        td, done = td.to("cpu", non_blocking=True), torch.cuda.Event()
+                        done.record()
+                    else:
+                        td, done = td.cpu(), None
+                    self._flush()
+                    self.pending = (idx, td, done)
+                with self.cv:
+                    if update:
+                        self.credit -= 1
+                        self.n_updates += 1
+                        self.losses.append(loss)
+                        self.qs.append(mq)
+                    # idle only once the last update's priorities are in
+                    self.busy = self.credit < 1 and self.pending is not None
+                    self.cv.notify_all()
+                if self.busy:
+                    self._flush()
+                    with self.cv:
+                        self.busy = False
+                        self.cv.notify_all()
+        except BaseException as e:  # noqa: BLE001 -- handed to the acting loop
+            with self.cv:
+                self.error = e
+                self.cv.notify_all()
 
 
 def warm_start(collector, cfg):
@@ -309,11 +439,21 @@ def main():
         for _, spec in cfg["start_level_schedule"]:
             parse_start_level(spec)
         print(f"start_level {level_spec}")
-    make = lambda: PacmanEnv(config=env_cfg)  # noqa: E731
-    envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+    make = functools.partial(PacmanEnv, config=env_cfg)
+    if cfg.get("vector_env", "sync") == "async":
+        # one process per env copy, observations through shared memory
+        envs = gym.vector.AsyncVectorEnv([make] * n, shared_memory=True,
+                                         autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+    else:
+        envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
     eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(cfg.get("eval_envs") or n)]
     # a resumed run must not replay the same games
-    col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps)
+    bg = None
+    if cfg.get("async_learner"):
+        bg = BackgroundLearner(learner, buffer, cfg, np.random.default_rng([seed, steps, 1]))
+        bg.n_updates = n_updates
+    col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps,
+                    lock=bg.buffer_lock if bg else None)
     if not ck and cfg["warm_start"]:
         warm_start(col, cfg)
     per = cfg["per"]["enabled"]
@@ -325,7 +465,10 @@ def main():
     next_log = (steps // cfg["log_every"] + 1) * cfg["log_every"]
     next_eval = (steps // cfg["eval_every"] + 1) * cfg["eval_every"]
     t_log, s_log = time.perf_counter(), steps
-    print(f"run {run_dir}, device {device}, buffer {buffer.nbytes / 1e9:.2f} GB")
+    print(f"run {run_dir}, device {device}, buffer {buffer.nbytes / 1e9:.2f} GB"
+          + (f", {cfg.get('vector_env', 'sync')} envs x{n}" + (", async learner" if bg else "")))
+    if bg:
+        bg.start()
 
     try:
         while steps < cfg["total_steps"]:
@@ -346,9 +489,12 @@ def main():
 
             # after a resume without a saved buffer, refill it first
             if steps >= cfg["learning_starts"] and buffer.size >= min_buffer:
-                update_credit += n / cfg["train_every"]
                 beta = per_beta(cfg, steps) if per else None
-                while update_credit >= 1:
+                if bg:
+                    bg.give(n / cfg["train_every"], beta)
+                else:
+                    update_credit += n / cfg["train_every"]
+                while not bg and update_credit >= 1:
                     batch, idx, weights = buffer.sample(rng, cfg["batch_size"], beta)
                     loss, mq, td = learner.update(batch, weights)
                     if per:
@@ -358,7 +504,10 @@ def main():
                     n_updates += 1
                     update_credit -= 1
             if steps >= next_target:
-                learner.sync_target()
+                if bg:
+                    bg.request_target_sync()
+                else:
+                    learner.sync_target()
                 next_target += cfg["target_update"]
 
             if steps >= next_log:
@@ -380,6 +529,8 @@ def main():
                 if col.ended:
                     msg += f"  hunger {col.hungry}/{col.ended}"
                     col.ended = col.hungry = 0
+                if bg:
+                    losses, qs, n_updates = bg.take_stats()
                 if losses:
                     loss_m = torch.stack(losses).mean().item()
                     q_m = torch.stack(qs).mean().item()
@@ -392,6 +543,9 @@ def main():
                 t_log, s_log = time.perf_counter(), steps
 
             if steps >= next_eval or steps >= cfg["total_steps"]:
+                if bg:  # a quiet learner while evaluating and saving
+                    bg.drain()
+                    n_updates = bg.n_updates
                 t0 = time.perf_counter()
                 all_res = evaluate(learner, eval_envs, cfg)
                 res = [r for r in all_res if "maze" not in r]  # games from level 1
@@ -432,6 +586,8 @@ def main():
                 next_eval += cfg["eval_every"]
                 t_log, s_log = time.perf_counter(), steps  # eval time is not training speed
     finally:
+        if bg:
+            bg.stop()
         envs.close()
         for e in eval_envs:
             e.close()

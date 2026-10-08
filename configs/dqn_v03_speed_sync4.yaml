@@ -1,0 +1,6 @@
+# Stage A speed smoke (2026-10-08 night): dqn_v03 for 1M steps as it is
+# (SyncVectorEnv x4, updates in the acting loop) -- the baseline.
+base: dqn_v03.yaml
+total_steps: 1000000
+eval_every: 1000000
+checkpoint_buffer: false

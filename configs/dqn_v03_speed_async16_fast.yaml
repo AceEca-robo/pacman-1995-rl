@@ -1,0 +1,4 @@
+# Stage A speed smoke (2026-10-08 night): async16_pipe plus fast_learner
+# (online(s') in a no-grad pass, cudnn.benchmark, bf16 acting forward passes).
+base: dqn_v03_speed_async16_pipe.yaml
+fast_learner: true

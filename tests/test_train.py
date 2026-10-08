@@ -248,3 +248,32 @@ def test_eval_levels(tmp_path):
         assert all(e["level"] >= e.get("maze", 1) for e in eps)  # started on its maze
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_async_envs_and_learner(tmp_path):
+    """vector_env: async + async_learner train, evaluate, checkpoint and resume."""
+    cfg = tmp_path / "tiny_async.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 4000, "num_envs": 8, "vector_env": "async",
+                                   "async_learner": True, "target_update": 1000,
+                                   "per": {"enabled": True}}))
+    name = f"test-async-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name]
+    try:
+        out = subprocess.run(cmd + ["--config", str(cfg)], capture_output=True, text=True,
+                             timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "async envs x8, async learner" in out.stdout
+        n_upd = [int(m) for m in re.findall(r"updates (\d+)", out.stdout)]
+        # credit = steps / train_every from learning_starts on, at most
+        # async_max_lag (4) updates behind
+        assert n_upd and 0 < n_upd[-1] <= (4000 - 500) // 16 + 1
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            assert [json.loads(line)["steps"] for line in f] == [2000, 4000]
+        out = subprocess.run(cmd + ["--resume", "--extend-steps", "2000"], capture_output=True,
+                             text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "resumed at 4000 steps" in out.stdout
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])
