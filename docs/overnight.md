@@ -575,3 +575,10 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   prefix, evals every 500k; supervisor (`--every 1000000`).
 - 11:51 Speed 940-980 steps/s per run (>= 800), so the AsyncVectorEnv x8
   smoke test was not needed; SyncVectorEnv stays. Expected end ~14:50.
+- 12:52 mm3 3.66M, mm4 3.68M (~950-970 steps/s), no crashes. Selection
+  evals 0.5-3.5M: 0 levels for both (food mm3 133-138, mm4 126-138). In
+  training, level clears appear for the first time in v0.3: episodes with a
+  clear per 1M steps mm3 39, 45, 54, 40; mm4 63, 62, 70, 47 (3-6% of
+  episodes; from at least 8-10 different mazes in the first 1M), presumably
+  the prefix episodes (the log does not separate them). No upward trend yet.
+  Disk 8.4 GB free (replay buffers 2 x 3.3 GB + checkpoint copies).
