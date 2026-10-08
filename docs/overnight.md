@@ -470,3 +470,5 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   food mm1 125-133, mm2 112-115. Projected end of 30M: ~08:00, so the final
   evaluation will be on best.pt as of ~06:45 (about 26M), as planned at 23:41.
   Disk 17 GB free.
+- 04:56 mm1 19.6M, mm2 19.9M (switches to random:1-16 at 20M), no crashes.
+  Evals 17-19M: 0 levels; food mm1 133-136, mm2 110-130. Disk 17 GB free.
