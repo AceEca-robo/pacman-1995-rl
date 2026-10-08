@@ -586,3 +586,53 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   levels (food 131-139; mm3's games stretch to 2800-5000 ticks from 4.5M on).
   Training episodes with a clear per 1M rise slowly: mm3 39 -> 73 (4M), 58
   at 6M; mm4 63 -> 105 (5M), 87 at 6M (~5-8% of episodes). Disk 7.7 GB free.
+- 14:48 / 14:50 mm4 / mm3 finished 10M, no crashes. Selection evals: 0
+  levels at all 20 points of both runs; best.pt (food decides) mm3 10.0M
+  (139.3 food), mm4 7.0M (139.6). Training episodes with a clear per 1M
+  peaked at ~70 (mm3, 4M) and ~105 (mm4, 5M), ~5-8% of episodes. Disk 6.8 GB.
+- 14:51-15:12 **Final** (levels suite, 8 CPU workers each, 21-22 min: long
+  games): **mm3 and mm4: 0 levels cleared from level 1 (100 games), 0% on
+  every maze (20 games each).** Food per game by maze: mm3 115-151 (2-32
+  above mm1 on every maze), mm4 89-142; 2.9 deaths per game from level 1.
+- 15:20 Probe: greedy play from the 400 endgame prefixes, stopped at the
+  first lost life: mm1 (27.0M) 2% cleared / 98% lost a life; mm3 7% / 92%;
+  mm4 9% / 90% (best: mazes 10-15, up to 32-36% on 13 and 15).
+- **Verdict: FAILURE** by the plan (0% < 10% mean over mazes): stop; no
+  --resume, no tag, no release, no README section. Results in results.md.
+
+## Unclear points and decisions (2026-10-08)
+
+- "Check whether a later mm1 checkpoint is better than 24.0M": by the
+  selection rule (levels 0 everywhere, so food on seeds 1000..1019) best.pt
+  is 27.0M (139.2 vs 138.9 food), a difference within noise; taken as the
+  rule says.
+- Prefix seeds 3000+ are disjoint from the final (0..99), selection
+  (1000..1019) and dqn8 prefix (2000..2599) seeds. The same seed numbers are
+  used on every maze (different games, as the board differs).
+- "Prefix stores its level": a `level` field per prefix; old prefix files
+  without it are level 1 (dqn9/dqn10 configs unaffected).
+- Speed stayed at 940-980 steps/s (>= 800), so no AsyncVectorEnv smoke test.
+- Between the branches: the result (0%) is below the FAILURE line, so the
+  "neither branch" case did not arise.
+- The endgame probe stops at the first lost life (the plan's "no life lost"
+  idea of an endgame); with the remaining lives the game would go on, which
+  the levels suite measures.
+
+## Ideas for later (2026-10-08)
+
+(Not tried.)
+
+- Deaths dominate (~90% of endgames, 2.9 deaths per full game). dqn8's path
+  on maze 1 was endgame reward + prefixes, then own-game prefixes + PER;
+  the 16-maze analogue of the second step is own-game prefixes per maze
+  (mm3's greedy games up to <= 15 food without a death), which also keeps
+  the endgames where this agent actually gets into trouble.
+- A death penalty larger than -20 relative to the endgame dot bonus (up to
+  21 per dot at the very end), or a ghost-distance input channel per maze,
+  aimed at the death rate rather than at food.
+- Per-maze training budget: 10M steps over 16 mazes is ~0.6M per maze, while
+  dqn8 -> dqn10 spent ~15M on maze 1 alone. A maze-by-maze curriculum of
+  fine-tunes (or more steps) may simply be needed; throughput (~950 steps/s
+  per run) is the limit.
+- mm3's games from level 1 run long (3300 ticks, 7% over 10000): it learned
+  to survive by wandering; hunger_limit could push it back to food.

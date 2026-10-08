@@ -420,6 +420,8 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | dqn9 | best_food.pt (5.0M) | fine-tune of dqn8 on its own endgame prefixes, 5M | 274.4 | 79% | 255.3 | 6050 | 8075 | 0% | 10 | 171.8 / 118.6 / 12% |
 | mm1 | best_24000000.pt (24.0M of 30M) | v0.3: wide DQN from scratch, all 16 mazes (random), PER, endgame dot reward | 135.9 | 0% | 60.5 | 1440 | 2690 | 0% | 261 | - |
 | mm2 | best_24000000.pt (24.0M of 30M) | mm1 with a maze curriculum 1-4 / 1-8 / 1-16 | 133.9 | 0% | 28.1 | 1400 | 3780 | 5% | 650 | - |
+| mm3 | best_10000000.pt (10.0M) | fine-tune of mm1 (27.0M) with endgame prefixes on all 16 mazes, prefix_prob 0.5, 10M | 139.0 | 0% | 25.2 | 1480 | 10480 | 7% | 517 | - |
+| mm4 | best_7000000.pt (7.0M) | mm3 with prefix_prob 0.7 | 138.0 | 0% | 43.8 | 1460 | 3860 | 3% | 666 | - |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%
 
@@ -543,3 +545,57 @@ numbers include food from the levels after the first):
   of 10-40.
 - Curves: `docs/eval_levels.png`; per-maze plots: `docs/levels_mm1.png`,
   `docs/levels_mm2.png`.
+
+### Continuation: endgame prefixes on all 16 mazes, mm3/mm4 (2026-10-08)
+
+mm1 had stopped at ~135 of 172 food on every maze, the plateau dqn1 had on
+maze 1 before endgame prefixes + fine-tuning (dqn7 -> dqn10). The same recipe
+on 16 mazes: `data/endgame_prefixes_all.json`, heuristic openings up to
+<= 15 food left with no life lost, 25 per maze (env seeds 3000+, 62-154
+seeds tried per maze), each replayed on its own maze. mm3/mm4: fine-tunes of
+mm1's best.pt (27.0M; later than the 24.0M of the first report, by the same
+rule), 10M steps, eps 0.05 -> 0.02, lr 3e-5, PER, endgame dot reward,
+prefix_prob 0.5 (mm3) / 0.7 (mm4), other resets on a random maze 1..16.
+Picked: best.pt by mean levels cleared on seeds 1000..1019 (0 at every point,
+so food decided): mm3 10.0M, mm4 7.0M. Criterion: mean levels cleared >= 1.0
+from level 1 and >= 40% on every maze (PARTIAL >= 25% mean over mazes,
+FAILURE < 10%).
+
+| agent | from level 1: mean / median / max levels cleared | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 | mean |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic (50 per maze) | 1.58 / 1 / 6 | 80% | 84% | 78% | 84% | 88% | 86% | 80% | 92% | 70% | 84% | 72% | 80% | 60% | 78% | 56% | 86% | 79% |
+| mm1 (24.0M) | 0.00 / 0 / 0 | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+| mm3 (10.0M) | 0.00 / 0 / 0 | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+| mm4 (7.0M) | 0.00 / 0 / 0 | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+
+Mean food per game by start maze (172 per maze):
+
+| agent | from L1 | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mm1 (24.0M) | 136 | 135 | 120 | 137 | 141 | 129 | 112 | 125 | 123 | 111 | 119 | 95 | 101 | 115 | 114 | 111 | 136 |
+| mm3 (10.0M) | 139 | 139 | 129 | 140 | 143 | 137 | 123 | 134 | 130 | 132 | 151 | 115 | 129 | 127 | 148 | 120 | 140 |
+| mm4 (7.0M) | 138 | 139 | 127 | 135 | 142 | 121 | 112 | 125 | 109 | 123 | 116 | 105 | 109 | 104 | 127 | 89 | 137 |
+
+**Verdict: FAILURE** (0% mean over the mazes, < 10%): stop, no --resume, no
+tag. mm3 eats 2-32 more food per maze than mm1 (most on mazes 10, 14, 9),
+but no game started from scratch reaches the end of a maze.
+
+Greedy play from the 400 endgame prefixes themselves (<= 15 food left, 3
+lives; stopped at the first lost life; scratchpad probe, results in
+`runs/levels/endgame_probe_*.json`):
+
+| agent | cleared | lost a life first | stuck (5000 ticks) | best mazes |
+|---|---|---|---|---|
+| mm1 (27.0M, start) | 2% | 98% | 0% | 13: 16% |
+| mm3 (10.0M) | 7% | 92% | 1% | 13: 32%, 12: 20%, 10-11: 16% |
+| mm4 (7.0M) | 9% | 90% | 1% | 15: 36%, 13: 32%, 10-11: 20% |
+
+- The fine-tunes learned a little of the endgame (2% -> 7-9% of endgames
+  finished cleanly, more on the long-corridor mazes 10-15), but they lose a
+  life in ~90% of endgames, and in full games from the start they lose
+  nearly all three lives (2.9 deaths per game) before the board is empty.
+  As for dqn8 on maze 1, **deaths are the main cause**; the endgame prefixes
+  do not teach ghost avoidance in 16 mazes the way dqn8's did on one.
+- Training showed level clears for the first time in v0.3 (3-8% of training
+  episodes, from 8+ mazes), all or nearly all from prefix starts; they never
+  carried over to games from the start.
