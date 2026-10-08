@@ -582,3 +582,7 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   episodes; from at least 8-10 different mazes in the first 1M), presumably
   the prefix episodes (the log does not separate them). No upward trend yet.
   Disk 8.4 GB free (replay buffers 2 x 3.3 GB + checkpoint copies).
+- 13:53 mm3 6.9M, mm4 7.1M, no crashes. Selection evals to 6.5M: still 0
+  levels (food 131-139; mm3's games stretch to 2800-5000 ticks from 4.5M on).
+  Training episodes with a clear per 1M rise slowly: mm3 39 -> 73 (4M), 58
+  at 6M; mm4 63 -> 105 (5M), 87 at 6M (~5-8% of episodes). Disk 7.7 GB free.
