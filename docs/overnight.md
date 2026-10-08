@@ -466,3 +466,7 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   every maze (even); mm2 107-126 on mazes 1-4, 29-62 on 5-8 (1M steps of
   training there so far), 8-18 on the unseen 9-16, the same "does not play"
   pattern as dqn10 off maze 1. JSON: `runs/levels/mm*_11M_probe.json`.
+- 03:55 mm1 16.1M, mm2 16.4M, no crashes. Selection evals 12-16M: 0 levels;
+  food mm1 125-133, mm2 112-115. Projected end of 30M: ~08:00, so the final
+  evaluation will be on best.pt as of ~06:45 (about 26M), as planned at 23:41.
+  Disk 17 GB free.
