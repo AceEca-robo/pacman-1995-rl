@@ -711,6 +711,12 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   mean Q and loss alike -- no sign of an async bug; the slower food curve is
   more likely the setting (death -50 against +1 per dot: long, cautious
   games). Run continues as planned. Speed 2.6-2.75k steps/s.
+- 02:15 v03s0 at 26M: evals 18-26M food 60.1-61.7, levels 0, 0% on every
+  maze (plateau since ~8M). Training episodes (TensorBoard): ~30% start
+  from an endgame prefix (11.5k prefixed resets so far), yet only 0.6-0.8%
+  of training episodes clear a maze (21-34 per 4M steps) -- even from <= 15
+  food left with 3 lives the agent rarely finishes. Episode length falls
+  (1076 -> 653 per 4M block). Speed 2.7-2.85k steps/s. Continuing.
 
 ## Unclear points and decisions (2026-10-08/09)
 
