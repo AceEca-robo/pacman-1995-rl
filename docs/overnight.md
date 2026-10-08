@@ -472,3 +472,74 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
   Disk 17 GB free.
 - 04:56 mm1 19.6M, mm2 19.9M (switches to random:1-16 at 20M), no crashes.
   Evals 17-19M: 0 levels; food mm1 133-136, mm2 110-130. Disk 17 GB free.
+- 05:47 mm1 22.5M, mm2 22.7M; evals 20-25M: 0 levels, food mm1 132-139,
+  mm2 129-134 (games up to 4600 ticks).
+- 06:38 **Step 5 (final evaluation, early)**: best.pt of both runs = 24.0M
+  (copied to `best_24000000.pt`), levels suite, 8 CPU workers each (13 min;
+  training slowed to ~370 steps/s meanwhile). **mm1 and mm2: 0 levels cleared
+  from level 1 (100 games), 0% on each of the 16 mazes (20 games each).**
+  Food per game: mm1 95-141 on every maze, mm2 110-138 on mazes 1-6 and
+  21-102 on 7-16. Over the whole run not one training episode cleared a level
+  (43818 / 38427 episodes up to 25.8M). Comparison: dqn10 (9.0M) 90% on maze
+  1, 0% elsewhere; heuristic 56-92% everywhere.
+- **Verdict: v0.3 criterion not met** (needs >= 3 levels in a row on average
+  or >= 50% on every maze; the best is 0). Per the plan: results.md and
+  conclusions only, no tag, no release, no README section. The best of the
+  two by the selection metric is a tie at 0; by food from level 1 mm1
+  (135.9 vs 133.9) and by evenness over the mazes mm1.
+- 06:55 Plots `docs/eval_levels.png`, `docs/levels_mm1.png`,
+  `docs/levels_mm2.png`; results.md section. mm1/mm2 keep training to 30M
+  (about 08:00-08:10, no crashes so far); their last evaluations are not in
+  this report.
+
+## Unclear points and decisions (2026-10-07/08)
+
+- `--level N` without `--rl` exits with an error (like `--headless`): the
+  plan says nothing may change without --rl, and an accepted but ignored flag
+  would have changed which arguments colour.cc sees.
+- Level > 16 is allowed (the game then draws a random maze per
+  `setboardlevel`); the env's `random:a-b` is checked to be >= 1.
+- "levels_cleared per game": highest level reached minus the start level,
+  over a whole game (3 lives, until game over). The suite cuts a game at
+  30000 ticks (`--max-steps`, also `eval_max_episode_steps` in training);
+  training episodes keep the 10000-step limit.
+- "share of the level cleared per level when starting on it" read as: the
+  share of games that clear their start level (reach start + 1).
+- Step 2 table: 50 games per level as asked, seeds 0..49; levels in a row
+  from level 1 on 100 games (seeds 0..99, like the final evaluations).
+- The selection metric (mean levels cleared, food second) stayed at 0 for
+  every evaluation of both runs, so best.pt was in effect picked by mean
+  food from level 1 on seeds 1000..1019.
+- Smoke test: both widths ran at the same time with mm1's setup, so they
+  shared the machine equally; the comparison is the mean of all 200 log
+  lines (1194 vs 1134 steps/s).
+- eval_every 1M instead of the configs' usual 500k: the runs were slower than
+  the plan assumed (~1.0-1.2k steps/s), and 30 selection points were judged
+  enough.
+- **The runs could not finish 30M before 08:00** (~950 steps/s from 2M on;
+  the Python loop holds one core per run). The final evaluation was done on
+  best.pt as of 06:38 (24.0M for both, copied to `runs/mm*/best_24000000.pt`);
+  the runs keep training to 30M after the report (~08:00). If a later
+  evaluation beats 24M on the selection seeds, the numbers should be
+  re-taken; the curves give no sign of a level clear coming.
+- dqn10's row uses its 9.0M checkpoint (the v0.2 release pick).
+
+## Ideas for later (v0.3)
+
+(Not tried.)
+
+- What made dqn8-dqn10 clear maze 1 was not more steps from scratch but the
+  endgame curriculum (prefixes ending with <= 15 food left, then own-game
+  prefixes) on top of the endgame dot reward. The multi-maze runs had the
+  reward but no prefixes (as planned), and both stall at ~135 of 172 food,
+  the same plateau as dqn0/dqn1 on maze 1 alone. Next: endgame prefixes on
+  all 16 mazes (heuristic games per maze up to <= 15 food left, recorded with
+  `--level`; the heuristic clears 56-92% of each maze, so prefixes are cheap).
+- Fine-tune mm1 (it plays evenly on all mazes) with those prefixes, like
+  dqn7 -> dqn10 did from dqn1.
+- mm2's curriculum gave a better maze-1 player early, but on unseen mazes it
+  played no better than dqn10 (probe at 11M), and its games grow long
+  (wandering): a hunger limit or steps-since-food input might help there.
+- Throughput: ~950 steps/s per run is the limit for 30M-step plans (8.5 h).
+  AsyncVectorEnv with more envs, or moving the PER sum tree to numpy
+  batched ops, would be the first places to look.

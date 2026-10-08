@@ -8,8 +8,7 @@ rolling median over --smooth episodes) and <out-dir>/eval.png (median eval
 reward, median eval score and share of eval episodes clearing level 1 at
 each checkpoint). Baselines from docs/results.md are drawn as dashed lines.
 --which levels writes <out-dir>/eval_levels.png instead (multi-maze runs:
-mean levels cleared per eval game from level 1, level 1 clears, and levels
-cleared per training episode, rolling mean over --smooth episodes).
+mean levels cleared, food and length per eval game from level 1).
 """
 
 import argparse
@@ -147,8 +146,8 @@ def plot_eval(data, baselines, args):
 def plot_levels(data, args):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
     panels = (("eval/mean_levels_cleared", "Eval: mean levels cleared per game from level 1"),
-              ("eval/level1_cleared", "Eval: games clearing level 1"),
-              ("episode/levels_cleared", "Training episodes: levels cleared (rolling mean)"))
+              ("eval/mean_food", "Eval: food eaten per game from level 1 (172 per maze)"),
+              ("eval/mean_length", "Eval: game length, ticks"))
     for ax, (tag, title) in zip(axes, panels):
         for run, sc in data.items():
             if tag not in sc:

@@ -418,6 +418,8 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | dqn8s0 | best_food.pt (5.0M) | dqn8 setup, from dqn1 seed 0 | 153.9 | 0% | 67.1 | 1680 | 2490 | 6% | 578 | 143.4 / 85.4 / 0% |
 | dqn8s2 | best_food.pt (4.5M) | dqn8 setup, from dqn1 seed 2 | 103.2 | 0% | -40.8 | 1395 | 5090 | 15% | 4342 | 102.5 / 28.9 / 0% |
 | dqn9 | best_food.pt (5.0M) | fine-tune of dqn8 on its own endgame prefixes, 5M | 274.4 | 79% | 255.3 | 6050 | 8075 | 0% | 10 | 171.8 / 118.6 / 12% |
+| mm1 | best_24000000.pt (24.0M of 30M) | v0.3: wide DQN from scratch, all 16 mazes (random), PER, endgame dot reward | 135.9 | 0% | 60.5 | 1440 | 2690 | 0% | 261 | - |
+| mm2 | best_24000000.pt (24.0M of 30M) | mm1 with a maze curriculum 1-4 / 1-8 / 1-16 | 133.9 | 0% | 28.1 | 1400 | 3780 | 5% | 650 | - |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%
 
@@ -496,3 +498,48 @@ clears none of the other 15 mazes when started on them.
 On maze 2 it eats 165 of 172 food per game on average (and still never
 finishes it); on mazes 3-16 it eats 3-40 food and loses its three lives
 within 94-259 ticks: outside mazes 1-2 it does not play at all.
+
+### Step 4/5: mm1 and mm2 (final, 2026-10-08)
+
+Both from scratch, 30M steps planned, wide network (64,128,128 channels, FC
+1024: 5% slower than the standard width in a 2M-step smoke test, limit 25%),
+eps 1.0 -> 0.05 over 3M, PER, dqn8's endgame dot reward (k 20), no prefixes.
+mm1: start_level random:1-16; mm2: random:1-4 for 10M, 1-8 to 20M, 1-16
+after. Checkpoint: best.pt by mean levels cleared from level 1 on seeds
+1000..1019 (food second), as of 06:38: **24.0M for both** (the runs had not
+reached 30M by the deadline; see docs/overnight.md). Final: 100 games from
+level 1 (seeds 0..99), 20 per start level (seeds 0..19).
+
+| agent | from level 1: mean / median / max levels cleared | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 | min |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic (50 per level) | 1.58 / 1 / 6 | 80% | 84% | 78% | 84% | 88% | 86% | 80% | 92% | 70% | 84% | 72% | 80% | 60% | 78% | 56% | 86% | 56% |
+| dqn10 (9.0M) | 0.84 / 1 / 1 | 90% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+| mm1 (24.0M) | 0.00 / 0 / 0 | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+| mm2 (24.0M) | 0.00 / 0 / 0 | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+
+Mean food per game by start maze (172 per maze; the heuristic's and dqn10's
+numbers include food from the levels after the first):
+
+| agent | from L1 | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 383 | 388 | 388 | 384 | 411 | 431 | 418 | 403 | 404 | 285 | 315 | 276 | 355 | 264 | 325 | 294 | 374 |
+| dqn10 (9.0M) | 300 | 311 | 165 | 17 | 40 | 3 | 7 | 6 | 6 | 6 | 10 | 4 | 4 | 4 | 10 | 6 | 7 |
+| mm1 (24.0M) | 136 | 135 | 120 | 137 | 141 | 129 | 112 | 125 | 123 | 111 | 119 | 95 | 101 | 115 | 114 | 111 | 136 |
+| mm2 (24.0M) | 134 | 134 | 110 | 127 | 138 | 123 | 133 | 97 | 102 | 80 | 76 | 50 | 47 | 73 | 21 | 65 | 61 |
+
+- **Neither run clears a level**, on any maze, in any of the 420 final games
+  each, nor in any selection evaluation (1-25M), nor in any of the 43818
+  (mm1) / 38427 (mm2) training episodes up to 25.8M (TensorBoard
+  `episode/levels_cleared`). The v0.3 criterion (>= 3 levels in
+  a row on average or >= 50% on every maze) is not met: no tag, no release.
+- mm1 plays all 16 mazes about equally (95-141 food, ~55-80% of a maze),
+  the multi-maze version of the from-scratch plateau dqn0/dqn1 hit on maze 1
+  alone (128-141 food, 0% level 1).
+- mm2's curriculum shows in its numbers: best on mazes 1-6 (110-138), worse
+  on 7-16 (21-102), which it saw only for the last 4-14M steps; its games
+  are longer (wandering without food: 5% hit the 30000-tick cut from level 1).
+- dqn10 (maze 1 only, with endgame prefixes) is the only agent that clears a
+  maze, and only maze 1; on mazes 3-16 it eats less than mm1/mm2 by a factor
+  of 10-40.
+- Curves: `docs/eval_levels.png`; per-maze plots: `docs/levels_mm1.png`,
+  `docs/levels_mm2.png`.
