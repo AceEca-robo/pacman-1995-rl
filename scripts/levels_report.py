@@ -25,16 +25,23 @@ def load(path):
         return json.load(f)
 
 
+def levels_of(res):
+    """The start levels of a result file's per-level games (1..16 for old files)."""
+    return res.get("levels") or list(range(1, LEVELS + 1))
+
+
 def table(results):
+    levels = levels_of(results[0])
     head = ("| agent | from level 1: mean / median / max levels cleared | "
-            + " | ".join(f"L{lv}" for lv in range(1, LEVELS + 1)) + " | min |")
-    lines = [head, "|---|---|" + "---|" * (LEVELS + 1)]
+            + " | ".join(f"L{lv}" for lv in levels) + " | min |")
+    lines = [head, "|---|---|" + "---|" * (len(levels) + 1)]
     for r in results:
         f1 = r["from_level1"]
-        cells = [f"{r['per_level'][str(lv)]['cleared']:.0%}" for lv in range(1, LEVELS + 1)]
+        cells = [f"{r['per_level'][str(lv)]['cleared']:.0%}" for lv in levels]
         lines.append(f"| {r['agent']} | {f1['mean_levels_cleared']:.2f} / "
                      f"{f1['median_levels_cleared']:g} / {f1['max_levels_cleared']} | "
-                     + " | ".join(cells) + f" | {r['min_level_cleared']:.0%} |")
+                     + " | ".join(cells)
+                     + f" | {min(r['per_level'][str(lv)]['cleared'] for lv in levels):.0%} |")
     return "\n".join(lines)
 
 
@@ -42,14 +49,16 @@ def plot(res, ref, out):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    levels = np.arange(1, LEVELS + 1)
+    levels = np.array(levels_of(res))
     share = [res["per_level"][str(lv)]["cleared"] * 100 for lv in levels]
-    fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4), gridspec_kw={"width_ratios": [2.2, 1]})
+    wide = len(levels) > 6
+    fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4) if wide else (10, 4),
+                               gridspec_kw={"width_ratios": [2.2, 1] if wide else [1, 1]})
     a.bar(levels, share, width=0.6, color=BLUE, label=res["agent"], zorder=2)
     if ref:
         rshare = [ref["per_level"][str(lv)]["cleared"] * 100 for lv in levels]
         a.plot(levels, rshare, "D", color=GRAY, ms=6, label=ref["agent"], zorder=3)
-    n = res["per_level"]["1"]["episodes"]
+    n = res["per_level"][str(levels[0])]["episodes"]
     a.set(xticks=levels, ylim=(0, 118), xlabel="start level (maze)",
           ylabel=f"games clearing the start level, % ({n} per level)")
     a.set_title(f"{res['agent']}: clears per maze", loc="left", color=INK)

@@ -93,9 +93,10 @@ def make_env(agent, env_config, **overrides):
     return PacmanEnv(config={**load_env_config(env_config), **overrides, **agent.env_overrides})
 
 
-def play(env, agent, seed, options=None):
+def play(env, agent, seed, options=None, stop_at_clear=False):
     """One episode with env/agent seed `seed`; returns its stats (level =
-    highest level reached, start_level = the level it started on)."""
+    highest level reached, start_level = the level it started on).
+    stop_at_clear: end the game once the start level is cleared."""
     obs, info = env.reset(seed=seed, options=options)
     agent.reset(seed=seed)
     start = info["level"]
@@ -112,7 +113,7 @@ def play(env, agent, seed, options=None):
             clean_clear = True
         deaths += ev["death"]
         level = max(level, info["level"])
-        if term or trunc:
+        if term or trunc or (stop_at_clear and level > start):
             break
     return {"seed": seed, "reward": total, "score": int(info["score"]), "length": n,
             "level": int(level), "deaths": deaths, "start_level": int(start),
@@ -179,17 +180,24 @@ def _init_worker(args):
 
 
 def _play_task(task):
-    level, seed = task
-    e = play(_worker["env"], _worker["agent"], seed, {"start_level": level})
+    level, seed, stop = task
+    e = play(_worker["env"], _worker["agent"], seed, {"start_level": level}, stop)
     e.pop("clean_clear")
     return e
 
 
 def levels_suite(args, label):
-    """Games from level 1 (args.episodes) and from each level 1..16
-    (args.level_episodes), seeds args.seed..; returns the summary dict."""
-    tasks = [(1, args.seed + i) for i in range(max(args.episodes, args.level_episodes))]
-    tasks += [(lv, args.seed + i) for lv in range(2, LEVELS + 1) for i in range(args.level_episodes)]
+    """Games from level 1 (args.episodes) and from each level of
+    args.level_range (default 1..16; args.level_episodes each), seeds
+    args.seed..; returns the summary dict. With args.stop_at_clear the games
+    started on levels 2.. end once their start level is cleared (the share
+    that clears it is the same; the level-1 games are shared with the
+    from-level-1 set and always play on)."""
+    lo, hi = (int(x) for x in args.level_range.split("-"))
+    levels = range(lo, hi + 1)
+    tasks = [(1, args.seed + i, False) for i in range(max(args.episodes, args.level_episodes))]
+    tasks += [(lv, args.seed + i, args.stop_at_clear) for lv in levels if lv != 1
+              for i in range(args.level_episodes)]
     # long games first, so the pool does not end on one straggler
     tasks.sort(key=lambda t: t[0] != 1)
     t0 = time.perf_counter()
@@ -202,7 +210,7 @@ def levels_suite(args, label):
     from1 = sorted(by[1], key=lambda g: g["seed"])[:args.episodes]
     cleared = np.array([g["levels_cleared"] for g in from1])
     per_level = {}
-    for lv in range(1, LEVELS + 1):
+    for lv in levels:
         gs = sorted(by[lv], key=lambda g: g["seed"])[:args.level_episodes]
         per_level[lv] = {
             "episodes": len(gs),
@@ -215,6 +223,8 @@ def levels_suite(args, label):
         "agent": label,
         "seeds": f"{args.seed}..{args.seed + args.episodes - 1}",
         "max_steps": args.max_steps,
+        "levels": list(levels),
+        "stop_at_clear": bool(args.stop_at_clear),
         "from_level1": {
             "episodes": len(from1),
             "mean_levels_cleared": float(cleared.mean()),
@@ -235,13 +245,14 @@ def levels_suite(args, label):
 
 def levels_markdown(res):
     f1 = res["from_level1"]
+    levels = res.get("levels") or list(range(1, LEVELS + 1))
     lines = [f"{res['agent']}: from level 1, {f1['episodes']} games ({res['seeds']}): "
              f"levels cleared mean {f1['mean_levels_cleared']:.2f}, "
              f"median {f1['median_levels_cleared']:g}, max {f1['max_levels_cleared']}",
-             "", "| start level | " + " | ".join(str(lv) for lv in range(1, LEVELS + 1)) + " |",
-             "|---|" + "---|" * LEVELS,
+             "", "| start level | " + " | ".join(str(lv) for lv in levels) + " |",
+             "|---|" + "---|" * len(levels),
              "| cleared | " + " | ".join(f"{res['per_level'][lv]['cleared']:.0%}"
-                                         for lv in range(1, LEVELS + 1)) + " |"]
+                                         for lv in levels) + " |"]
     return "\n".join(lines)
 
 
@@ -301,6 +312,10 @@ def main():
     p.add_argument("--max-steps", type=int, default=30000,
                    help="--levels: ticks before a game is cut (env max_episode_steps)")
     p.add_argument("--workers", type=int, default=8, help="--levels: processes (CPU)")
+    p.add_argument("--level-range", default=f"1-{LEVELS}",
+                   help="--levels: start levels a-b of the per-level games")
+    p.add_argument("--stop-at-clear", action="store_true",
+                   help="--levels: end the per-level games once the start level is cleared")
     args = p.parse_args()
 
     if args.levels:

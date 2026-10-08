@@ -1,4 +1,6 @@
+import json
 import os
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,3 +27,22 @@ def test_update_results_keeps_rows_and_sections(tmp_path):
         assert line in text
     assert "| dqn a | 1 |" not in text and text.count(HEADER) == 1
     assert not os.path.exists(path + ".tmp")
+
+
+def test_levels_suite_range_stop_at_clear(tmp_path):
+    """--level-range limits the per-level games to those levels;
+    --stop-at-clear ends them at the first level up (level-1 games play on)."""
+    out = tmp_path / "lv.json"
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "evaluate.py"),
+                        "--agent", "heuristic", "--levels", str(out), "--episodes", "2",
+                        "--level-episodes", "2", "--level-range", "1-3", "--stop-at-clear",
+                        "--workers", "2", "--max-steps", "3000"],
+                       capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stderr
+    res = json.loads(out.read_text())
+    assert res["levels"] == [1, 2, 3] and sorted(res["per_level"]) == ["1", "2", "3"]
+    for g in res["games"]:
+        if g["start_level"] != 1:
+            assert g["levels_cleared"] <= 1
+    assert sorted((g["start_level"], g["seed"]) for g in res["games"]) == \
+        [(1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1)]
