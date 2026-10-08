@@ -702,6 +702,15 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   save included in the checkpoint step. Heuristic reference on the final
   protocol (`runs/levels/heuristic_v03.json`): mazes 1-4 80/84/72/80%,
   from level 1 mean 1.58 levels.
+- 01:10 v03s0 at 16M: food per game from level 1 by eval 8M 61.8, 10M 63.5,
+  12M 57.6, 14M 59.5, 16M 58.6 (games 2300-2500 ticks, ~3 deaths; per-maze
+  games 63-67 food), levels 0 and 0% on every maze. mm1 (16 mazes, death
+  -20, no prefixes) had 120-130 food at 6-16M. A check of the async mode
+  against the sync hedge run (same config, first 1.36M steps): training
+  episode reward -142.7 / -141.2 (sync) vs -142.7 / -141.3 (async), length,
+  mean Q and loss alike -- no sign of an async bug; the slower food curve is
+  more likely the setting (death -50 against +1 per dot: long, cautious
+  games). Run continues as planned. Speed 2.6-2.75k steps/s.
 
 ## Unclear points and decisions (2026-10-08/09)
 
