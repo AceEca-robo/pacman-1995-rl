@@ -696,6 +696,12 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
 - 23:33 Supervisor for v03s0 (`--every 10000000 --episodes 20 --min-speed
   1800`, its log, state, table and plot in `runs/sv_v03/`): one --resume
   on a crash.
+- 23:40-00:05 v03s0 evals (20 games from level 1 / 20 per maze 1..4):
+  2M food 25, 4M 46, 6M 53; levels 0 and 0% on every maze so far. Speed
+  2.6-2.7k steps/s alone (eps reached 0.05 at 5M). Eval 12-41 s, buffer
+  save included in the checkpoint step. Heuristic reference on the final
+  protocol (`runs/levels/heuristic_v03.json`): mazes 1-4 80/84/72/80%,
+  from level 1 mean 1.58 levels.
 
 ## Unclear points and decisions (2026-10-08/09)
 
