@@ -9,3 +9,4 @@ Goal: train an RL agent to play the original pacman 1.0 (1995, Roar Thronaes, GP
 - runs/ — runs and checkpoints, not in git (.gitignore); checkpoints are published only through GitHub releases.
 - Python 3.10+, environment .venv. Run pytest before committing. Training longer than 10 minutes only in tmux.
 - Public repository: github.com/AceEca-robo/pacman-1995-rl, branch main. Commits use AceEca-robo@users.noreply.github.com (set in the project's git config).
+- Language: answer the user in Russian; code, documentation and commit messages in English.
