@@ -683,3 +683,36 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   PER tree in shared memory, weights pushed back to the actor), a larger
   change; with the stage's deadline long past, stage A stopped at ~2.5k
   (target 4k not reached, >= 2k).
+- 23:26 **Stage B started**: `configs/dqn_v03.yaml` (from scratch, start_level
+  random:1-4, wide network, PER, endgame dot k 20, death -50, prefix_prob 0.3
+  with the maze 1..4 heuristic prefixes, eps 1.0 -> 0.05 over 5M, 60M steps,
+  evals every 2M) with stage A's async setting (AsyncVectorEnv x16, learner
+  thread). The hedge run (sync, 1.36M steps) was stopped and kept as
+  `runs/v03_hedge_sync`.
+- 23:26-23:31 Second seed probe: v03s0 and v03s1 together ran 1,637 and
+  1,631 steps/s (GPU 99%), i.e. 64% of one run alone (2,567); together
+  3,268 = 64% of two runs' worth. Below 70% -> no second seed; v03s1
+  stopped at 250k (`runs/v03s1_parallel_probe`), v03s0 keeps going alone.
+- 23:33 Supervisor for v03s0 (`--every 10000000 --episodes 20 --min-speed
+  1800`, its log, state, table and plot in `runs/sv_v03/`): one --resume
+  on a crash.
+
+## Unclear points and decisions (2026-10-08/09)
+
+- Stage A started at 22:20, after its ~22:00 deadline. Following the plan's
+  fallback strictly would have meant going to stage B at once with 1.36k
+  steps/s; instead stage A got about an hour (a ~2x speed-up is worth more
+  than an hour of an 8-hour run) while a hedge run of stage B trained with
+  the old code. Stage B started at 23:26.
+- "Batched inference for all envs in one call": train.py already did this
+  (one forward pass for all greedy envs per step); the new part is that the
+  acting pass no longer waits behind the learner's kernels (own CUDA stream).
+- The async mode is opt-in (`vector_env: async`, `async_learner: true`); the
+  defaults keep the old synchronous, deterministic loop, and the tests cover
+  both. `add_batch` gives the same buffer and PER tree as one-by-one adds
+  (test). Deferred PER priorities: a sampled batch may miss the priorities of
+  the one update before it.
+- "Second seed if the total speed does not fall below 70%": read as each
+  run keeping >= 70% of its speed alone (equivalently: the two together
+  >= 70% of two runs alone). Both readings give 64% -> one seed. (Read as
+  "the sum >= 70% of one run" it would have passed: 127%.)

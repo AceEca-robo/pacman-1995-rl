@@ -13,6 +13,10 @@ eval_every: 2000000
 eval_levels: [1, 2, 3, 4]
 eval_level_episodes: 20
 eval_envs: 20
+# stage A's fastest setting (2.57k steps/s alone)
+num_envs: 16
+vector_env: async
+async_learner: true
 env_config:
   start_level: random:1-4
   prefix_prob: 0.3
