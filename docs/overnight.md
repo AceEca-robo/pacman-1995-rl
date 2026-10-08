@@ -543,3 +543,35 @@ cleared per game from level 1 on seeds 1000..1019, final numbers on seeds
 - Throughput: ~950 steps/s per run is the limit for 30M-step plans (8.5 h).
   AsyncVectorEnv with more envs, or moving the PER sum tree to numpy
   batched ops, would be the first places to look.
+
+# Session 2026-10-08 11:42: v0.3 continued, endgame prefixes on 16 mazes
+
+mm1 plays all 16 mazes but stalls at ~135 of 172 food, the plateau dqn1 had
+on maze 1 before endgame prefixes + fine-tuning (dqn7 -> dqn10) broke it.
+Same recipe on 16 mazes. Selection: mean levels cleared from level 1 on
+seeds 1000..1019; final: seeds 0..99 and 20 games per maze. Criterion:
+mean levels >= 1.0 from level 1 and >= 40% on each maze (PARTIAL: >= 25%
+mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
+
+## Chronology (2026-10-08)
+
+- 11:42 Start. mm1 and mm2 finished 30M at 08:09, no crashes; 25-30M
+  selection evals all 0 levels (mm1 food 132.9-139.2, mm2 131.2-135.5).
+  **mm1's best.pt is 27.0M** (139.2 food vs 138.9 at 24.0M, levels 0 both:
+  food decides), copied to `runs/mm1/best_27000000.pt`, the start of mm3/mm4.
+  Disk 17 GB free, GPU 15 MB.
+- 11:43 **Step 2**: `tools/record_prefixes.py --level 1-16 --keep 25
+  --seed-start 3000 --seeds 400` (levels in parallel, 9 s):
+  `data/endgame_prefixes_all.json`, 25 prefixes per maze (400), heuristic
+  games up to <= 15 food left with no life lost; seeds tried per maze 62-154
+  (maze 15 needs the most: the heuristic loses a life first in 129 of 154),
+  prefix lengths 363..873 steps (one of 2835 on maze 13). Each prefix stores
+  its "level"; PacmanEnv replays it with game --level of that level and
+  checks food left, lives and level after the replay. All 400 replays
+  checked; test_prefix_on_its_own_level.
+- 11:46 **Step 3 started**: mm3 (`configs/dqn_mm3.yaml`, prefix_prob 0.5) and
+  mm4 (`configs/dqn_mm4.yaml`, 0.7): from mm1 27.0M, 10M steps, eps 0.05 ->
+  0.02 over 1M, lr 3e-5, PER, start_level random:1-16 for resets without a
+  prefix, evals every 500k; supervisor (`--every 1000000`).
+- 11:51 Speed 940-980 steps/s per run (>= 800), so the AsyncVectorEnv x8
+  smoke test was not needed; SyncVectorEnv stays. Expected end ~14:50.
