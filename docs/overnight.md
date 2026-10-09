@@ -891,3 +891,6 @@ RL), PARTIAL >= 30%.
   food per maze game, ~66% clears). The fresh Q heads have not recovered
   the BC policy yet. Speed with both unfrozen ~1.55k steps/s each
   (20M expected ~03:40).
+- 00:28 Eval @4M: rl_bc0 food 118, rl_bc1 116; 0 levels, 0% on all 16 mazes
+  (both). The level of mm1 (wide DQN from scratch, ~120-135 food), not of
+  the BC (~160 per maze game). Runs continue as planned; ~1.56k steps/s each.
