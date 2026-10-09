@@ -903,3 +903,7 @@ RL), PARTIAL >= 30%.
   129 / 104, 0% everywhere. Supervisor @10M (20 games from level 1, seeds
   1000..): rl_bc1 food 128; it logged rl_bc0 at 1,500 steps/s (= the
   threshold) once. No crash so far.
+- 02:42 Evals @14M / 16M: rl_bc0 food 146 / 161, mazes 7 and 8 at 25-30% /
+  20-30%, maze 1 5% at 16M, 0.05 levels from level 1 at 16M (one game);
+  the other 13 mazes 0%. rl_bc1 food 131 / 132, 0% everywhere. The frozen
+  start (rl_bc0) is ahead from 6M on.
