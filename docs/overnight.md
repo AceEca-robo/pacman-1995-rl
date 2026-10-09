@@ -717,6 +717,8 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   of training episodes clear a maze (21-34 per 4M steps) -- even from <= 15
   food left with 3 lives the agent rarely finishes. Episode length falls
   (1076 -> 653 per 4M block). Speed 2.7-2.85k steps/s. Continuing.
+- 03:43 v03s0 at 40M: evals 28-40M food 62.0-65.4 (slow rise), levels 0,
+  0% on every maze. Speed 2.9-3.0k steps/s; 60M expected ~05:50.
 
 ## Unclear points and decisions (2026-10-08/09)
 
