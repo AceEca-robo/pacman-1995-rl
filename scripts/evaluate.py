@@ -29,12 +29,13 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
+from agents.bc import BCAgent  # noqa: E402
 from agents.dqn import DQNAgent  # noqa: E402
 from agents.ppo import PPOAgent  # noqa: E402
 from agents.random_agent import RandomAgent  # noqa: E402
 from env.pacman_env import LEVELS, PacmanEnv, load_env_config  # noqa: E402
 
-AGENTS = ("random", "heuristic", "dqn", "ppo")
+AGENTS = ("random", "heuristic", "dqn", "ppo", "bc")
 HEADER = ("| agent | episodes | seeds | mean reward | median reward | mean score "
           "| median score | max score | level 1 cleared | level 1 without death "
           "| mean length | truncated | time, s | commit |")
@@ -64,6 +65,10 @@ def make_agent(args):
     label = os.path.relpath(path, os.path.join(ROOT, "runs")) if path.startswith(ROOT) else path
     if args.agent == "ppo":
         return PPOAgent(path, seed=args.seed), f"ppo {label}"
+    if args.agent == "bc":
+        agent = BCAgent(path, epsilon=args.epsilon, seed=args.seed,
+                        device=getattr(args, "device", None))
+        return agent, f"bc {label}"
     agent = DQNAgent(path, epsilon=args.epsilon, seed=args.seed,
                      device=getattr(args, "device", None))
     return agent, f"dqn {label}"
@@ -172,7 +177,7 @@ _worker = {}
 def _init_worker(args):
     import torch
     torch.set_num_threads(1)
-    if args.agent in ("dqn", "ppo"):
+    if args.agent in ("dqn", "ppo", "bc"):
         args.device = "cpu"  # many processes: no CUDA context each
     agent, _ = make_agent(args)
     _worker["agent"] = agent
@@ -291,9 +296,9 @@ def update_results(path, res):
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--agent", choices=AGENTS, required=True)
-    p.add_argument("--checkpoint", help="dqn/ppo: best.pt or checkpoint.pt from scripts/train.py "
-                                        "or scripts/train_ppo.py")
-    p.add_argument("--epsilon", type=float, default=0.0, help="dqn only: random action probability")
+    p.add_argument("--checkpoint", help="dqn/ppo/bc: best.pt or checkpoint.pt from scripts/train.py, "
+                                        "scripts/train_ppo.py or scripts/train_bc.py")
+    p.add_argument("--epsilon", type=float, default=0.0, help="dqn/bc only: random action probability")
     p.add_argument("--label", help="row label in the results table (default from the agent)")
     p.add_argument("--episodes-out", help="write per-episode stats (incl. steps without food) "
                                           "as JSON lines here")

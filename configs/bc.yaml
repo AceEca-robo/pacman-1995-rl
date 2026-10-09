@@ -1,0 +1,23 @@
+# Behaviour cloning of the heuristic on all 16 mazes (agents/bc.py,
+# scripts/train_bc.py; data from tools/gen_bc_data.py: heuristic play with
+# eps 0.1, the heuristic's action as the label).
+train_data: [runs/bc_data/train_w*.npz]   # globs, relative to the repo root
+val_data: [runs/bc_data/val_w*.npz]
+init_checkpoint: null       # DAgger: continue from this BC checkpoint
+epochs: 10
+batch_size: 512
+lr: 0.0003
+# Cross-entropy class weights: "auto" weighs classes with at least
+# min_class_share of the labels by mean share / share when the largest and
+# the smallest of those shares differ by more than imbalance_ratio (rarer
+# classes keep weight 1); "none" = unweighted.
+class_weights: auto
+imbalance_ratio: 2.0
+min_class_share: 0.01
+n_actions: 5
+network:                    # dqn_mm_wide.yaml's network: the convolutions can initialize a DQN
+  conv_channels: [64, 128, 128]
+  conv_kernels: [3, 3, 3]
+  conv_strides: [1, 2, 2]
+  vec_hidden: 64
+  hidden: 1024

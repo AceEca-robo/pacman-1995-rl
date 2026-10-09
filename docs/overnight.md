@@ -779,3 +779,26 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   cloning from it on mazes 1-4 (dqn2's warm start was on maze 1 only, at
   5M steps) might get the agent past the "eat 40%, then hide" policy.
 
+
+## Chronology (2026-10-09/10)
+
+Plan of the night: v0.3 on all 16 mazes through behaviour cloning of the
+heuristic (stage 1), then RL fine-tuning from the BC network (stage 2).
+Death -20 everywhere. Criterion: >= 50% clears of each of the 16 mazes (BC or
+RL), PARTIAL >= 30%.
+
+- 21:15 Start. No BC code or runs yet (no agents/bc.py, no runs/bc*);
+  disk 14 GB free, GPU idle.
+- 21:25 `tools/gen_bc_data.py`: the heuristic plays games started on a
+  random maze 1..16 (seed and maze per game), executing a random action with
+  eps 0.1; the label is always the heuristic's action. Grids bit-packed as in
+  the replay buffer, compressed shards (113 MB for 3.1M steps). Train: 3M
+  steps on seeds 100000.. (16 workers, 73 s, ~7000 games); validation: 100k
+  steps on seeds 5000000.. Label shares U/D/L/R/N 0.280 / 0.218 / 0.255 /
+  0.246 / 0.000 -> largest/smallest of the used classes 1.28 < 2, so no
+  class weights (N is ~never a label: the heuristic idles only with no food
+  reachable).
+- 21:33 `scripts/train_bc.py` (`configs/bc.yaml`): BCNetwork = the wide DQN
+  trunk (conv 64/128/128, fc 1024, same parameter names as QNetwork) + one
+  logits head; cross-entropy, Adam 3e-4, batch 512, 10 epochs, bc_best.pt by
+  validation accuracy. Run bc0 started.
