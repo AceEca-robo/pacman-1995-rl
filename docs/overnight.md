@@ -880,3 +880,9 @@ RL), PARTIAL >= 30%.
 - 23:43 Stage 2 started: rl_bc0 (`configs/rl_bc.yaml`, convs frozen 500k)
   and rl_bc1 (`configs/rl_bc_nofreeze.yaml`), both seed 0, from
   bc0_dagger3. Disk 13 GB free, GPU 15 MB used before the start.
+- 23:45 BC warm start 300k steps in 67 s per run (both at once). Speeds
+  over the first 120k steps: rl_bc0 1.85-1.92k steps/s (convs frozen),
+  rl_bc1 1.75-1.78k -> both >= 1.5k, both keep running. Supervisor
+  (`--every 10000000 --min-speed 1500`, log/state in `runs/sv_rlbc/`): one
+  --resume per run on a crash. Buffers are not checkpointed (disk), so a
+  resume refills the buffer with the Q policy before learning.
