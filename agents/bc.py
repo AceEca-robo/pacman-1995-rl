@@ -34,13 +34,22 @@ class BCNetwork(nn.Module):
 
 def load_shards(paths):
     """npz shards from tools/gen_bc_data.py -> dict of concatenated arrays
-    (obs, vec, act, level)."""
-    parts = {"obs": [], "vec": [], "act": [], "level": []}
+    (obs, vec, act, level). Filled in place: peak memory is the result plus
+    one shard (np.concatenate of all shards would need twice the result)."""
+    sizes = []
     for path in paths:
         with np.load(path) as z:
-            for k in parts:
-                parts[k].append(z[k])
-    return {k: np.concatenate(v) for k, v in parts.items()}
+            sizes.append(len(z["act"]))
+            if len(sizes) == 1:
+                out = {k: np.empty((0,) + z[k].shape[1:], z[k].dtype) for k in z.files}
+    out = {k: np.empty((sum(sizes),) + v.shape[1:], v.dtype) for k, v in out.items()}
+    i = 0
+    for path, n in zip(paths, sizes):
+        with np.load(path) as z:
+            for k in out:
+                out[k][i:i + n] = z[k]
+        i += n
+    return out
 
 
 def load_bc(checkpoint, device):

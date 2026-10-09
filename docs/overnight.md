@@ -847,3 +847,8 @@ RL), PARTIAL >= 30%.
   noise except the weakest mazes (9: 36 -> 64%, 15: 36 -> 44%). Still < 30%
   at eps 0.02 -> DAgger iteration 2: bc0_dagger1 plays (eps 0.02), 1M steps
   on seeds 2000000.., fine-tune on train + dagger1 + dagger2 (5M), 4 epochs.
+- 22:28-22:48 bc0_dagger2's first start was killed by the OOM killer while
+  loading the 5M steps (load_shards concatenated the shards: twice the 16.6 GB
+  at the peak, 29 GB RSS; the tee'd log stayed empty, found at 22:47).
+  Fixed (`agents/bc.py` load_shards fills one preallocated array), restarted
+  22:50.
