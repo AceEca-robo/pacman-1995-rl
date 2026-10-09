@@ -894,3 +894,7 @@ RL), PARTIAL >= 30%.
 - 00:28 Eval @4M: rl_bc0 food 118, rl_bc1 116; 0 levels, 0% on all 16 mazes
   (both). The level of mm1 (wide DQN from scratch, ~120-135 food), not of
   the BC (~160 per maze game). Runs continue as planned; ~1.56k steps/s each.
+- 01:12 Evals @6M / 8M: rl_bc0 food 124 / 132, rl_bc1 127 / 121; still 0
+  levels and 0% on all 16 mazes. Eval games from level 1 last ~420-460
+  ticks (3 lives lost fast: a fast eater that dies, not the wandering of
+  v03s0). Speeds 1.54-1.57k steps/s.
