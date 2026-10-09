@@ -839,3 +839,11 @@ RL), PARTIAL >= 30%.
   differ, and no eval seed is used.) Fine-tune bc0_dagger1 started
   (`configs/bc_dagger1.yaml`). `scripts/v03_16_report.py`: 16-maze verdict
   (SUCCESS >= 50% on each, PARTIAL >= 30%), table and plot.
+- 22:15 bc0_dagger1 (bc_best = epoch 1, val acc 0.9866; all 4 epochs
+  0.9859-0.9866, i.e. the heuristic-play validation set no longer moves):
+  eps 0 per maze 60/80/64/72/68/76/72/100/64/68/44/60/40/68/44/92% (min
+  40%), from level 1 0.85 levels; eps 0.02 min 16% (maze 15), 0.40 levels.
+  At 25 games per maze one game is 4 points, so bc0 vs dagger1 is mostly
+  noise except the weakest mazes (9: 36 -> 64%, 15: 36 -> 44%). Still < 30%
+  at eps 0.02 -> DAgger iteration 2: bc0_dagger1 plays (eps 0.02), 1M steps
+  on seeds 2000000.., fine-tune on train + dagger1 + dagger2 (5M), 4 epochs.
