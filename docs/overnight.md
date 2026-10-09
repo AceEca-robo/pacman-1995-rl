@@ -852,3 +852,15 @@ RL), PARTIAL >= 30%.
   at the peak, 29 GB RSS; the tee'd log stayed empty, found at 22:47).
   Fixed (`agents/bc.py` load_shards fills one preallocated array), restarted
   22:50.
+- 22:55 Smoke test of `configs/rl_bc.yaml` (200k steps, warm start 40k,
+  freeze 100k, 2 games per maze; next to the BC training on the GPU): BC
+  warm start 2.2k steps/s, the freeze/unfreeze switch logged, 1.35k steps/s
+  frozen vs 1.05k unfrozen (shared GPU), eval with 16 mazes 8-9 s, 4 GB GPU.
+- 23:09 bc0_dagger2 (best = epoch 1, val acc 0.9875): eps 0 per maze
+  52/76/64/76/80/68/80/92/64/80/52/48/40/76/24/84% (min 24%, maze 15),
+  0.89 levels from level 1; eps 0.02 min 20% (maze 12), 0.45 levels.
+  Maze 15 at eps 0 went 36 -> 44 -> 24% over bc0 / dagger1 / dagger2, i.e.
+  within the noise of 25 games; DAgger has not moved the minimum. Iteration
+  3 anyway (the plan allows 3 while a maze is < 30%; ~35 min of an 8-hour
+  night): dagger2 plays (eps 0.02), 1M steps on seeds 4000000.., fine-tune
+  on all 6M.
