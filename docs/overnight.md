@@ -719,6 +719,18 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   (1076 -> 653 per 4M block). Speed 2.7-2.85k steps/s. Continuing.
 - 03:43 v03s0 at 40M: evals 28-40M food 62.0-65.4 (slow rise), levels 0,
   0% on every maze. Speed 2.9-3.0k steps/s; 60M expected ~05:50.
+- 06:00 v03s0 finished 60M, no crash (the supervisor never restarted it).
+  Evals 42-60M food 64.4-67.4, levels 0 and 0% per maze at all 30 eval
+  points; the 60M games grew to 17000 ticks. best.pt = 52.0M (food 67.4,
+  chosen by food as all levels were 0).
+- 06:03-06:25 **Final** (levels suite on mazes 1-4, seeds 0..99 from level
+  1, 25 games per maze, stopped at the clear, 12 CPU workers, 22 min):
+  **0% on each of mazes 1-4, 0 levels from level 1** (heuristic: 80 / 84 /
+  72 / 80%, 1.58 levels). Food 67.6 per game, 2.61 deaths, 7328 ticks
+  after the last food, 19% of games cut at 30000 ticks.
+- **Verdict: FAILURE** (criterion >= 50% on each maze; PARTIAL >= 25%).
+  results.md and conclusions only; no README section, gif, tag, release or
+  push. Nothing is training at the end of the session.
 
 ## Unclear points and decisions (2026-10-08/09)
 
@@ -739,3 +751,31 @@ mean over mazes -> --resume the best +10M; FAILURE: < 10% -> stop).
   run keeping >= 70% of its speed alone (equivalently: the two together
   >= 70% of two runs alone). Both readings give 64% -> one seed. (Read as
   "the sum >= 70% of one run" it would have passed: 127%.)
+- The final protocol "seeds 0..99, 25 games per maze": 100 games from level
+  1 on seeds 0..99, and on each maze seeds 0..24 (maze 1's are the first 25
+  games from level 1, the same games). evaluate.py's per-level games used
+  the same seeds on every maze before (mm1-mm4), so this follows that.
+- best.pt by the selection rule (mean levels cleared, ties by food): all
+  evals tied at 0 levels, so food decided (52.0M).
+- On FAILURE the plan asks only for results.md and conclusions; commits
+  stayed local (no push), as push was listed only for the success branch.
+
+## Ideas for later (2026-10-09)
+
+(Not tried.)
+
+- The agent stops eating, not only dies: 7300 ticks without food at the
+  end of a game. hunger_limit (it ended dqn4's wandering) or a smaller
+  death penalty (-20 as in mm1, whose agent ate ~130) are the first knobs;
+  death -50 with +1 per dot makes hiding the better policy.
+- Speed: the next lever is the learner in its own process (buffer and PER
+  tree in shared memory, weights back to the actor every few updates); the
+  acting loop and the learner thread now share one interpreter. A larger
+  batch with a larger train_every (same replay ratio) would cut the
+  memory-bound Adam step over the 7M fc parameters per sample, but changes
+  the algorithm. With ~3k steps/s per run, two seeds share the GPU at ~1.6k
+  each.
+- The heuristic clears 72-84% of each maze; DQN warm starts or behaviour
+  cloning from it on mazes 1-4 (dqn2's warm start was on maze 1 only, at
+  5M steps) might get the agent past the "eat 40%, then hide" policy.
+
