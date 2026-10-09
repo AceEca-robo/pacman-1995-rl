@@ -26,6 +26,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+from agents.bc import BCAgent  # noqa: E402
 from agents.dqn import DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
 from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims, parse_start_level  # noqa: E402
@@ -257,18 +258,28 @@ class BackgroundLearner(threading.Thread):
                 self.cv.notify_all()
 
 
-def warm_start(collector, cfg):
-    """Fill the buffer with cfg["warm_start"] env steps of the heuristic agent.
-    These steps do not count towards total_steps or the schedules."""
-    agent = HeuristicAgent(cfg["warm_start_agent_config"], n_actions=collector.envs.single_action_space.n)
+def warm_start(collector, cfg, device):
+    """Fill the buffer with cfg["warm_start"] env steps of the warm start
+    agent: the heuristic, or (cfg["warm_start_agent"] = a BC checkpoint) the
+    BC policy, greedy, all envs in one forward pass. These steps do not count
+    towards total_steps or the schedules."""
+    kind = cfg.get("warm_start_agent") or "heuristic"
+    if kind == "heuristic":
+        agent = HeuristicAgent(cfg["warm_start_agent_config"],
+                               n_actions=collector.envs.single_action_space.n)
+    else:
+        agent = BCAgent(os.path.join(ROOT, kind), device=device)
     done, t0 = 0, time.perf_counter()
     while done < cfg["warm_start"]:
         obs = collector.obs
-        actions = np.array([agent.act({"grid": obs["grid"][i], "vec": obs["vec"][i]})
-                            for i in range(collector.n)])
+        if kind == "heuristic":
+            actions = np.array([agent.act({"grid": obs["grid"][i], "vec": obs["vec"][i]})
+                                for i in range(collector.n)])
+        else:
+            actions = agent.act_batch(collector.cur, obs["vec"])
         collector.step(actions, done, prefix="warm_start")
         done += collector.n
-    print(f"warm start: {done} heuristic steps, buffer {collector.buffer.size} "
+    print(f"warm start: {done} {kind} steps, buffer {collector.buffer.size} "
           f"({time.perf_counter() - t0:.0f} s)", flush=True)
 
 
@@ -307,7 +318,8 @@ def evaluate(learner, envs, cfg):
             e[1], e[3], e[4], e[5] = obs, e[3] + r, e[4] + 1, max(e[5], info["level"])
             e[6] += info["events"]["eaten_dot"] + info["events"]["eaten_energizer"]
             seed, level, stop = e[2]
-            if term or trunc or (stop and e[5] > e[7]):
+            cut = stop and cfg.get("eval_level_max_steps") and e[4] >= cfg["eval_level_max_steps"]
+            if term or trunc or cut or (stop and e[5] > e[7]):
                 res = {"seed": seed, "reward": e[3], "score": info["score"],
                        "length": e[4], "level": e[5], "food": e[6],
                        "levels_cleared": e[5] - e[7]}
@@ -321,7 +333,7 @@ def evaluate(learner, envs, cfg):
     return sorted(results, key=lambda x: (x.get("maze", 0), x["seed"]))
 
 
-def best_metric(name, results):
+def best_metric(name, results, maze_results=()):
     """Value to pick best.pt by (higher is better).
     "level1_cleared" (the rule since v0.2): share of eval games that cleared
     level 1, ties broken by mean food eaten; returned as
@@ -330,11 +342,21 @@ def best_metric(name, results):
     "mean_reward" (dqn4..dqn10: a median ignores games stuck until the step
     limit while they are under half), "median_reward" / "median_score"; old
     configs say "reward" / "score".
+    "levels_cleared_min_maze": the same mean, ties by the lowest per-maze
+    clear share (needs eval_levels).
     "levels_cleared" (the rule since v0.3): mean levels cleared per eval game
     (evaluation starts on level 1), ties by mean food; returned as
     mean * 1e5 + mean food / 1000 (one game changes the mean by >= 1 /
     episodes, i.e. the first term by >= 1e5 / episodes, food / 1000 stays
     far below that)."""
+    if name == "levels_cleared_min_maze":
+        # rule of the BC -> RL runs: mean levels cleared from level 1, ties by
+        # the lowest share of per-maze games clearing their maze (in [0, 1])
+        mean = float(np.mean([r["levels_cleared"] for r in results]))
+        shares = {}
+        for r in maze_results:
+            shares.setdefault(r["maze"], []).append(r["levels_cleared"] >= 1)
+        return mean * 1e5 + min(float(np.mean(v)) for v in shares.values())
     if name == "levels_cleared":
         mean = float(np.mean([r["levels_cleared"] for r in results]))
         return mean * 1e5 + float(np.mean([r["food"] for r in results])) / 1000
@@ -420,6 +442,15 @@ def main():
         learner.online.load_state_dict(init["learner"]["online"])
         learner.target.load_state_dict(init["learner"]["online"])
         print(f"initialized from {cfg['init_checkpoint']} ({init['steps']} steps)")
+    if not ck and cfg.get("init_conv_from"):
+        # the convolutions of a BC network (agents/bc.py, same layer names);
+        # the vec, fc and Q heads keep their fresh initialization
+        bc = torch.load(os.path.join(ROOT, cfg["init_conv_from"]), map_location=device,
+                        weights_only=False)
+        conv = {k[len("conv."):]: v for k, v in bc["net"].items() if k.startswith("conv.")}
+        learner.online.conv.load_state_dict(conv)
+        learner.target.conv.load_state_dict(conv)
+        print(f"convolutions from {cfg['init_conv_from']}")
     if ck:
         learner.load_state_dict(ck["learner"])
         steps, n_updates, episodes, best = ck["steps"], ck["n_updates"], ck["episodes"], ck["best"]
@@ -455,10 +486,15 @@ def main():
     col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps,
                     lock=bg.buffer_lock if bg else None)
     if not ck and cfg["warm_start"]:
-        warm_start(col, cfg)
+        warm_start(col, cfg, device)
     per = cfg["per"]["enabled"]
     min_buffer = min(cfg["learning_starts"], cfg["buffer_size"]) if ck else cfg["batch_size"]
 
+    freeze_steps = cfg.get("freeze_conv_steps") or 0
+    conv_frozen = steps < freeze_steps
+    if conv_frozen:
+        learner.request_conv_trainable(False)
+        print(f"convolutions frozen until {freeze_steps} steps")
     losses, qs = [], []
     update_credit = 0.0
     next_target = (steps // cfg["target_update"] + 1) * cfg["target_update"]
@@ -480,6 +516,10 @@ def main():
                 actions[greedy] = q.argmax(1)
             episodes += col.step(actions, steps)
             steps += n
+            if conv_frozen and steps >= freeze_steps:
+                conv_frozen = False
+                learner.request_conv_trainable(True)
+                print(f"{steps:>9} steps  convolutions unfrozen", flush=True)
             spec = start_level_at(cfg, steps)
             if spec != level_spec:  # curriculum: from the envs' next reset on
                 level_spec = spec
@@ -549,7 +589,7 @@ def main():
                 t0 = time.perf_counter()
                 all_res = evaluate(learner, eval_envs, cfg)
                 res = [r for r in all_res if "maze" not in r]  # games from level 1
-                metric = best_metric(cfg["best_metric"], res)
+                metric = best_metric(cfg["best_metric"], res, [r for r in all_res if "maze" in r])
                 summary = {
                     "steps": steps,
                     "median_reward": float(np.median([r["reward"] for r in res])),
@@ -564,6 +604,9 @@ def main():
                 for lv in cfg.get("eval_levels") or []:
                     summary[f"maze{lv}_cleared"] = float(np.mean(
                         [r["levels_cleared"] >= 1 for r in all_res if r.get("maze") == lv]))
+                if cfg.get("eval_levels"):
+                    summary["min_maze_cleared"] = min(summary[f"maze{lv}_cleared"]
+                                                      for lv in cfg["eval_levels"])
                 for k, v in summary.items():
                     if k != "steps":
                         writer.add_scalar(f"eval/{k}", v, steps)

@@ -789,7 +789,7 @@ RL), PARTIAL >= 30%.
 
 - 21:15 Start. No BC code or runs yet (no agents/bc.py, no runs/bc*);
   disk 14 GB free, GPU idle.
-- 21:25 `tools/gen_bc_data.py`: the heuristic plays games started on a
+- 21:17 `tools/gen_bc_data.py`: the heuristic plays games started on a
   random maze 1..16 (seed and maze per game), executing a random action with
   eps 0.1; the label is always the heuristic's action. Grids bit-packed as in
   the replay buffer, compressed shards (113 MB for 3.1M steps). Train: 3M
@@ -798,7 +798,15 @@ RL), PARTIAL >= 30%.
   0.246 / 0.000 -> largest/smallest of the used classes 1.28 < 2, so no
   class weights (N is ~never a label: the heuristic idles only with no food
   reachable).
-- 21:33 `scripts/train_bc.py` (`configs/bc.yaml`): BCNetwork = the wide DQN
+- 21:19 `scripts/train_bc.py` (`configs/bc.yaml`): BCNetwork = the wide DQN
   trunk (conv 64/128/128, fc 1024, same parameter names as QNetwork) + one
   logits head; cross-entropy, Adam 3e-4, batch 512, 10 epochs, bc_best.pt by
   validation accuracy. Run bc0 started.
+- 21:26 Stage 2 code (`scripts/train.py`, `agents/dqn.py`): `init_conv_from`
+  (a BC checkpoint's convolutions into online and target nets; vec, fc and
+  Q heads fresh), `freeze_conv_steps` (requires_grad off for the convs,
+  switched inside update(), i.e. in the learner thread), `warm_start_agent`
+  = a BC checkpoint (greedy BC, all envs in one forward pass),
+  best_metric `levels_cleared_min_maze` (mean levels cleared from level 1,
+  ties by the lowest per-maze clear share), `eval_level_max_steps` (cut for
+  the per-maze eval games). Tests added; full pytest 77 passed.

@@ -277,3 +277,79 @@ def test_async_envs_and_learner(tmp_path):
         assert "resumed at 4000 steps" in out.stdout
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_rl_from_bc(tmp_path):
+    """init_conv_from copies a BC network's convolutions, freeze_conv_steps
+    keeps them fixed (then they train), warm_start_agent plays the BC policy,
+    levels_cleared_min_maze picks best.pt."""
+    import torch
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from agents.bc import BCNetwork
+    from train import best_metric, load_config
+    net_cfg = load_config(os.path.join(ROOT, "configs", "dqn.yaml"))["network"]
+    bc_path = tmp_path / "bc.pt"
+    bc = BCNetwork(net_cfg)
+    torch.save({"algo": "bc", "config": {"network": net_cfg}, "n_actions": 5,
+                "env_config": {"actions": 5}, "net": bc.state_dict()}, bc_path)
+    cfg = tmp_path / "tiny_bc.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 4000, "warm_start": 600,
+                                   "warm_start_agent": str(bc_path), "init_conv_from": str(bc_path),
+                                   "freeze_conv_steps": 2000, "per": {"enabled": True},
+                                   "best_metric": "levels_cleared_min_maze",
+                                   "eval_levels": [2, 3], "eval_level_episodes": 1,
+                                   "eval_level_max_steps": 200, "eval_max_episode_steps": 300}))
+    name = f"test-bc-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    try:
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "train.py"),
+                              "--run-name", name, "--config", str(cfg)],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert re.search(r"warm start: 600 \S+bc.pt steps", out.stdout), out.stdout
+        assert "convolutions frozen until 2000" in out.stdout
+        assert re.search(r"2000 steps  convolutions unfrozen", out.stdout), out.stdout
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            evals = [json.loads(line) for line in f]
+        first, last = evals[0], evals[-1]
+        assert "min_maze_cleared" in last
+        assert all(g["length"] <= 200 for g in last["episodes"] if "maze" in g)
+        ck = [torch.load(os.path.join(run_dir, f), weights_only=False) for f in ("checkpoint.pt",)]
+        conv = {k: v for k, v in bc.state_dict().items() if k.startswith("conv.")}
+        online = ck[0]["learner"]["online"]
+        assert any(not torch.equal(online[k].cpu(), v) for k, v in conv.items())  # trained later
+        assert first["steps"] == 2000
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])
+    maze = [{"maze": 2, "levels_cleared": 1}, {"maze": 3, "levels_cleared": 0}]
+    res = [{"levels_cleared": 1}, {"levels_cleared": 0}]
+    assert best_metric("levels_cleared_min_maze", res, maze) == 0.5 * 1e5
+    maze2 = [{"maze": 2, "levels_cleared": 1}, {"maze": 3, "levels_cleared": 1}]
+    assert best_metric("levels_cleared_min_maze", res, maze2) == 0.5 * 1e5 + 1
+
+
+def test_conv_freeze_keeps_weights():
+    import numpy as np
+    import torch
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from agents.dqn import DQNLearner, N_PLANES, PACKED
+    from train import load_config
+    cfg = {**load_config(os.path.join(ROOT, "configs", "dqn.yaml")), "compile": False}
+    learner = DQNLearner(cfg, "cpu")
+    before = {k: v.clone() for k, v in learner.online.state_dict().items()}
+    rng = np.random.default_rng(0)
+    b = 8
+    batch = (rng.integers(0, 256, (b, N_PLANES, PACKED), dtype=np.uint8),
+             rng.random((b, 3), dtype=np.float32), rng.integers(0, 5, b),
+             rng.random(b, dtype=np.float32),
+             rng.integers(0, 256, (b, N_PLANES, PACKED), dtype=np.uint8),
+             rng.random((b, 3), dtype=np.float32), np.full(b, 0.97, np.float32))
+    learner.request_conv_trainable(False)
+    learner.update(batch, np.ones(b, np.float32))
+    after = learner.online.state_dict()
+    assert all(torch.equal(before[k], after[k]) for k in before if k.startswith("conv."))
+    assert not torch.equal(before["fc.0.weight"], after["fc.0.weight"])
+    learner.request_conv_trainable(True)
+    learner.update(batch, np.ones(b, np.float32))
+    assert not torch.equal(before["conv.0.weight"], learner.online.state_dict()["conv.0.weight"])

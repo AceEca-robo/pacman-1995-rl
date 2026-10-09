@@ -26,6 +26,12 @@ compile: true               # torch.compile the loss (~25 s at start)
 # epsilon/beta schedules or learning_starts. 0 = off.
 warm_start: 0
 warm_start_agent_config: null   # null = configs/heuristic.yaml
+warm_start_agent: heuristic     # or a BC checkpoint (scripts/train_bc.py), which then plays greedily
+
+# Start from a BC network's convolutions (agents/bc.py, the same network
+# config); the rest of the Q network starts fresh. null = off.
+init_conv_from: null
+freeze_conv_steps: 0        # keep those convolutions fixed for this many env steps
 
 # Prioritized replay, proportional variant.
 per:
@@ -52,7 +58,8 @@ eval_episodes: 20
 eval_seed: 1000             # eval episode i uses env seed eval_seed + i (1000..1019: kept apart from the final evaluation on 0..99)
 eval_levels: null           # e.g. [1, 2, 3, 4]: also eval_level_episodes games started on each of these mazes (same seeds), stopped once the maze is cleared; eval/maze<N>_cleared
 eval_level_episodes: null   # null = eval_episodes
+eval_level_max_steps: null  # cut the per-maze eval games after this many ticks; null = eval_max_episode_steps
 eval_envs: null             # eval games played in parallel; null = num_envs
-best_metric: level1_cleared # rule since v0.2: share of eval games clearing level 1, ties by mean food; or mean_reward (dqn4..dqn10), median_reward (dqn0..dqn3b), median_score
+best_metric: level1_cleared # rule since v0.2: share of eval games clearing level 1, ties by mean food; or levels_cleared (v0.3), levels_cleared_min_maze, mean_reward (dqn4..dqn10), median_reward (dqn0..dqn3b), median_score
 checkpoint_buffer: true     # save the replay buffer with checkpoints (~3.3 GB)
 log_every: 10000            # env steps between scalar logs

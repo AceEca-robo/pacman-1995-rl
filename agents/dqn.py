@@ -385,8 +385,17 @@ class DQNLearner:
         loss = (weights * F.smooth_l1_loss(q, target, reduction="none")).mean()
         return loss, q_all.detach().max(1).values.mean(), (q.detach() - target).abs()
 
+    def request_conv_trainable(self, flag):
+        """Freeze / unfreeze the online network's convolutions at the start of
+        the next update() (so it happens in the thread that runs updates)."""
+        self._conv_request = flag
+
     def update(self, batch, weights):
         """Returns device tensors (loss, mean max Q, |TD| per sample)."""
+        flag = getattr(self, "_conv_request", None)
+        if flag is not None:  # frozen parameters get no grad; Adam skips them
+            self._conv_request = None
+            self.online.conv.requires_grad_(flag)
         obs, vec, act, ret, next_obs, next_vec, discount = batch
         loss, mean_q, td = self._loss(self._t(np.concatenate([obs, next_obs])),
                                       self._t(np.concatenate([vec, next_vec])),
