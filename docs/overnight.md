@@ -864,3 +864,19 @@ RL), PARTIAL >= 30%.
   3 anyway (the plan allows 3 while a maze is < 30%; ~35 min of an 8-hour
   night): dagger2 plays (eps 0.02), 1M steps on seeds 4000000.., fine-tune
   on all 6M.
+- 23:42 bc0_dagger3 (best = epoch 2, val acc 0.9884): eps 0 per maze
+  60/72/72/84/64/80/80/72/40/72/56/72/24/76/52/80% (min 24%, maze 13), from
+  level 1 0.98 levels (median 1, max 3); eps 0.02 min 24%, 0.43 levels.
+  Mean of the 16 per-maze shares at eps 0: bc0 63.5%, dagger1 67.0%,
+  dagger2 66.0%, dagger3 66.0% -- DAgger added ~3 points on average and
+  nothing consistent on the weakest maze (which maze is lowest changes
+  from version to version: 9/15, 11/13, 15, 13). No BC version meets 30% on
+  every maze at eps 0.02; bc0 and dagger1 do at eps 0 (PARTIAL).
+  Which BC goes on: the plan's RL selection rule applied to the BCs (mean
+  levels cleared from level 1 at eps 0, then the per-maze minimum) ->
+  bc0_dagger3 (0.98; bc0 0.95, dagger2 0.89, dagger1 0.85). It is the RL
+  init and the "BC" of the final table. (Every difference here is within
+  the noise of 100 / 25 games.)
+- 23:43 Stage 2 started: rl_bc0 (`configs/rl_bc.yaml`, convs frozen 500k)
+  and rl_bc1 (`configs/rl_bc_nofreeze.yaml`), both seed 0, from
+  bc0_dagger3. Disk 13 GB free, GPU 15 MB used before the start.

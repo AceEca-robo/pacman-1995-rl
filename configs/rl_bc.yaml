@@ -15,8 +15,8 @@ epsilon_start: 0.1
 epsilon_end: 0.02
 epsilon_steps: 2000000
 warm_start: 300000
-warm_start_agent: runs/bc0/bc_best.pt
-init_conv_from: runs/bc0/bc_best.pt
+warm_start_agent: runs/bc0_dagger3/bc_best.pt
+init_conv_from: runs/bc0_dagger3/bc_best.pt
 freeze_conv_steps: 500000
 best_metric: levels_cleared_min_maze
 eval_every: 2000000
