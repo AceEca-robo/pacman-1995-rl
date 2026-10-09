@@ -422,6 +422,7 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | mm2 | best_24000000.pt (24.0M of 30M) | mm1 with a maze curriculum 1-4 / 1-8 / 1-16 | 133.9 | 0% | 28.1 | 1400 | 3780 | 5% | 650 | - |
 | mm3 | best_10000000.pt (10.0M) | fine-tune of mm1 (27.0M) with endgame prefixes on all 16 mazes, prefix_prob 0.5, 10M | 139.0 | 0% | 25.2 | 1480 | 10480 | 7% | 517 | - |
 | mm4 | best_7000000.pt (7.0M) | mm3 with prefix_prob 0.7 | 138.0 | 0% | 43.8 | 1460 | 3860 | 3% | 666 | - |
+| v03s0 | best.pt (52.0M of 60M) | v0.3 as four mazes: wide DQN from scratch on mazes 1-4 (random), PER, endgame dot reward, death -50, heuristic endgame prefixes 0.3; async training | 67.6 | 0% | -138.7 | 760 | 6730 | 19% (30000 ticks) | 7328 | - |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%
 
@@ -599,3 +600,60 @@ lives; stopped at the first lost life; scratchpad probe, results in
 - Training showed level clears for the first time in v0.3 (3-8% of training
   episodes, from 8+ mazes), all or nearly all from prefix starts; they never
   carried over to games from the start.
+
+### v0.3 as four mazes: v03s0 (2026-10-09)
+
+`configs/dqn_v03.yaml`: DQN from scratch (wide network, PER, endgame dot
+reward k 20, death -50), every reset on a random maze of 1..4, 30% of resets
+replay a heuristic endgame prefix of mazes 1..4 (<= 15 food left, 3 lives),
+eps 1.0 -> 0.05 over 5M, 60M steps (AsyncVectorEnv x16 + learner thread,
+~2.6-3.0k steps/s, 6.6 h). Evals every 2M on seeds 1000..1019 (20 games
+from level 1, 20 per maze); best.pt by mean levels cleared, ties by food:
+all 30 evals 0 levels / 0% per maze, so food picked 52.0M (67.4).
+
+Final (`evaluate.py --levels --seed 0 --episodes 100 --level-episodes 25
+--level-range 1-4 --stop-at-clear --max-steps 30000`; maze 1 = the first 25
+of the from-level-1 games, mazes 2-4 seeds 0..24; `runs/levels/v03s0.json`,
+`docs/levels_v03.png`):
+
+| agent | maze 1 | maze 2 | maze 3 | maze 4 | min | from level 1: levels cleared mean / median / max | >= 1 | >= 2 | >= 3 | >= 4 | games per maze / from level 1 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| v03s0 (52.0M) | 0% | 0% | 0% | 0% | 0% | 0.00 / 0 / 0 | 0% | 0% | 0% | 0% | 25 / 100 |
+| heuristic | 80% | 84% | 72% | 80% | 72% | 1.58 / 1 / 6 | 82% | 47% | 18% | 8% | 25 / 100 |
+
+Mean food per game by start maze (v03s0): 67.8 / 68.1 / 75.9 / 82.3; from
+level 1: 67.6 food, 2.61 deaths, 8123 ticks per game, 19% cut at 30000
+ticks, 7328 ticks after the last food on average.
+
+**Verdict: FAILURE** (criterion: >= 50% on each of mazes 1-4 = SUCCESS,
+>= 25% on each = PARTIAL). No tag, no release, no README section.
+
+- The agent eats ~40% of a maze, then stops eating: on average the last
+  7300 ticks of a game pass without food, a fifth of the games run into
+  the 30000-tick cut. With death at -50 against +1 per dot, avoiding
+  ghosts (wandering) pays more than going for distant dots; the endgame dot
+  bonus only kicks in near an empty board, which it no longer reaches.
+- Even from the endgame prefixes (30% of training episodes) only 0.6-0.8% of
+  training episodes cleared a maze.
+- Food in the evals rose from 25 (2M) to ~60 (8M) and then only to ~67
+  (50-60M); mm1 (16 mazes, death -20, no prefixes) reached 120-130 food
+  by 6-16M. Fewer mazes did not make the task easier for this setting.
+
+### Training throughput (stage A, 2026-10-08)
+
+Wide network (conv 64/128/128, fc 1024), train_every 16, batch 64, PER,
+`configs/dqn_v03_speed_*.yaml` (1M-step smoke tests, mean steps/s from 300k on):
+
+| setup | steps/s |
+|---|---|
+| SyncVectorEnv x4, updates in the acting loop (before) | ~1,360 |
+| AsyncVectorEnv x8 (shared memory) + batched buffer add | 1,261 (next to another run) |
+| AsyncVectorEnv x16 | 1,542 |
+| x16 + learner thread (`async_learner`) | 2,166 |
+| x16 + learner thread, deferred PER priorities, acting on its own CUDA stream | **2,567** |
+| same + `fast_learner` | 2,464 |
+| two such runs at once | 1,637 + 1,631 |
+
+v03s0 itself ran at 2.6-3.0k steps/s. The limit is now the one Python
+interpreter shared by the acting loop and the learner thread (GPU 40-85%).
+
