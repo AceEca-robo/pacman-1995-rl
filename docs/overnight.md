@@ -898,3 +898,8 @@ RL), PARTIAL >= 30%.
   levels and 0% on all 16 mazes. Eval games from level 1 last ~420-460
   ticks (3 lives lost fast: a fast eater that dies, not the wandering of
   v03s0). Speeds 1.54-1.57k steps/s.
+- 01:57 Evals @10M / 12M: rl_bc0 food 142 / 144, first maze clears at 12M
+  (mazes 7 and 8: 1 of 20 games each), 0 levels from level 1; rl_bc1 food
+  129 / 104, 0% everywhere. Supervisor @10M (20 games from level 1, seeds
+  1000..): rl_bc1 food 128; it logged rl_bc0 at 1,500 steps/s (= the
+  threshold) once. No crash so far.
