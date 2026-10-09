@@ -1,0 +1,38 @@
+# v0.3 stage 2: RL fine-tuning from behaviour cloning of the heuristic
+# (scripts/train_bc.py). The Q network has the BC network's trunk; its
+# convolutions start from BC and stay frozen for the first 500k steps, the
+# vec / fc / Q heads learn from scratch (BC logits are not Q values). Before
+# training, 300k steps of the BC policy itself (greedy) fill the buffer.
+# All 16 mazes, death -20, endgame dot reward k 20, 30% of resets replay a
+# heuristic endgame prefix of a random maze (data/endgame_prefixes_all.json),
+# eps 0.1 -> 0.02 over 2M, PER, 20M steps, async envs + learner thread.
+# Eval every 2M: 20 games from level 1 (seeds 1000..1019, selection: mean
+# levels cleared, ties by the lowest per-maze share) and 20 games started on
+# each of the 16 mazes (stopped once cleared, cut at 10000 ticks).
+base: dqn_mm_wide.yaml
+total_steps: 20000000
+epsilon_start: 0.1
+epsilon_end: 0.02
+epsilon_steps: 2000000
+warm_start: 300000
+warm_start_agent: runs/bc0/bc_best.pt
+init_conv_from: runs/bc0/bc_best.pt
+freeze_conv_steps: 500000
+best_metric: levels_cleared_min_maze
+eval_every: 2000000
+eval_levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+eval_level_episodes: 20
+eval_level_max_steps: 10000
+eval_envs: 20
+# the buffer is not saved (2 x 3.3 GB against ~14 GB free disk); a --resume
+# refills it before learning again
+checkpoint_buffer: false
+num_envs: 16
+vector_env: async
+async_learner: true
+env_config:
+  start_level: random:1-16
+  prefix_prob: 0.3
+  prefix_file: data/endgame_prefixes_all.json
+  reward:
+    death: -20.0

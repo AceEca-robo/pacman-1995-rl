@@ -1,0 +1,3 @@
+# rl_bc.yaml without the conv freeze: the BC convolutions train from the first update.
+base: rl_bc.yaml
+freeze_conv_steps: 0

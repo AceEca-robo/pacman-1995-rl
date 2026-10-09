@@ -810,3 +810,12 @@ RL), PARTIAL >= 30%.
   best_metric `levels_cleared_min_maze` (mean levels cleared from level 1,
   ties by the lowest per-maze clear share), `eval_level_max_steps` (cut for
   the per-maze eval games). Tests added; full pytest 77 passed.
+- 21:28 Heuristic on the final protocol for 16 mazes (`evaluate.py --levels
+  --episodes 100 --level-episodes 25 --stop-at-clear`, seeds 0..99 from
+  level 1, 0..24 per maze; `runs/levels/heuristic_v03_16.json`): per maze
+  80/84/72/80/88/80/80/96/56/80/72/80/68/72/56/88%, from level 1 mean 1.58
+  levels (median 1, max 6). The teacher's own minimum is 56% (mazes 9, 15).
+- 21:35 Probe of bc0 after epoch 4 (val acc 0.982; 20 games from level 1,
+  10 per maze): 30-80% per maze, 0.7 levels from level 1, 10% of level-1
+  games stuck to the 30000-tick cut. Configs for stage 2 written
+  (`configs/rl_bc.yaml`, `configs/rl_bc_nofreeze.yaml`).
