@@ -886,3 +886,8 @@ RL), PARTIAL >= 30%.
   (`--every 10000000 --min-speed 1500`, log/state in `runs/sv_rlbc/`): one
   --resume per run on a crash. Buffers are not checkpointed (disk), so a
   resume refills the buffer with the Q policy before learning.
+- 00:05 Eval @2M (20 games from level 1, 20 per maze): rl_bc0 food 118 per
+  game, rl_bc1 110, 0 levels and 0% on all 16 mazes for both (BC: ~160
+  food per maze game, ~66% clears). The fresh Q heads have not recovered
+  the BC policy yet. Speed with both unfrozen ~1.55k steps/s each
+  (20M expected ~03:40).
