@@ -1,0 +1,18 @@
+# DAgger iteration 1: bc0 fine-tuned on the heuristic data + 1M steps of
+# bc0's own play (eps 0.02) labelled by the heuristic.
+train_data: [runs/bc_data/train_w*.npz, runs/bc_data/dagger1_w*.npz]
+val_data: [runs/bc_data/val_w*.npz]
+init_checkpoint: runs/bc0/bc_best.pt
+epochs: 4
+batch_size: 512
+lr: 0.0003
+class_weights: auto
+imbalance_ratio: 2.0
+min_class_share: 0.01
+n_actions: 5
+network:
+  conv_channels: [64, 128, 128]
+  conv_kernels: [3, 3, 3]
+  conv_strides: [1, 2, 2]
+  vec_hidden: 64
+  hidden: 1024

@@ -819,3 +819,23 @@ RL), PARTIAL >= 30%.
   10 per maze): 30-80% per maze, 0.7 levels from level 1, 10% of level-1
   games stuck to the 30000-tick cut. Configs for stage 2 written
   (`configs/rl_bc.yaml`, `configs/rl_bc_nofreeze.yaml`).
+- 21:41 bc0 finished: val acc 0.986 (epoch 10 = best; per class U/D/L/R
+  0.990 / 0.984 / 0.981 / 0.989, N 0.76 on its 29 labels), 95-105 s per
+  epoch. Final protocol (seeds 0..99 from level 1, 25 games per maze):
+  - eps 0: per maze 72/72/56/72/72/72/72/80/36/80/44/64/60/52/36/76%
+    (min 36%: mazes 9, 15), from level 1 mean 0.95 levels (median 1, max 4).
+  - eps 0.02: 32/44/32/52/52/48/56/84/32/32/28/36/36/44/36/52% (min 28%:
+    maze 11), from level 1 mean 0.40. A random action costs much more than
+    for the heuristic (probably steps into ghosts the BC would have fled).
+  Already PARTIAL at eps 0, but maze 11 < 30% at eps 0.02 -> DAgger, as
+  the plan says ("anywhere < 30%").
+- 21:46 DAgger iteration 1: bc0 plays (eps 0.02, `gen_bc_data.py
+  --checkpoint`), the heuristic labels, 1M steps on seeds 300000..; then
+  bc0 is fine-tuned on train + dagger1 (4M) for 4 epochs.
+- 21:58 dagger1 data: 1M steps of bc0's play (eps 0.02, 16 CPU workers,
+  11 min; ~1500 games, so ~650 steps per game), heuristic labels U/D/L/R/N
+  0.272 / 0.234 / 0.252 / 0.240 / 0.001. (Worker seeds 300000 + w * 100000 + k
+  overlap the train shards' seed ranges; the maze per game and the policy
+  differ, and no eval seed is used.) Fine-tune bc0_dagger1 started
+  (`configs/bc_dagger1.yaml`). `scripts/v03_16_report.py`: 16-maze verdict
+  (SUCCESS >= 50% on each, PARTIAL >= 30%), table and plot.
