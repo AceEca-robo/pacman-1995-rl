@@ -735,7 +735,7 @@ the training evals breaks the tie, 0.081 vs 0.034):
 Games from level 1 (100, seeds 0..99): heuristic 383 food, level 1 cleared
 82%; BC 291 food, 64%, 3% cut at 30000 ticks (bc0: 282, 68%); RL 20M 159
 food, 5%, 3 lives lost in ~550 ticks on average; RL 36M 210 food, 30%, 1%
-cut. Mean of the 16 per-maze shares: heuristic 78%, BC 66%, RL 20M 12%,
+cut. Mean of the 16 per-maze shares: heuristic 77%, BC 66%, RL 20M 12%,
 RL 36M 30%.
 
 Beyond the plan, rl_bc0 was continued with `--resume --extend-steps`
