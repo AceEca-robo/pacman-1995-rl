@@ -1,0 +1,7 @@
+# smoke2m_pool64.yaml with the speed setting: 24 envs, batch 128 every 32
+# env steps (the same 4 samples per env step), fast_learner.
+base: smoke2m_pool64.yaml
+num_envs: 24
+batch_size: 128
+train_every: 32
+fast_learner: true

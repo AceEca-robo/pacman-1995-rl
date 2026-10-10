@@ -1,0 +1,4 @@
+# speed_pool32.yaml with 48 envs, 32 results per actor batch.
+base: speed_pool32.yaml
+num_envs: 48
+pool_min_ready: 32

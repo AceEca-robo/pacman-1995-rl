@@ -1,0 +1,10 @@
+# smoke2m_thread.yaml with the learner process and the env pool (x16), the
+# same batch 64 / train_every 16; CPU pinning as configs/speed_proc_pin.yaml.
+base: smoke2m_thread.yaml
+async_learner: false
+learner_process: true
+vector_env: pool
+cpu_affinity:
+  actor: [4, 5]
+  learner: [6, 7]
+  envs: [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]

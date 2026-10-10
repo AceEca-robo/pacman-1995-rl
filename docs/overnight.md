@@ -1068,3 +1068,53 @@ extended, not restarted. This session only prepares it (no training).
   on disk, run finished at 60M). Full pytest on an idle machine: 77 passed,
   including `test_close_leaves_nothing` (the 05:53 failure was the race with
   the concurrent training run).
+- 13:25 **Part A, learner in its own process.** Where the time went (wide
+  network, 16 mazes): one learner update at batch 64 is ~4.6 ms of GPU
+  (conv backward 1.2 ms, fused Adam over the 7.5M parameters 0.9 ms), so
+  batch 64 / train_every 16 tops out at ~217 updates/s = ~3.5k steps/s on
+  this GPU whatever the process layout; batch 128 / train_every 32 (the same
+  4 samples per env step) with fast_learner reaches 202 updates/s = 6.4k.
+  The acting loop alone (no learning, trained policy) ran only 3.3-3.7k
+  steps/s: env workers' waits, gymnasium's info merging and packing the float
+  grids in the main process.
+- 13:40 Built (agents/shared_replay.py, agents/learner_proc.py): a frame
+  replay in shared memory (one ring per env, each observation stored once,
+  transitions point to s_{t+1} and s_{t+n}; half the memory of the old
+  buffer and what DQfD's 1-step loss needs), written by the actor; the
+  learner process owns the PER tree, registers new slots and clears slots
+  ahead of each writer; weights pushed to the actor's copy every 50 updates
+  (seqlock in shared memory); grids packed inside the env workers
+  (PackedObs). First numbers (400k-step runs from the BC convs,
+  `configs/speed_*.yaml`): process + AsyncVectorEnv x16 3.4k (batch 64,
+  GPU-bound) / 3.9k (batch 128).
+- 13:50 The CPU is a hybrid i7-13650HX (cpus 0-11 = 6 P-cores x 2 threads,
+  12-19 = E-cores): pinning the actor and the learner to a P-core each and
+  the envs to the rest (`cpu_affinity`) doubled the acting loop alone (3.4k
+  -> 6.9k steps/s). With learning: 4.15k (batch 128).
+- 13:55 Resets stall the vector env: a reset costs 13 ms (new game process)
+  or 24 ms (endgame prefix replay), a step 0.06 ms, and AsyncVectorEnv waits
+  for all 16 envs every step. agents/env_pool.py steps each env on its own
+  (the actor acts on whichever envs have results, at least half of them):
+  4.5k (x16), 5.0k (x24).
+- 13:59-14:45 **Smoke 2M, same seed (0), rl_bc.yaml** (BC convs frozen to
+  500k, warm start 300k BC steps): learner thread (as rl_bc0) vs learner
+  process + env pool at batch 64 / 16 vs at batch 128 / 32 (24 envs) vs the
+  same with 16 results per actor batch. Training episode reward per 250k
+  steps and evals agree within noise (2.0M: food 139 / 134 / 143 / 151;
+  last 250k mean episode reward 93 / 81 / 94 / 106): no degradation.
+  Speed (mean from 300k): 2,627 / 3,077 / 4,484 / 4,482 steps/s
+  (`docs/smoke_learner_process.png`, `scripts/compare_smoke.py`).
+- 14:50 Both batch-128 runs fall from ~5.1k to ~4.4k at 500k, when the
+  convolutions unfreeze. New per-line timings in the log (`q` / `env` ms per
+  actor batch) show why: next to the learner the actor's forward pass takes
+  ~3 ms (0.57 ms alone; the two processes' CUDA contexts time-slice the
+  GPU), independent of the batch size; TF32 for the actor and channels_last
+  changed nothing. Larger actor batches amortize it (convs trainable, 400k
+  runs): 24 envs / 16 per batch 4.39k, 32 / 24 5.0k, 48 / 32 5.27k (learner
+  busy 91%, the actor waits 14%: the learner's GPU is the limit). DQfD uses
+  32 / 24. Batch 256 / 64 would add only ~9% per sample on the GPU: not
+  taken.
+- 15:10 Full pytest: 88 passed (new: tests/test_shared_replay.py — frames
+  equal NStep's transitions, ring overwrite consistency, demo not evicted,
+  demo save/load, margin loss, env pool equals the env; train tests for
+  learner_process and DQfD).

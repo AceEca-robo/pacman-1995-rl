@@ -1,0 +1,6 @@
+# speed_proc.yaml with batch 128 every 32 env steps (the same 4 samples per
+# env step) and fast_learner (cudnn autotuning).
+base: speed_proc.yaml
+batch_size: 128
+train_every: 32
+fast_learner: true

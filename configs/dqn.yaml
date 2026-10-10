@@ -6,6 +6,12 @@ vector_env: sync            # sync: SyncVectorEnv (deterministic); async: AsyncV
 async_learner: false        # gradient steps in a thread next to acting (scripts/train.py BackgroundLearner); not deterministic
 async_max_lag: 4            # async_learner: acting waits while more updates than this are pending
 fast_learner: false         # async_learner runs: online(s') in a no-grad pass, cudnn.benchmark, bf16 acting forward passes
+learner_process: false      # the learner in its own process, replay frames in shared memory (agents/learner_proc.py, agents/shared_replay.py); not deterministic
+                            # vector_env "pool" (learner_process only): agents/env_pool.py, envs step without a barrier
+pool_min_ready: null        # pool: results to wait for per actor batch; null = num_envs / 2
+weight_sync_every: 50       # learner_process: updates between pushes of the online weights to the actor
+replay_guard: 1024          # learner_process: free slots kept ahead of each env's writer (< buffer_size / num_envs)
+cpu_affinity: null          # {actor: [cpus], learner: [cpus], envs: [cpus]} (os.sched_setaffinity); null = off
 env_config: null            # null = configs/env_default.yaml
 
 buffer_size: 500000
@@ -32,6 +38,13 @@ warm_start_agent: heuristic     # or a BC checkpoint (scripts/train_bc.py), whic
 # config); the rest of the Q network starts fresh. null = off.
 init_conv_from: null
 freeze_conv_steps: 0        # keep those convolutions fixed for this many env steps
+
+# DQfD (Hester et al. 2018; learner_process only): demo transitions of a BC
+# agent in the replay for good, phase 0 = pretrain_updates updates on them
+# alone, then RL; loss = lambda_nstep * n-step TD + lambda_1step * 1-step TD
+# + lambda_margin * large-margin (demo samples only) + L2 (configs/dqfd.yaml).
+dqfd:
+  enabled: false
 
 # Prioritized replay, proportional variant.
 per:

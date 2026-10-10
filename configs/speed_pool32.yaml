@@ -1,0 +1,6 @@
+# speed_pool24_mr16_nofreeze.yaml with 32 envs, 24 results per actor batch:
+# the actor's forward pass waits ~3 ms for its GPU time slice next to the
+# learner whatever the batch size, so larger batches amortize it.
+base: speed_pool24_mr16_nofreeze.yaml
+num_envs: 32
+pool_min_ready: 24

@@ -1,0 +1,8 @@
+# Part A smoke (2026-10-10): rl_bc.yaml (16 mazes, wide network, BC convs
+# frozen for 500k, warm start 300k BC steps, PER, eps 0.1 -> 0.02) for 2M
+# steps with the learner thread (async_learner, AsyncVectorEnv x16) as
+# rl_bc0. Evals every 500k: 20 games from level 1, 10 per maze.
+base: rl_bc.yaml
+total_steps: 2000000
+eval_every: 500000
+eval_level_episodes: 10

@@ -27,7 +27,10 @@ from torch.utils.tensorboard import SummaryWriter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.bc import BCAgent  # noqa: E402
-from agents.dqn import DQNLearner, NStep, make_buffer, pack_grid, pack_grids  # noqa: E402
+from agents.dqn import DQNLearner, NStep, make_buffer, n_planes, pack_grid, pack_grids  # noqa: E402
+from agents.env_pool import EnvPool  # noqa: E402
+from agents.learner_proc import LearnerProcess  # noqa: E402
+from agents.shared_replay import SharedReplay, StreamWriter, make_packed_env  # noqa: E402
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
 from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims, parse_start_level  # noqa: E402
 
@@ -87,6 +90,11 @@ class Collector:
             if cells else None
         self.tracked = 0  # pacman steps on track_cells since last read
         self.prefixed = 0  # episodes started from an endgame prefix since last read
+        self.ids = np.arange(self.n)  # envs waiting for an action (all, for vector envs)
+        self.last_n = self.n  # env steps taken by the last step()
+
+    def set_start_level(self, spec):
+        self.envs.call("set_start_level", spec)
 
     def step(self, actions, log_step, prefix="episode"):
         """Returns the number of episodes that ended."""
@@ -135,6 +143,132 @@ class Collector:
     def add(self, transitions):
         with self.lock:
             self.buffer.add_batch(transitions)
+
+
+class FrameCollector(Collector):
+    """learner_process: the envs return bit-packed grids
+    (agents/shared_replay.py PackedObs) and every step goes into a
+    StreamWriter (frames in the shared replay). Same episode logging."""
+
+    def __init__(self, envs, cfg, stream, writer, seed):
+        if cfg.get("track_cells"):
+            raise ValueError("track_cells needs the float grid (not with learner_process)")
+        self.envs, self.writer, self.lock = envs, writer, contextlib.nullcontext()
+        self.buffer = stream  # .size: transitions written (warm_start's report)
+        self.n = envs.num_envs
+        self.obs, info = envs.reset(seed=seed)
+        self.cur = self.obs["grid"]
+        stream.begin(self.cur, self.obs["vec"])
+        self.ep_reward = np.zeros(self.n)
+        self.ep_len = np.zeros(self.n, int)
+        self.ep_start = np.array(info["level"], int)
+        self.ep_level = self.ep_start.copy()
+        self.ended = self.hungry = 0
+        self.track, self.tracked, self.prefixed = None, 0, 0
+        self.ids, self.last_n = np.arange(self.n), self.n
+
+    def step(self, actions, log_step, prefix="episode"):
+        nobs, rew, term, trunc, info = self.envs.step(actions)
+        ended = np.flatnonzero(term | trunc)
+        fin = [info["final_obs"][i] for i in ended]
+        self.buffer.step(actions, rew, nobs["grid"], nobs["vec"], term, trunc,
+                         np.stack([f["grid"] for f in fin]) if fin else None,
+                         np.stack([f["vec"] for f in fin]) if fin else None)
+        self.ep_reward += rew
+        self.ep_len += 1
+        live = ~(term | trunc)  # ended envs: info["level"] is the next episode's
+        self.ep_level[live] = np.maximum(self.ep_level[live], info["level"][live])
+        for i in ended:
+            src = info["final_info"]
+            level = max(int(self.ep_level[i]), int(src["level"][i]))
+            if "prefix" in info and info["_prefix"][i] and info["prefix"][i] >= 0:
+                self.prefixed += 1
+            hunger = bool(src["hunger"][i]) if "hunger" in src else False
+            self.ended += 1
+            self.hungry += hunger
+            w = self.writer
+            w.add_scalar(f"{prefix}/hunger", float(hunger), log_step)
+            w.add_scalar(f"{prefix}/reward", self.ep_reward[i], log_step)
+            w.add_scalar(f"{prefix}/score", src["score"][i], log_step)
+            w.add_scalar(f"{prefix}/length", self.ep_len[i], log_step)
+            w.add_scalar(f"{prefix}/level_reached", level, log_step)
+            w.add_scalar(f"{prefix}/start_level", self.ep_start[i], log_step)
+            w.add_scalar(f"{prefix}/levels_cleared", level - self.ep_start[i], log_step)
+            self.ep_reward[i], self.ep_len[i] = 0.0, 0
+            self.ep_start[i] = self.ep_level[i] = info["level"][i]
+        self.cur, self.obs = nobs["grid"], nobs
+        return len(ended)
+
+
+class PoolCollector(FrameCollector):
+    """FrameCollector over agents/env_pool.py EnvPool: step() sends actions
+    to the envs in self.ids and returns once the next envs have results
+    (they become self.ids); envs step independently, no barrier."""
+
+    def __init__(self, pool, cfg, stream, writer, seed):
+        if cfg.get("track_cells"):
+            raise ValueError("track_cells needs the float grid (not with learner_process)")
+        self.envs, self.writer, self.lock = pool, writer, contextlib.nullcontext()
+        self.buffer = stream
+        self.n = pool.n
+        pool.drain()
+        grids, vecs, infos = pool.reset(seed=seed)
+        self.cur, self.obs = grids, {"vec": vecs}
+        stream.begin(grids, vecs)
+        self.ep_reward = np.zeros(self.n)
+        self.ep_len = np.zeros(self.n, int)
+        self.ep_start = np.array([inf["level"] for inf in infos], int)
+        self.ep_level = self.ep_start.copy()
+        self.ended = self.hungry = 0
+        self.track, self.tracked, self.prefixed = None, 0, 0
+        self.ids, self.last_n = np.arange(self.n), 0
+        self.actions = np.zeros(self.n, np.int64)  # last action sent to each env
+
+    def set_start_level(self, spec):
+        self.envs.call_async("set_start_level", spec)
+
+    def step(self, actions, log_step, prefix="episode"):
+        pool = self.envs
+        self.actions[self.ids] = actions
+        pool.send(self.ids, actions)
+        ids, res = pool.recv()
+        rew = np.array([x[0] for x in res])
+        term = np.array([x[1] for x in res])
+        trunc = np.array([x[2] for x in res])
+        fin = [x[4] for x in res if x[4] is not None]
+        grids, vecs = pool.grid[ids], pool.vec[ids]
+        self.buffer.step(self.actions[ids], rew, grids, vecs, term, trunc,
+                         np.stack([f[0] for f in fin]) if fin else None,
+                         np.stack([f[1] for f in fin]) if fin else None, ids=ids)
+        self.cur[ids], self.obs["vec"][ids] = grids, vecs
+        self.ep_reward[ids] += rew
+        self.ep_len[ids] += 1
+        n_ended = 0
+        w = self.writer
+        for j, i in enumerate(ids):
+            info, final = res[j][3], res[j][4]
+            if final is None:
+                self.ep_level[i] = max(self.ep_level[i], info["level"])
+                continue
+            n_ended += 1
+            src = final[2]
+            level = max(int(self.ep_level[i]), int(src["level"]))
+            if info.get("prefix", -1) >= 0:
+                self.prefixed += 1
+            hunger = bool(src.get("hunger", False))
+            self.ended += 1
+            self.hungry += hunger
+            w.add_scalar(f"{prefix}/hunger", float(hunger), log_step)
+            w.add_scalar(f"{prefix}/reward", self.ep_reward[i], log_step)
+            w.add_scalar(f"{prefix}/score", src["score"], log_step)
+            w.add_scalar(f"{prefix}/length", self.ep_len[i], log_step)
+            w.add_scalar(f"{prefix}/level_reached", level, log_step)
+            w.add_scalar(f"{prefix}/start_level", self.ep_start[i], log_step)
+            w.add_scalar(f"{prefix}/levels_cleared", level - self.ep_start[i], log_step)
+            self.ep_reward[i], self.ep_len[i] = 0.0, 0
+            self.ep_start[i] = self.ep_level[i] = info["level"]
+        self.ids, self.last_n = ids, len(ids)
+        return n_ended
 
 
 class BackgroundLearner(threading.Thread):
@@ -272,15 +406,77 @@ def warm_start(collector, cfg, device):
     done, t0 = 0, time.perf_counter()
     while done < cfg["warm_start"]:
         obs = collector.obs
+        ids = collector.ids
         if kind == "heuristic":
             actions = np.array([agent.act({"grid": obs["grid"][i], "vec": obs["vec"][i]})
-                                for i in range(collector.n)])
+                                for i in ids])
         else:
-            actions = agent.act_batch(collector.cur, obs["vec"])
+            actions = agent.act_batch(collector.cur[ids], obs["vec"][ids])
         collector.step(actions, done, prefix="warm_start")
-        done += collector.n
+        done += collector.last_n
     print(f"warm start: {done} {kind} steps, buffer {collector.buffer.size} "
           f"({time.perf_counter() - t0:.0f} s)", flush=True)
+
+
+def generate_demo(make_collector, cfg, replay, n_actions, seed, device):
+    """DQfD: the demo agent (a BC checkpoint, greedy unless demo_epsilon)
+    plays in the training envs until the demo streams hold
+    dqfd.demo_transitions transitions (or a stream is full)."""
+    dq = cfg["dqfd"]
+    agent = BCAgent(os.path.join(ROOT, dq["demo_agent"]), device=device)
+    stream = StreamWriter(replay, range(replay.n_demo), cfg["n_step"], cfg["gamma"])
+    col = make_collector(stream, 10**9 + seed)
+    rng = np.random.default_rng([seed, 7])
+    t0, steps, eps = time.perf_counter(), 0, dq.get("demo_epsilon") or 0.0
+    while stream.size < dq["demo_transitions"] and not stream.full():
+        ids = col.ids
+        actions = agent.act_batch(col.cur[ids], col.obs["vec"][ids])
+        rand = rng.random(len(ids)) < eps
+        actions[rand] = rng.integers(n_actions, size=int(rand.sum()))
+        col.step(actions, steps, prefix="demo")
+        steps += col.last_n
+        if steps % 100_000 < col.last_n:
+            print(f"demo: {steps} steps, {stream.size} transitions "
+                  f"({time.perf_counter() - t0:.0f} s)", flush=True)
+    print(f"demo: {stream.size} transitions of {dq['demo_agent']} "
+          f"({time.perf_counter() - t0:.0f} s)", flush=True)
+
+
+def pretrain(bg, cfg, writer, evaluate_fn):
+    """DQfD phase 0: dqfd.pretrain_updates updates on the demo transitions
+    only (no env steps; the agent streams are still empty), target sync every
+    pretrain_target_update updates. Returns the eval summary at the end."""
+    dq = cfg["dqfd"]
+    total, tu = dq["pretrain_updates"], dq["pretrain_target_update"]
+    log_every = dq.get("pretrain_log_every") or 10000
+    beta = cfg["per"]["beta_start"] if cfg["per"]["enabled"] else None
+    t0, done = time.perf_counter(), bg.n_updates
+    t_log, d_log = t0, done
+    while done < total:
+        chunk = min(tu - done % tu, total - done)
+        bg.give(chunk, beta)  # returns with <= async_max_lag updates pending
+        bg.drain()
+        done = bg.n_updates
+        if done % tu == 0:
+            bg.request_target_sync()
+        if done % log_every == 0 or done >= total:
+            losses, qs, _ = bg.take_stats()
+            now = time.perf_counter()
+            ups = (done - d_log) / (now - t_log)
+            msg = f"pretrain {done:>7} updates  {ups:,.0f} updates/s"
+            if losses:
+                loss_m, q_m = losses[0].item(), qs[0].item()
+                writer.add_scalar("pretrain/loss", loss_m, done)
+                writer.add_scalar("pretrain/mean_q", q_m, done)
+                writer.add_scalar("pretrain/margin_loss", bg.last_margin_loss, done)
+                msg += f"  loss {loss_m:.4f}  Q {q_m:.2f}  margin {bg.last_margin_loss:.4f}"
+            print(msg, flush=True)
+            t_log, d_log = now, done
+        if dq.get("pretrain_eval_every") and done % dq["pretrain_eval_every"] == 0 \
+                and done < total:
+            evaluate_fn(f"pretrain@{done}")
+    print(f"pretrain: {done} updates ({time.perf_counter() - t0:.0f} s)", flush=True)
+    return evaluate_fn("pretrain")
 
 
 def eval_tasks(cfg):
@@ -388,6 +584,8 @@ def main():
     p.add_argument("--resume", action="store_true", help="continue runs/<run-name>/checkpoint.pt")
     p.add_argument("--extend-steps", type=int, default=0,
                    help="with --resume: add this many steps to the run's total_steps")
+    p.add_argument("--pretrain-only", action="store_true",
+                   help="dqfd: stop after phase 0 (checkpoint.pt; --resume continues with RL)")
     args = p.parse_args()
 
     run_dir = os.path.join(ROOT, "runs", args.run_name)
@@ -426,43 +624,66 @@ def main():
     if cfg.get("eval_max_episode_steps"):
         eval_env_cfg["max_episode_steps"] = cfg["eval_max_episode_steps"]
     n_channels, vec_dim = obs_dims(env_cfg)
-    learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
-    buffer = make_buffer(cfg, n_channels, vec_dim)
+    proc = bool(cfg.get("learner_process"))
+    dq = cfg.get("dqfd") or {}
+    if dq.get("enabled") and not proc:
+        sys.exit("dqfd needs learner_process: true")
+    if proc and cfg["warm_start"] and (cfg.get("warm_start_agent") or "heuristic") == "heuristic":
+        sys.exit("learner_process: the warm start agent must be a BC checkpoint")
     rng = np.random.default_rng(seed)
     steps = n_updates = episodes = 0
     best = -np.inf
+    init = {}  # initial weights: applied here, or in the learner process (proc)
     if not ck and cfg.get("init_checkpoint"):
         # fine-tune: start from another run's network (online and target);
         # optimizer, buffer, step counts and schedules start fresh
-        init = torch.load(os.path.join(ROOT, cfg["init_checkpoint"]), map_location=device,
-                          weights_only=False)
-        if init.get("n_actions", 5) != n_actions or \
-                obs_dims(init.get("env_config") or {}) != (n_channels, vec_dim):
+        ick = torch.load(os.path.join(ROOT, cfg["init_checkpoint"]), map_location="cpu",
+                         weights_only=False)
+        if ick.get("n_actions", 5) != n_actions or \
+                obs_dims(ick.get("env_config") or {}) != (n_channels, vec_dim):
             sys.exit(f"{cfg['init_checkpoint']} does not match this env's actions/observation")
-        learner.online.load_state_dict(init["learner"]["online"])
-        learner.target.load_state_dict(init["learner"]["online"])
-        print(f"initialized from {cfg['init_checkpoint']} ({init['steps']} steps)")
+        init["online"] = ick["learner"]["online"]
+        print(f"initialized from {cfg['init_checkpoint']} ({ick['steps']} steps)")
     if not ck and cfg.get("init_conv_from"):
         # the convolutions of a BC network (agents/bc.py, same layer names);
         # the vec, fc and Q heads keep their fresh initialization
-        bc = torch.load(os.path.join(ROOT, cfg["init_conv_from"]), map_location=device,
+        bc = torch.load(os.path.join(ROOT, cfg["init_conv_from"]), map_location="cpu",
                         weights_only=False)
-        conv = {k[len("conv."):]: v for k, v in bc["net"].items() if k.startswith("conv.")}
-        learner.online.conv.load_state_dict(conv)
-        learner.target.conv.load_state_dict(conv)
+        init["conv"] = {k[len("conv."):]: v for k, v in bc["net"].items() if k.startswith("conv.")}
         print(f"convolutions from {cfg['init_conv_from']}")
     if ck:
-        learner.load_state_dict(ck["learner"])
+        init["learner"] = ck["learner"]
         steps, n_updates, episodes, best = ck["steps"], ck["n_updates"], ck["episodes"], ck["best"]
         rng.bit_generator.state = ck["rng"]
         torch.set_rng_state(ck["torch_rng"].cpu())  # map_location moved it to the device
-        if os.path.exists(buf_path):
+    n = cfg["num_envs"]
+    learner = buffer = replay = None
+    if proc:
+        # frames in shared memory: one ring per env, plus the demo streams
+        demo_sizes = []
+        if dq.get("enabled"):
+            per_stream = int(np.ceil(dq["demo_transitions"] / n * 1.1)) + 64
+            demo_sizes = [per_stream] * n
+        replay = SharedReplay.create([cfg["buffer_size"] // n] * n, demo_sizes,
+                                     n_planes(n_channels), vec_dim)
+    else:
+        learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
+        if "online" in init:
+            learner.online.load_state_dict(init["online"])
+            learner.target.load_state_dict(init["online"])
+        if "conv" in init:
+            learner.online.conv.load_state_dict(init["conv"])
+            learner.target.conv.load_state_dict(init["conv"])
+        if "learner" in init:
+            learner.load_state_dict(init["learner"])
+        buffer = make_buffer(cfg, n_channels, vec_dim)
+        if ck and os.path.exists(buf_path):
             with np.load(buf_path) as z:
                 buffer.load_state_dict(z)
-        print(f"resumed at {steps} steps, buffer {buffer.size}")
+    if ck:
+        print(f"resumed at {steps} steps, buffer {buffer.size if buffer else 0}")
     writer = SummaryWriter(run_dir, purge_step=steps if ck else None)
 
-    n = cfg["num_envs"]
     level_spec = start_level_at(cfg, steps)
     if level_spec is not None:
         parse_start_level(level_spec)  # fail now, not hours later
@@ -470,70 +691,182 @@ def main():
         for _, spec in cfg["start_level_schedule"]:
             parse_start_level(spec)
         print(f"start_level {level_spec}")
-    make = functools.partial(PacmanEnv, config=env_cfg)
-    if cfg.get("vector_env", "sync") == "async":
-        # one process per env copy, observations through shared memory
-        envs = gym.vector.AsyncVectorEnv([make] * n, shared_memory=True,
-                                         autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+    if proc:  # the grid is packed in the env workers
+        make = functools.partial(make_packed_env, env_cfg, n_planes(n_channels))
     else:
-        envs = gym.vector.SyncVectorEnv([make] * n, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
-    eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(cfg.get("eval_envs") or n)]
-    # a resumed run must not replay the same games
-    bg = None
-    if cfg.get("async_learner"):
-        bg = BackgroundLearner(learner, buffer, cfg, np.random.default_rng([seed, steps, 1]))
-        bg.n_updates = n_updates
-    col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps,
-                    lock=bg.buffer_lock if bg else None)
-    if not ck and cfg["warm_start"]:
-        warm_start(col, cfg, device)
-    per = cfg["per"]["enabled"]
-    min_buffer = min(cfg["learning_starts"], cfg["buffer_size"]) if ck else cfg["batch_size"]
-
-    freeze_steps = cfg.get("freeze_conv_steps") or 0
-    conv_frozen = steps < freeze_steps
-    if conv_frozen:
-        learner.request_conv_trainable(False)
-        print(f"convolutions frozen until {freeze_steps} steps")
-    losses, qs = [], []
-    update_credit = 0.0
-    next_target = (steps // cfg["target_update"] + 1) * cfg["target_update"]
-    next_log = (steps // cfg["log_every"] + 1) * cfg["log_every"]
-    next_eval = (steps // cfg["eval_every"] + 1) * cfg["eval_every"]
-    t_log, s_log = time.perf_counter(), steps
-    print(f"run {run_dir}, device {device}, buffer {buffer.nbytes / 1e9:.2f} GB"
-          + (f", {cfg.get('vector_env', 'sync')} envs x{n}" + (", async learner" if bg else "")))
-    if bg:
-        bg.start()
-
+        make = functools.partial(PacmanEnv, config=env_cfg)
+    envs = bg = None
+    eval_envs = []
+    aff = cfg.get("cpu_affinity") or {}
     try:
+        if aff.get("envs"):  # the env workers (and the games they start) inherit it
+            os.sched_setaffinity(0, aff["envs"])
+        if cfg.get("vector_env", "sync") == "pool":
+            if not proc:
+                sys.exit("vector_env pool needs learner_process: true")
+            envs = EnvPool(make, n, n_planes(n_channels), vec_dim, n_actions,
+                           min_ready=cfg.get("pool_min_ready"))
+        elif cfg.get("vector_env", "sync") == "async":
+            # one process per env copy, observations through shared memory
+            envs = gym.vector.AsyncVectorEnv([make] * n, shared_memory=True,
+                                             autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+        else:
+            envs = gym.vector.SyncVectorEnv([make] * n,
+                                            autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+        eval_envs = [PacmanEnv(config=eval_env_cfg) for _ in range(cfg.get("eval_envs") or n)]
+        if aff.get("actor"):
+            os.sched_setaffinity(0, aff["actor"])
+        # a resumed run must not replay the same games
+        if proc:
+            bg = LearnerProcess(cfg, device, (n_actions, n_channels, vec_dim), replay, init,
+                                seed=seed * 1_000_000 + steps + 1, n_updates=n_updates)
+            actor, state_src = bg.actor, bg
+        else:
+            if cfg.get("async_learner"):
+                bg = BackgroundLearner(learner, buffer, cfg, np.random.default_rng([seed, steps, 1]))
+                bg.n_updates = n_updates
+            actor = state_src = learner
+
+        def save_state(extra=None):
+            state = {"config": cfg, "seed": seed, "n_actions": n_actions,
+                     "env_config": env_cfg, "learner": state_src.state_dict(),
+                     "steps": steps, "n_updates": bg.n_updates if bg else n_updates,
+                     "episodes": episodes, "best": best, "rng": rng.bit_generator.state,
+                     "torch_rng": torch.get_rng_state(), **(extra or {})}
+            return state
+
+        def run_eval(label=None):
+            """Evaluate the acting network, log, append to evals.jsonl;
+            -> (summary, best_metric value)."""
+            t0 = time.perf_counter()
+            all_res = evaluate(actor, eval_envs, cfg)
+            res = [r for r in all_res if "maze" not in r]  # games from level 1
+            metric = best_metric(cfg["best_metric"], res, [r for r in all_res if "maze" in r])
+            summary = {
+                "steps": steps,
+                "median_reward": float(np.median([r["reward"] for r in res])),
+                "mean_reward": float(np.mean([r["reward"] for r in res])),
+                "median_score": float(np.median([r["score"] for r in res])),
+                "mean_length": float(np.mean([r["length"] for r in res])),
+                "level1_cleared": float(np.mean([r["level"] >= 2 for r in res])),
+                "mean_food": float(np.mean([r["food"] for r in res])),
+                "mean_levels_cleared": float(np.mean([r["levels_cleared"] for r in res])),
+                "median_levels_cleared": float(np.median([r["levels_cleared"] for r in res])),
+            }
+            for lv in cfg.get("eval_levels") or []:
+                summary[f"maze{lv}_cleared"] = float(np.mean(
+                    [r["levels_cleared"] >= 1 for r in all_res if r.get("maze") == lv]))
+            if cfg.get("eval_levels"):
+                summary["min_maze_cleared"] = min(summary[f"maze{lv}_cleared"]
+                                                  for lv in cfg["eval_levels"])
+                summary["mean_maze_cleared"] = float(np.mean(
+                    [summary[f"maze{lv}_cleared"] for lv in cfg["eval_levels"]]))
+            tag = "eval" if label is None else "pretrain_eval"
+            x = steps if label is None else bg.n_updates
+            for k, v in summary.items():
+                if k != "steps":
+                    writer.add_scalar(f"{tag}/{k}", v, x)
+            row = {**summary, "episodes": all_res}
+            if label is not None:
+                row = {"phase": label, "updates": bg.n_updates, **row}
+            with open(os.path.join(run_dir, "evals.jsonl"), "a") as f:
+                f.write(json.dumps(row) + "\n")
+            print(f"eval @ {steps if label is None else label}: "
+                  + ", ".join(f"{k} {v:.2f}" for k, v in summary.items() if k != "steps")
+                  + f"  ({time.perf_counter() - t0:.0f} s)", flush=True)
+            return summary, metric
+
+        if proc:
+            cls = PoolCollector if isinstance(envs, EnvPool) else FrameCollector
+
+            def make_collector(stream, col_seed):
+                return cls(envs, cfg, stream, writer, seed=col_seed)
+
+            stream = StreamWriter(replay, range(replay.n_demo, replay.n_demo + n),
+                                  cfg["n_step"], cfg["gamma"])
+            if dq.get("enabled"):
+                demo_path = os.path.join(ROOT, dq["demo_file"]) if dq.get("demo_file") \
+                    else os.path.join(run_dir, "demo.npz")
+                if os.path.exists(demo_path):
+                    replay.load_demo(demo_path)
+                    print(f"demo: {replay.demo_transitions()} transitions from {demo_path}")
+                else:
+                    generate_demo(make_collector, cfg, replay, n_actions, seed, device)
+                    replay.save_demo(demo_path)
+                if not (ck and ck.get("pretrained")):
+                    summary, _ = pretrain(bg, cfg, writer, lambda label: run_eval(label))
+                    state = save_state({"pretrained": True, "eval": summary})
+                    save_atomic(state, os.path.join(run_dir, "pretrain.pt"), torch.save)
+                    save_atomic(state, ck_path, torch.save)
+                if args.pretrain_only:
+                    print("pretrain only: stopped before RL (--resume continues)")
+                    return
+            col = make_collector(stream, seed * 1_000_000 + steps)
+            fill = lambda: min(stream.size, n * (cfg["buffer_size"] // n))  # noqa: E731
+            nbytes = replay.nbytes
+        else:
+            col = Collector(envs, cfg, buffer, writer, seed=seed * 1_000_000 + steps,
+                            lock=bg.buffer_lock if bg else None)
+            fill = lambda: buffer.size  # noqa: E731
+            nbytes = buffer.nbytes
+        if not ck and cfg["warm_start"]:
+            warm_start(col, cfg, device)
+        per = cfg["per"]["enabled"]
+        min_buffer = min(cfg["learning_starts"], cfg["buffer_size"]) if ck else cfg["batch_size"]
+
+        freeze_steps = cfg.get("freeze_conv_steps") or 0
+        conv_frozen = steps < freeze_steps
+        if conv_frozen:
+            state_src.request_conv_trainable(False)
+            print(f"convolutions frozen until {freeze_steps} steps")
+        losses, qs = [], []
+        update_credit = 0.0
+        next_target = (steps // cfg["target_update"] + 1) * cfg["target_update"]
+        next_log = (steps // cfg["log_every"] + 1) * cfg["log_every"]
+        next_eval = (steps // cfg["eval_every"] + 1) * cfg["eval_every"]
+        t_log, s_log = time.perf_counter(), steps
+        t_act = t_env = 0.0  # acting loop: forward passes / env steps + replay writes
+        n_iter = 0
+        print(f"run {run_dir}, device {device}, buffer {nbytes / 1e9:.2f} GB"
+              + f", {cfg.get('vector_env', 'sync')} envs x{n}"
+              + (", learner process" if proc else ", async learner" if bg else ""))
+        if bg:
+            bg.start()
+
         while steps < cfg["total_steps"]:
             eps = epsilon(cfg, steps)
-            actions = rng.integers(n_actions, size=n)
-            greedy = rng.random(n) >= eps
+            ids = col.ids  # all envs, or (pool) those with results in
+            actions = rng.integers(n_actions, size=len(ids))
+            greedy = rng.random(len(ids)) >= eps
+            t_a = time.perf_counter()
             if greedy.any():
-                q = learner.q_values(col.cur[greedy], col.obs["vec"][greedy])
+                g = ids[greedy]
+                q = actor.q_values(col.cur[g], col.obs["vec"][g])
                 actions[greedy] = q.argmax(1)
+            t_b = time.perf_counter()
             episodes += col.step(actions, steps)
-            steps += n
+            t_act += t_b - t_a
+            t_env += time.perf_counter() - t_b
+            n_iter += 1
+            steps += col.last_n
             if conv_frozen and steps >= freeze_steps:
                 conv_frozen = False
-                learner.request_conv_trainable(True)
+                state_src.request_conv_trainable(True)
                 print(f"{steps:>9} steps  convolutions unfrozen", flush=True)
             spec = start_level_at(cfg, steps)
             if spec != level_spec:  # curriculum: from the envs' next reset on
                 level_spec = spec
-                envs.call("set_start_level", spec)
+                col.set_start_level(spec)
                 writer.add_text("train/start_level", str(spec), steps)
                 print(f"{steps:>9} steps  start_level {spec}", flush=True)
 
             # after a resume without a saved buffer, refill it first
-            if steps >= cfg["learning_starts"] and buffer.size >= min_buffer:
+            if steps >= cfg["learning_starts"] and fill() >= min_buffer:
                 beta = per_beta(cfg, steps) if per else None
                 if bg:
-                    bg.give(n / cfg["train_every"], beta)
+                    bg.give(col.last_n / cfg["train_every"], beta)
                 else:
-                    update_credit += n / cfg["train_every"]
+                    update_credit += col.last_n / cfg["train_every"]
                 while not bg and update_credit >= 1:
                     batch, idx, weights = buffer.sample(rng, cfg["batch_size"], beta)
                     loss, mq, td = learner.update(batch, weights)
@@ -555,7 +888,7 @@ def main():
                 sps = (steps - s_log) / (now - t_log)
                 writer.add_scalar("train/epsilon", eps, steps)
                 writer.add_scalar("perf/steps_per_sec", sps, steps)
-                writer.add_scalar("train/buffer_size", buffer.size, steps)
+                writer.add_scalar("train/buffer_size", fill(), steps)
                 if per:
                     writer.add_scalar("train/per_beta", per_beta(cfg, steps), steps)
                 msg = f"{steps:>9} steps  eps {eps:.3f}  {sps:,.0f} steps/s  episodes {episodes}"
@@ -569,6 +902,14 @@ def main():
                 if col.ended:
                     msg += f"  hunger {col.hungry}/{col.ended}"
                     col.ended = col.hungry = 0
+                if proc:
+                    wait, busy = bg.perf()
+                    writer.add_scalar("perf/actor_wait", wait, steps)
+                    writer.add_scalar("perf/learner_busy", busy, steps)
+                    msg += (f"  wait {wait:.0%} busy {busy:.0%}  q {t_act / n_iter * 1e3:.2f}"
+                            f" env {t_env / n_iter * 1e3:.2f} ms x{(steps - s_log) / n_iter:.1f}")
+                t_act = t_env = 0.0
+                n_iter = 0
                 if bg:
                     losses, qs, n_updates = bg.take_stats()
                 if losses:
@@ -577,6 +918,9 @@ def main():
                     writer.add_scalar("train/loss", loss_m, steps)
                     writer.add_scalar("train/mean_q", q_m, steps)
                     msg += f"  loss {loss_m:.4f}  Q {q_m:.2f}  updates {n_updates}"
+                    if dq.get("enabled"):
+                        writer.add_scalar("train/margin_loss", bg.last_margin_loss, steps)
+                        msg += f"  margin {bg.last_margin_loss:.4f}"
                     losses, qs = [], []
                 print(msg, flush=True)
                 next_log += cfg["log_every"]
@@ -586,55 +930,28 @@ def main():
                 if bg:  # a quiet learner while evaluating and saving
                     bg.drain()
                     n_updates = bg.n_updates
-                t0 = time.perf_counter()
-                all_res = evaluate(learner, eval_envs, cfg)
-                res = [r for r in all_res if "maze" not in r]  # games from level 1
-                metric = best_metric(cfg["best_metric"], res, [r for r in all_res if "maze" in r])
-                summary = {
-                    "steps": steps,
-                    "median_reward": float(np.median([r["reward"] for r in res])),
-                    "mean_reward": float(np.mean([r["reward"] for r in res])),
-                    "median_score": float(np.median([r["score"] for r in res])),
-                    "mean_length": float(np.mean([r["length"] for r in res])),
-                    "level1_cleared": float(np.mean([r["level"] >= 2 for r in res])),
-                    "mean_food": float(np.mean([r["food"] for r in res])),
-                    "mean_levels_cleared": float(np.mean([r["levels_cleared"] for r in res])),
-                    "median_levels_cleared": float(np.median([r["levels_cleared"] for r in res])),
-                }
-                for lv in cfg.get("eval_levels") or []:
-                    summary[f"maze{lv}_cleared"] = float(np.mean(
-                        [r["levels_cleared"] >= 1 for r in all_res if r.get("maze") == lv]))
-                if cfg.get("eval_levels"):
-                    summary["min_maze_cleared"] = min(summary[f"maze{lv}_cleared"]
-                                                      for lv in cfg["eval_levels"])
-                for k, v in summary.items():
-                    if k != "steps":
-                        writer.add_scalar(f"eval/{k}", v, steps)
-                with open(os.path.join(run_dir, "evals.jsonl"), "a") as f:
-                    f.write(json.dumps({**summary, "episodes": all_res}) + "\n")
-                print(f"eval @ {steps}: " + ", ".join(f"{k} {v:.2f}" for k, v in summary.items()
-                                                       if k != "steps")
-                      + f"  ({time.perf_counter() - t0:.0f} s)", flush=True)
-                state = {"config": cfg, "seed": seed, "n_actions": n_actions,
-                         "env_config": env_cfg, "learner": learner.state_dict(),
-                         "steps": steps, "n_updates": n_updates, "episodes": episodes,
-                         "best": max(best, metric), "rng": rng.bit_generator.state,
-                         "torch_rng": torch.get_rng_state()}
+                summary, metric = run_eval()
+                state = save_state({"best": max(best, metric),
+                                    "pretrained": bool(dq.get("enabled"))})
                 if metric > best:
                     best = metric
-                    save_atomic({**state, "eval": summary}, os.path.join(run_dir, "best.pt"), torch.save)
+                    save_atomic({**state, "eval": summary}, os.path.join(run_dir, "best.pt"),
+                                torch.save)
                 save_atomic(state, ck_path, torch.save)
-                if cfg["checkpoint_buffer"]:
+                if cfg["checkpoint_buffer"] and buffer is not None:
                     save_atomic(buffer.state_dict(), buf_path, save_npz)
                 next_eval += cfg["eval_every"]
                 t_log, s_log = time.perf_counter(), steps  # eval time is not training speed
     finally:
         if bg:
             bg.stop()
-        envs.close()
+        if envs is not None:
+            envs.close()
         for e in eval_envs:
             e.close()
         writer.close()
+        if replay is not None:
+            replay.close()
 
 
 if __name__ == "__main__":

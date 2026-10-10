@@ -1,0 +1,5 @@
+# speed_proc_b128_pin.yaml with the env pool instead of AsyncVectorEnv
+# (agents/env_pool.py: envs step without a barrier; the actor takes the
+# results of at least half of them per batch).
+base: speed_proc_b128_pin.yaml
+vector_env: pool

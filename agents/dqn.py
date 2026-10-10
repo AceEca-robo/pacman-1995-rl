@@ -37,6 +37,25 @@ def n_planes(n_channels):
     return N_PLANES + DIST_BITS * (n_channels - len(CHANNELS))
 
 
+def large_margin(q_all, act, margin):
+    """DQfD's supervised loss per sample: max_a [Q(s, a) + margin * (a != a_E)]
+    - Q(s, a_E) >= 0; zero once Q(s, a_E) is at least margin above every
+    other action's value."""
+    q = q_all.gather(1, act[:, None]).squeeze(1)
+    margins = margin * (1.0 - F.one_hot(act, q_all.shape[1]).to(q_all.dtype))
+    return (q_all + margins).max(1).values - q
+
+
+def frame_loss_weights(cfg):
+    """(lam_1, lam_n, lam_margin, margin, l2) of the frame-batch loss: plain
+    n-step DQN unless cfg["dqfd"]["enabled"]."""
+    d = cfg.get("dqfd") or {}
+    if not d.get("enabled"):
+        return 0.0, 1.0, 0.0, 0.0, 0.0
+    return (float(d["lambda_1step"]), float(d["lambda_nstep"]), float(d["lambda_margin"]),
+            float(d["margin"]), float(d["l2"]))
+
+
 def load_config(path=None):
     with open(path or DEFAULT_CONFIG) as f:
         return yaml.safe_load(f)
@@ -315,11 +334,16 @@ class DQNLearner:
         self.target = QNetwork(cfg["network"], n_actions, vec_dim, n_channels).to(device)
         self.target.load_state_dict(self.online.state_dict())
         self.target.requires_grad_(False)
+        # frame batches (learner process, agents/shared_replay.py): loss weights
+        self.lam_1, self.lam_n, self.lam_m, self.margin, l2 = frame_loss_weights(cfg)
+        # L2 on the weights: loss l2 * ||theta||^2 / 2 = coupled weight decay l2
         self.opt = torch.optim.Adam(self.online.parameters(), lr=cfg["lr"], eps=cfg["adam_eps"],
-                                    fused=cuda)
+                                    weight_decay=l2, fused=cuda)
         self.decode = GridDecoder(device, n_channels)
         self.amp = cuda and cfg.get("bf16", False)
         self._loss = torch.compile(self._loss_fn) if cfg.get("compile", False) else self._loss_fn
+        self._floss = torch.compile(self._frame_loss_fn) if cfg.get("compile", False) \
+            else self._frame_loss_fn
         # set by train.py's BackgroundLearner: forward passes for acting and
         # optimizer steps (in another thread) do not interleave
         self.lock = contextlib.nullcontext()
@@ -390,17 +414,69 @@ class DQNLearner:
         the next update() (so it happens in the thread that runs updates)."""
         self._conv_request = flag
 
-    def update(self, batch, weights):
-        """Returns device tensors (loss, mean max Q, |TD| per sample)."""
+    def _frame_loss_fn(self, obs, vec, act, rew1, disc1, ret, discn, demo, weights):
+        """DQfD-style loss on frame batches (Hester et al. 2018): n-step double
+        DQN TD (Huber) * lam_n + 1-step TD * lam_1 + large-margin
+        classification * lam_m on demo samples only:
+        max_a [Q(s, a) + margin * (a != a_demo)] - Q(s, a_demo).
+        obs/vec: s, then s_{t+1} (only with lam_1), then s_{t+n}, stacked.
+        Returns (importance-weighted loss, mean max Q(s), |n-step TD| per
+        sample, mean margin loss over the demo samples)."""
+        n = act.shape[0]
+        x = self.decode(obs)
+        with torch.autocast("cuda", torch.bfloat16, enabled=self.amp):
+            q_all = self.online(x[:n], vec[:n])
+            with torch.no_grad():  # backward only through s
+                q_next = self.online(x[n:], vec[n:])
+                q_target = self.target(x[n:], vec[n:])
+        q_all, q_next, q_target = q_all.float(), q_next.float(), q_target.float()
+        q = q_all.gather(1, act[:, None]).squeeze(1)
+        with torch.no_grad():  # double DQN: online picks, target evaluates
+            boot = q_target.gather(1, q_next.argmax(1, keepdim=True)).squeeze(1)
+            target_n = ret + discn * boot[-n:]
+        loss = self.lam_n * F.smooth_l1_loss(q, target_n, reduction="none")
+        if self.lam_1:
+            target_1 = rew1 + disc1 * boot[:n].detach()
+            loss = loss + self.lam_1 * F.smooth_l1_loss(q, target_1, reduction="none")
+        je = large_margin(q_all, act, self.margin)
+        if self.lam_m:
+            loss = loss + self.lam_m * je * demo
+        loss = (weights * loss).mean()
+        je_demo = (je.detach() * demo).sum() / demo.sum().clamp(min=1.0)
+        return loss, q_all.detach().max(1).values.mean(), (q.detach() - target_n).abs(), je_demo
+
+    def update_frames(self, b, weights):
+        """b: a batch dict of agents/shared_replay.py Sampler. Returns device
+        tensors (loss, mean max Q, |n-step TD| per sample, demo margin loss)."""
+        self._apply_conv_request()
+        frames = ("obs", "obs1", "obsn") if self.lam_1 else ("obs", "obsn")
+        loss, mean_q, td, je = self._floss(
+            self._t(np.concatenate([b[k] for k in frames])),
+            self._t(np.concatenate([b["vec" + k[3:]] for k in frames])),
+            self._t(b["act"], torch.long), self._t(b["rew1"]), self._t(b["disc1"]),
+            self._t(b["ret"]), self._t(b["discn"]), self._t(b["demo"], torch.float32),
+            self._t(weights))
+        self._step(loss)
+        return loss.detach(), mean_q, td, je
+
+    def _apply_conv_request(self):
         flag = getattr(self, "_conv_request", None)
         if flag is not None:  # frozen parameters get no grad; Adam skips them
             self._conv_request = None
             self.online.conv.requires_grad_(flag)
+
+    def update(self, batch, weights):
+        """Returns device tensors (loss, mean max Q, |TD| per sample)."""
+        self._apply_conv_request()
         obs, vec, act, ret, next_obs, next_vec, discount = batch
         loss, mean_q, td = self._loss(self._t(np.concatenate([obs, next_obs])),
                                       self._t(np.concatenate([vec, next_vec])),
                                       self._t(act, torch.long), self._t(ret), self._t(discount),
                                       self._t(weights))
+        self._step(loss)
+        return loss.detach(), mean_q, td
+
+    def _step(self, loss):
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.online.parameters(), self.cfg["grad_clip"], foreach=True)
@@ -410,7 +486,6 @@ class DQNLearner:
             self.opt.step()
             if self.act_stream is not None:
                 self._step_done.record()
-        return loss.detach(), mean_q, td
 
     def sync_target(self):
         self.target.load_state_dict(self.online.state_dict())

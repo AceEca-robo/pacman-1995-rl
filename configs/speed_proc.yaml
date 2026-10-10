@@ -1,0 +1,5 @@
+# speed_thread.yaml with the learner in its own process (shared-memory frame
+# replay, agents/learner_proc.py); same batch 64 / train_every 16.
+base: speed_thread.yaml
+async_learner: false
+learner_process: true

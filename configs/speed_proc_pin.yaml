@@ -1,0 +1,8 @@
+# speed_proc.yaml with CPU pinning (i7-13650HX: cpus 0-11 = 6 P-cores x 2
+# threads, 12-19 = E-cores): the actor and the learner process on a P-core
+# each, the env workers and their games on everything else.
+base: speed_proc.yaml
+cpu_affinity:
+  actor: [4, 5]
+  learner: [6, 7]
+  envs: [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]

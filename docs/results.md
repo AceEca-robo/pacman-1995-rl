@@ -661,6 +661,38 @@ Wide network (conv 64/128/128, fc 1024), train_every 16, batch 64, PER,
 v03s0 itself ran at 2.6-3.0k steps/s. The limit is now the one Python
 interpreter shared by the acting loop and the learner thread (GPU 40-85%).
 
+### Training throughput (part A, 2026-10-10): learner process
+
+Wide network, 16 mazes (rl_bc.yaml), PER. Learner in its own process with a
+shared-memory frame replay (`learner_process`), env pool without a step
+barrier (`vector_env: pool`), CPU pinning (`cpu_affinity`); see
+docs/overnight.md (2026-10-10, session 2).
+
+2M-step smoke tests on seed 0 (`configs/smoke2m_*.yaml`; convs frozen to
+500k; mean steps/s from 300k on; `scripts/compare_smoke.py`,
+`docs/smoke_learner_process.png`):
+
+| setup | steps/s | eval food @ 2M | episode reward 1.75-2M |
+|---|---|---|---|
+| learner thread, AsyncVectorEnv x16, batch 64 / train_every 16 (as rl_bc0) | 2,627 | 139 | 93.3 |
+| learner process, pool x16, batch 64 / 16 (GPU-bound) | 3,077 | 134 | 80.7 |
+| learner process, pool x24, batch 128 / 32 | 4,484 | 143 | 93.6 |
+| same, 16 of 24 envs per actor batch | 4,482 | 151 | 105.8 |
+
+400k-step runs with the convolutions trainable from the start (the GPU load
+of the whole run; `configs/speed_pool*.yaml`):
+
+| setup | steps/s |
+|---|---|
+| pool x24, 16 per actor batch | 4,389 |
+| pool x32, 24 per actor batch (configs/dqfd.yaml) | 4,996 |
+| pool x48, 32 per actor batch (learner busy 91%) | 5,265 |
+
+Batch 64 / 16 cannot pass ~3.5k on this GPU (one update ~4.6 ms); batch 128
+every 32 env steps keeps 4 samples per env step. Next to the learner, the
+actor's forward pass waits ~3 ms for its GPU time slice, so the actor acts on
+large batches of envs.
+
 
 ### v0.3 on 16 mazes: behaviour cloning of the heuristic, then RL (2026-10-09/10)
 

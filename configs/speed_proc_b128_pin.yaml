@@ -1,0 +1,6 @@
+# speed_proc_b128.yaml with the CPU pinning of speed_proc_pin.yaml.
+base: speed_proc_b128.yaml
+cpu_affinity:
+  actor: [4, 5]
+  learner: [6, 7]
+  envs: [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]

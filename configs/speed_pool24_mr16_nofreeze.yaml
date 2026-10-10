@@ -1,0 +1,4 @@
+# speed_pool24_mr16.yaml with the convolutions trainable from the start (as
+# in DQfD), so the GPU load of the learner is that of the whole run.
+base: speed_pool24_mr16.yaml
+freeze_conv_steps: 0

@@ -353,3 +353,90 @@ def test_conv_freeze_keeps_weights():
     learner.request_conv_trainable(True)
     learner.update(batch, np.ones(b, np.float32))
     assert not torch.equal(before["conv.0.weight"], learner.online.state_dict()["conv.0.weight"])
+
+
+def shm_segments():
+    """Python shared_memory segments of this user."""
+    return {p for p in os.listdir("/dev/shm") if p.startswith("psm_")
+            and os.stat(os.path.join("/dev/shm", p)).st_uid == os.getuid()}
+
+
+def test_learner_process(tmp_path):
+    """learner_process with AsyncVectorEnv: the update count follows the
+    credit, evaluate, checkpoint, resume (the replay is refilled)."""
+    cfg = tmp_path / "tiny_proc.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 4000, "num_envs": 4, "vector_env": "async",
+                                   "learner_process": True, "target_update": 1000,
+                                   "buffer_size": 4000, "replay_guard": 64,
+                                   "checkpoint_buffer": False, "per": {"enabled": True}}))
+    name = f"test-proc-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name]
+    shm_before = shm_segments()
+    try:
+        out = subprocess.run(cmd + ["--config", str(cfg)], capture_output=True, text=True,
+                             timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "async envs x4, learner process" in out.stdout
+        n_upd = [int(m) for m in re.findall(r"updates (\d+)", out.stdout)]
+        assert n_upd and (4000 - 500) // 16 - 5 <= n_upd[-1] <= (4000 - 500) // 16 + 1
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            assert [json.loads(line)["steps"] for line in f] == [2000, 4000]
+        out = subprocess.run(cmd + ["--resume", "--extend-steps", "2000"], capture_output=True,
+                             text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert "resumed at 4000 steps" in out.stdout
+        assert not shm_segments() - shm_before  # shared memory unlinked
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_dqfd_pool(tmp_path):
+    """DQfD on the env pool: demo of a BC agent, pretrain updates on it with
+    evals, RL; a resume reloads demo.npz and skips the pretraining."""
+    import torch
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from agents.bc import BCNetwork
+    from train import load_config
+    net_cfg = load_config(os.path.join(ROOT, "configs", "dqn.yaml"))["network"]
+    bc_path = tmp_path / "bc.pt"
+    torch.save({"algo": "bc", "config": {"network": net_cfg}, "n_actions": 5,
+                "env_config": {"actions": 5}, "net": BCNetwork(net_cfg).state_dict()}, bc_path)
+    cfg = tmp_path / "tiny_dqfd.yaml"
+    cfg.write_text(yaml.safe_dump({
+        **TINY, "base": os.path.relpath(TINY["base"], tmp_path), "total_steps": 3000,
+        "num_envs": 4, "vector_env": "pool", "learner_process": True, "buffer_size": 4000,
+        "replay_guard": 64, "checkpoint_buffer": False, "eval_every": 1500,
+        "per": {"enabled": True}, "init_conv_from": str(bc_path), "epsilon_start": 0.02,
+        "epsilon_end": 0.01, "dqfd": {
+            "enabled": True, "demo_agent": str(bc_path), "demo_transitions": 600,
+            "demo_epsilon": 0.1, "pretrain_updates": 200, "pretrain_target_update": 50,
+            "pretrain_eval_every": 100, "pretrain_log_every": 50, "margin": 0.8,
+            "lambda_margin": 1.0, "lambda_1step": 1.0, "lambda_nstep": 1.0, "l2": 1e-5,
+            "eps_demo": 1.0}}))
+    name = f"test-dqfd-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "train.py"), "--run-name", name]
+    try:
+        out = subprocess.run(cmd + ["--config", str(cfg)], capture_output=True, text=True,
+                             timeout=300)
+        assert out.returncode == 0, out.stderr
+        m = re.search(r"demo: (\d+) transitions of", out.stdout)
+        assert m and 600 <= int(m.group(1)) < 620, out.stdout
+        assert re.search(r"pretrain +200 updates .* margin \d", out.stdout), out.stdout
+        assert "pool envs x4, learner process" in out.stdout
+        with open(os.path.join(run_dir, "evals.jsonl")) as f:
+            rows = [json.loads(line) for line in f]
+        assert [r.get("phase") for r in rows] == ["pretrain@100", "pretrain", None, None]
+        # pool: steps advance by the envs that had results, evals at the first step >= k * 1500
+        assert 1500 <= rows[2]["steps"] < 1520 and 3000 <= rows[3]["steps"] < 3020
+        pre = torch.load(os.path.join(run_dir, "pretrain.pt"), weights_only=False)
+        assert pre["pretrained"] and pre["steps"] == 0 and pre["n_updates"] == 200
+        out = subprocess.run(cmd + ["--resume", "--extend-steps", "1500"], capture_output=True,
+                             text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert re.search(r"demo: \d+ transitions from .*demo.npz", out.stdout), out.stdout
+        assert "pretrain " not in out.stdout
+    finally:
+        subprocess.run(["rm", "-rf", run_dir])

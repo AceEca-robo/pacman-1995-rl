@@ -1,0 +1,9 @@
+# Learner-process speed tests (2026-10-10, part A): rl_bc.yaml (16 mazes,
+# wide network, PER, async envs x16, warm start from BC) for 400k steps,
+# the learner thread (async_learner) as before.
+base: rl_bc.yaml
+total_steps: 400000
+warm_start: 20000
+eval_every: 400000
+eval_level_episodes: 2
+eval_episodes: 2
