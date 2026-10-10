@@ -907,3 +907,24 @@ RL), PARTIAL >= 30%.
   20-30%, maze 1 5% at 16M, 0.05 levels from level 1 at 16M (one game);
   the other 13 mazes 0%. rl_bc1 food 131 / 132, 0% everywhere. The frozen
   start (rl_bc0) is ahead from 6M on.
+- 03:25 Both runs finished 20M without a crash (the supervisor never
+  restarted anything). Last evals (20 games per maze, seeds 1000..):
+  - rl_bc0 18M / 20M: food 154 / 158, levels 0.00 / 0.05; mazes 7 and 8
+    40-55% / 50%, mazes 1, 2, 4, 9 at 5-10% at 20M, the other 10 mazes 0%;
+    mean per-maze share 0.034 (16M) -> 0.059 -> 0.081.
+  - rl_bc1 18M / 20M: food 140 / 146, 0% on every maze at every eval.
+  Selection: by mean levels cleared then the per-maze minimum, rl_bc0's
+  16M and 20M tie (0.05 / 0%); train.py kept the first (16M) as best.pt.
+  The tie is not covered by the plan; third key = mean per-maze clear
+  share of the same training evals -> 20M (0.081 vs 0.034; no test seeds
+  involved). rl_bc1 never beats rl_bc0 on either key, so "RL best" =
+  rl_bc0 @ 20M (`runs/rl_bc0/final_20M.pt`, = ck_20000000.pt; the 16M
+  best.pt kept as best_plan_16M.pt).
+- 03:30 Final protocol on rl_bc0 @ 20M started (CPU, 12 workers).
+- 03:30 **Beyond the plan**: the GPU would idle from 03:30 to 08:00 while
+  rl_bc0's maze clears were still rising (7/8: 25 -> 55%), so rl_bc0 goes
+  on with `--resume --extend-steps 20000000` (same config, to 40M; the
+  replay buffer was not saved, so it refills with 20k steps of the current
+  policy and PER restarts). Its own supervisor in `runs/sv_rlbc_ext/`. The
+  plan's result stays the 20M checkpoint; the continuation is reported
+  separately. rl_bc1 (flat at 0%) is not continued.
