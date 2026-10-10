@@ -30,7 +30,7 @@ from agents.dqn import DQNLearner, GridDecoder, QNetwork
 # ctrl fields
 CREDIT, BETA, SYNC_REQ, STOP = 0, 1, 2, 3  # actor
 DONE, SYNC_DONE, FLUSHED, WVER, ERROR = 4, 5, 6, 7, 8  # learner
-LOSS_SUM, Q_SUM, JE_SUM, STAT_N, BUSY_S = 9, 10, 11, 12, 13  # learner, running sums
+LOSS_SUM, Q_SUM, JE_SUM, STAT_N, BUSY_S, DEMO_SUM = 9, 10, 11, 12, 13, 14  # learner, running sums
 N_CTRL = 16
 
 
@@ -80,6 +80,7 @@ class LearnerProcess:
         self._wver = -1
         self._stats = self.ctrl.copy()
         self.last_margin_loss = 0.0
+        self.last_demo_frac = 0.0  # share of demo samples in the batches
         self.wait_s = 0.0  # time the actor waited for the learner (give)
         self._perf = (time.perf_counter(), 0.0, 0.0)
         init = _to_cpu(init)  # no CUDA tensors through the process boundary
@@ -152,6 +153,7 @@ class LearnerProcess:
         if d[STAT_N] < 1:
             return [], [], int(cur[DONE])
         self.last_margin_loss = d[JE_SUM] / d[STAT_N]
+        self.last_demo_frac = d[DEMO_SUM] / d[STAT_N]
         return ([torch.tensor(d[LOSS_SUM] / d[STAT_N])], [torch.tensor(d[Q_SUM] / d[STAT_N])],
                 int(cur[DONE]))
 
@@ -275,14 +277,17 @@ def learner_main(cfg, device, dims, replay_spec, ctrl_name, weights_name, n_para
             ctrl[FLUSHED] = ctrl[DONE]
 
         acc, acc_n = None, 0  # loss, Q, margin loss summed on the device
+        demo_acc = 0.0  # demo share of the batches, summed on the CPU
 
         def stats_out():
-            nonlocal acc, acc_n
+            nonlocal acc, acc_n, demo_acc
             if acc_n:
                 loss_s, q_s, je_s = acc.tolist()
                 ctrl[LOSS_SUM] += loss_s
                 ctrl[Q_SUM] += q_s
                 ctrl[JE_SUM] += je_s
+                ctrl[DEMO_SUM] += demo_acc
+                demo_acc = 0.0
                 ctrl[STAT_N] += acc_n
                 acc, acc_n = None, 0
 
@@ -318,6 +323,7 @@ def learner_main(cfg, device, dims, replay_spec, ctrl_name, weights_name, n_para
                 pending = (idx, td, done)
                 st = torch.stack([loss, mq, je]).detach()
                 acc, acc_n = (st if acc is None else acc + st), acc_n + 1
+                demo_acc += float(np.mean(batch["demo"]))
                 ctrl[DONE] += 1
                 ctrl[BUSY_S] += time.perf_counter() - t_busy
                 if int(ctrl[DONE]) % sync_every == 0:

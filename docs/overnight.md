@@ -1226,3 +1226,30 @@ extended, not restarted. This session only prepares it (no training).
   would remove the ~3 ms GPU time-slice wait of the actor's forward pass.
 - If the learner is the limit in phase 1: the target network's s_{t+1} /
   s_{t+n} passes could share one forward with the online no-grad pass.
+
+## Chronology (2026-10-11, session 3: the long DQfD run, phase 1)
+
+Task: phase 1 of dqfd0 from `runs/dqfd0/checkpoint.pt` (50M first leg),
+supervisor evaluations every 10M on the run's eval protocol (20 games per
+maze + 20 games from level 1, seeds 1000..1019), extended by rule, hourly
+watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
+
+- 23:55 Added (logging / supervision only, no training change):
+  the share of demo samples in the learner's batches (`demo` in the log
+  line, `train/demo_frac`); `supervisor.py --train-eval` (scores the copies
+  with scripts/train_eval.py, rows in `runs/<run>/sv_evals.jsonl`) and
+  `--extend` (the extension rule below). Step-0 eval through the new path
+  equals the training's own pretrain eval (59.4% per maze, min 25%, 0.95
+  levels): the protocol is deterministic. `runs/dqfd0/phase1_start.pt` =
+  the phase-1 start (rollback point of rule 4).
+- 23:59 dqfd0 resumed (tmux `dqfd0`), supervisor (tmux `sv_dqfd0`, log
+  `runs/sv_dqfd0/supervisor.log`, `--every 10000000 --train-eval --extend
+  --min-speed 3500`). First lines: 4.34k steps/s, Q 38, demo share 84-93%
+  while the agent part of the replay fills.
+- 00:03 Reference on the same seeds: the heuristic with `evaluate.py
+  --levels --seed 1000 --episodes 20 --level-episodes 20 --stop-at-clear
+  --max-steps 10000` (`runs/ref_seed1000/heuristic.json`): per maze
+  70/90/90/90/80/85/70/90/90/90/85/70/70/85/60/85%, mean 81.3%, min 60%,
+  from level 1 1.25 levels. BC bc0_dagger1 (session 2): 66.9% / 40% / 1.20.
+- 00:05 Full pytest with dqfd0 running: 89 passed. At 1.4M steps: 4.0-4.3k
+  steps/s, Q 46, margin loss 0.06, demo share of the batches 38%.

@@ -15,6 +15,17 @@ it is restarted once with --resume (train.py or train_ppo.py, by the run's
 "algo"); a second crash is only logged. A mean speed under --min-speed
 steps/s over the last 20 log lines is logged (at most every 10 min). Everything goes to runs/supervisor.log;
 state (restart counts, done evals) in runs/supervisor_state.json.
+
+--train-eval scores the copies with scripts/train_eval.py on the run's own
+eval protocol instead (games from level 1 + games on each maze, seeds
+eval_seed..; train.py's evaluate()) and appends the summaries with "steps" to
+runs/<run>/sv_evals.jsonl (no results.md row, no plot).
+
+--extend applies the long-run rule when a run reaches its total_steps: if the
+mean of the last two evaluations beats the mean of the two before on the
+per-maze clear share or on levels cleared from level 1, --resume
+--extend-steps --extend-rise; otherwise (a plateau confirmation) extend by
+--extend-plateau, and stop at the --plateau-stop-th confirmation in a row.
 """
 
 import argparse
@@ -91,7 +102,38 @@ def read_steps(path):
     return steps
 
 
-def evaluate(run, steps, episodes):
+def sv_evals(run):
+    path = os.path.join(RUNS, run, "sv_evals.jsonl")
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        rows = [json.loads(line) for line in f if line.strip()]
+    return sorted(rows, key=lambda r: r["steps"])
+
+
+def train_eval(run, steps, ck):
+    tmp = os.path.join(RUNS, run, "sv_evals.tmp.jsonl")
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    out = subprocess.run(
+        [PY, os.path.join(ROOT, "scripts", "train_eval.py"),
+         "--config", os.path.join(RUNS, run, "config.yaml"), "--checkpoint", ck,
+         "--label", f"{run}@{steps}", "--out", tmp],
+        capture_output=True, text=True, cwd=ROOT)
+    if out.returncode != 0:
+        log(f"{run}: train_eval.py failed at {steps}: {out.stderr.strip()[-500:]}")
+        return
+    with open(tmp) as f:
+        row = {"steps": steps, **json.loads(f.read().strip().splitlines()[-1])}
+    os.remove(tmp)
+    with open(os.path.join(RUNS, run, "sv_evals.jsonl"), "a") as f:
+        f.write(json.dumps(row) + "\n")
+    log(f"{run}: eval @ {steps}: per-maze mean {row['mean_maze_cleared']:.1%}, "
+        f"min {row['min_maze_cleared']:.0%}, levels from level 1 "
+        f"{row['mean_levels_cleared']:.2f}, food {row['mean_food']:.0f}")
+
+
+def evaluate(run, steps, episodes, train_eval_mode=False):
     ck = os.path.join(RUNS, run, f"ck_{steps}.pt")
     shutil.copy(os.path.join(RUNS, run, "checkpoint.pt"), ck + ".tmp")
     os.replace(ck + ".tmp", ck)
@@ -99,6 +141,9 @@ def evaluate(run, steps, episodes):
     if got != steps:  # training replaced checkpoint.pt in between
         log(f"{run}: wanted the {steps} checkpoint, copied {got}; skipped")
         os.remove(ck)
+        return
+    if train_eval_mode:
+        train_eval(run, steps, ck)
         return
     algo = run_algo(run)
     label = f"{algo} {run}@{steps / 1e6:05.2f}M"
@@ -132,9 +177,10 @@ def run_algo(run):
         return yaml.safe_load(f).get("algo", "dqn")
 
 
-def restart(run):
+def restart(run, extend=0):
     script = "train_ppo.py" if run_algo(run) == "ppo" else "train.py"
-    cmd = (f"cd {ROOT} && {PY} scripts/{script} --run-name {run} --resume "
+    ext = f"--extend-steps {extend} " if extend else ""
+    cmd = (f"cd {ROOT} && {PY} scripts/{script} --run-name {run} --resume {ext}"
            f"2>&1 | tee -a runs/{run}.log")
     subprocess.run(["tmux", "new-session", "-d", "-s", run, cmd], check=True)
 
@@ -163,6 +209,12 @@ def main():
     p.add_argument("--results", default=RESULTS, help="markdown table evaluate.py updates")
     p.add_argument("--plot-dir", default=PLOT_DIR, help="where eval.png goes")
     p.add_argument("--log-dir", default=RUNS, help="supervisor.log and supervisor_state.json")
+    p.add_argument("--train-eval", action="store_true",
+                   help="evaluate with scripts/train_eval.py (the run's eval protocol)")
+    p.add_argument("--extend", action="store_true", help="apply the extension rule (see above)")
+    p.add_argument("--extend-rise", type=int, default=50_000_000)
+    p.add_argument("--extend-plateau", type=int, default=30_000_000)
+    p.add_argument("--plateau-stop", type=int, default=3)
     args = p.parse_args()
     LOG = os.path.join(args.log_dir, "supervisor.log")
     STATE = os.path.join(args.log_dir, "supervisor_state.json")
@@ -220,8 +272,9 @@ def check(run, st, args, save):
             log(f"{run}: no checkpoint left for {missed[0]}..{missed[-1]} "
                 f"({len(missed)} points), skipped")
         if fresh:
-            evaluate(run, steps, args.episodes)
-            plot(args.runs)
+            evaluate(run, steps, args.episodes, args.train_eval)
+            if not args.train_eval:
+                plot(args.runs)
         st["evaluated"].extend(due)
         save()
 
@@ -234,7 +287,14 @@ def check(run, st, args, save):
 
     if alive(run):
         return
-    if finished:
+    extended_here = bool(st.get("extensions")) and st["extensions"][-1][0] == total
+    if finished and args.extend and extended_here:
+        log(f"{run}: the extension from {total} did not start (config.yaml not extended); "
+            f"not restarting")
+        st["status"] = "failed"
+    elif finished and args.extend:
+        extend_or_stop(run, st, total, args)
+    elif finished:
         log(f"{run}: finished ({total} steps)")
         st["status"] = "finished"
     elif st["restarts"] == 0:
@@ -247,6 +307,37 @@ def check(run, st, args, save):
         log(f"{run}: CRASHED again (checkpoint {steps}); not restarting")
         st["status"] = "failed"
     save()
+
+
+def extend_or_stop(run, st, total, args):
+    rows = [r for r in sv_evals(run) if r["steps"] <= total]
+    mm = [r["mean_maze_cleared"] for r in rows]
+    lv = [r["mean_levels_cleared"] for r in rows]
+    if len(rows) >= 4:
+        def mean(x):
+            return sum(x) / len(x)
+        rise_m, rise_l = mean(mm[-2:]) > mean(mm[-4:-2]), mean(lv[-2:]) > mean(lv[-4:-2])
+        what = (f"evals at {[r['steps'] // 1_000_000 for r in rows[-4:]]}M: per-maze mean "
+                f"{mean(mm[-4:-2]):.3f} -> {mean(mm[-2:]):.3f}, levels "
+                f"{mean(lv[-4:-2]):.3f} -> {mean(lv[-2:]):.3f}")
+    else:
+        rise_m = rise_l = True
+        what = f"only {len(rows)} evaluations (< 4), counted as a rise"
+    if rise_m or rise_l:
+        st["plateau"] = 0
+        n = args.extend_rise
+        log(f"{run}: reached {total}; rise ({what}); extending by {n}")
+    else:
+        st["plateau"] = st.get("plateau", 0) + 1
+        if st["plateau"] >= args.plateau_stop:
+            log(f"{run}: reached {total}; plateau confirmation {st['plateau']} ({what}); STOP")
+            st["status"] = "finished"
+            return
+        n = args.extend_plateau
+        log(f"{run}: reached {total}; plateau confirmation {st['plateau']} ({what}); "
+            f"extending by {n} anyway")
+    st.setdefault("extensions", []).append([total, n])
+    restart(run, n)
 
 
 if __name__ == "__main__":

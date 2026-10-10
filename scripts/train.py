@@ -949,7 +949,8 @@ def main():
                     msg += f"  loss {loss_m:.4f}  Q {q_m:.2f}  updates {n_updates}"
                     if dq.get("enabled"):
                         writer.add_scalar("train/margin_loss", bg.last_margin_loss, steps)
-                        msg += f"  margin {bg.last_margin_loss:.4f}"
+                        writer.add_scalar("train/demo_frac", bg.last_demo_frac, steps)
+                        msg += f"  margin {bg.last_margin_loss:.4f}  demo {bg.last_demo_frac:.1%}"
                     losses, qs = [], []
                 print(msg, flush=True)
                 next_log += cfg["log_every"]
