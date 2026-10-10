@@ -1002,3 +1002,10 @@ RL), PARTIAL >= 30%.
   statistic (one game = 4 points; the minimum is biased low). 50-100 games
   per maze for the final protocol, or a criterion on the 16-maze mean plus a
   looser minimum.
+
+## Chronology, continued (2026-10-10, beyond the plan)
+
+- 04:08 rl_bc0 continuation evals 22M / 24M / 26M: food 162 / 157 / 154,
+  levels 0.05 / 0 / 0.05, mean per-maze share 0.069 / 0.069 / 0.100
+  (maze 8 55-65%, maze 7 40-45%, maze 2 up to 20%, maze 12 15% at 26M).
+  2.7-2.9k steps/s alone; 40M expected ~05:35.
