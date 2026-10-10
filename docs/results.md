@@ -423,6 +423,8 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | mm3 | best_10000000.pt (10.0M) | fine-tune of mm1 (27.0M) with endgame prefixes on all 16 mazes, prefix_prob 0.5, 10M | 139.0 | 0% | 25.2 | 1480 | 10480 | 7% | 517 | - |
 | mm4 | best_7000000.pt (7.0M) | mm3 with prefix_prob 0.7 | 138.0 | 0% | 43.8 | 1460 | 3860 | 3% | 666 | - |
 | v03s0 | best.pt (52.0M of 60M) | v0.3 as four mazes: wide DQN from scratch on mazes 1-4 (random), PER, endgame dot reward, death -50, heuristic endgame prefixes 0.3; async training | 67.6 | 0% | -138.7 | 760 | 6730 | 19% (30000 ticks) | 7328 | - |
+| bc0_dagger3 | bc_best.pt (DAgger 3, epoch 2) | v0.3 on 16 mazes: behaviour cloning of the heuristic (3M steps, eps-0.1 play) + 3 DAgger iterations; not RL | 291.3 | 64% | 309.3 | 7910 | 33170 | 3% (30000 ticks) | 929 | - |
+| rl_bc0 | ck_20000000.pt (20.0M) | v0.3 on 16 mazes: DQN from bc0_dagger3's convs (frozen 500k), 300k BC steps in the buffer, eps 0.1 -> 0.02, PER, endgame dot reward, prefixes of all 16 mazes, death -20 | 159.4 | 5% | 102.2 | 1635 | 7085 | 0% (30000 ticks) | 26 | - |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%
 
