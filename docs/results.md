@@ -657,3 +657,86 @@ Wide network (conv 64/128/128, fc 1024), train_every 16, batch 64, PER,
 v03s0 itself ran at 2.6-3.0k steps/s. The limit is now the one Python
 interpreter shared by the acting loop and the learner thread (GPU 40-85%).
 
+
+### v0.3 on 16 mazes: behaviour cloning of the heuristic, then RL (2026-10-09/10)
+
+Plan: clone the heuristic on all 16 mazes (stage 1), then fine-tune with DQN
+from the cloned network (stage 2). Criterion: >= 50% of the games started on
+each of the 16 mazes clear it (BC or RL) = SUCCESS, >= 30% on each = PARTIAL.
+Final protocol: `evaluate.py --levels --seed 0 --episodes 100 --level-episodes
+25 --stop-at-clear` (100 games from level 1 on seeds 0..99, played to game
+over or 30000 ticks; 25 games started on each maze, seeds 0..24, stopped at
+the clear). At 25 games per maze one game is 4 points; the noise on a
+per-maze share is about +-10 points.
+
+**Stage 1, BC.** Data (`tools/gen_bc_data.py`): the heuristic plays games
+started on a random maze 1..16 and executes a random action with eps 0.1; the
+label is always the heuristic's own action. 3M steps for training (~7000
+games), 100k for validation on other seeds; labels U/D/L/R/N 28 / 22 / 25 /
+25 / 0.001% (no class weights: the four used classes differ by 1.3x).
+Network (`agents/bc.py`): the wide DQN trunk (conv 64/128/128, fc 1024) with
+one logits head; cross-entropy, Adam 3e-4, batch 512, 10 epochs, the epoch
+with the best validation accuracy kept (`scripts/train_bc.py`,
+`configs/bc.yaml`). DAgger: the current BC plays (eps 0.02), the heuristic
+labels, 1M steps per iteration, the previous BC fine-tuned on everything so
+far for 4 epochs (`configs/bc_dagger*.yaml`).
+
+| BC version | data | val acc | eps 0: per-maze min / mean of 16 | eps 0: levels from level 1 (mean / median / max) | eps 0.02: min / levels |
+|---|---|---|---|---|---|
+| bc0 | 3M heuristic | 0.9861 | 36% (mazes 9, 15) / 63.5% | 0.95 / 1 / 4 | 28% / 0.40 |
+| bc0_dagger1 | + 1M bc0 play | 0.9866 | 40% (maze 13) / 67.0% | 0.85 / 1 / 3 | 16% / 0.40 |
+| bc0_dagger2 | + 1M dagger1 play | 0.9875 | 24% (maze 15) / 66.0% | 0.89 / 1 / 4 | 20% / 0.45 |
+| bc0_dagger3 | + 1M dagger2 play | 0.9884 | 24% (maze 13) / 66.0% | 0.98 / 1 / 3 | 24% / 0.43 |
+
+BC reaches 98.6-98.8% agreement with the heuristic on held-out heuristic
+play and clears 60-84% of most mazes, but its weakest maze sits at 24-40%
+and which maze is weakest changes from version to version (9/15, 13, 15,
+13): DAgger added ~3 points on the 16-maze average and nothing consistent
+on the minimum. A random action costs BC far more than the teacher (eps
+0.02 roughly halves its levels from level 1). The version passed on to RL
+and to the final table is the one the plan's RL selection rule picks
+(mean levels cleared from level 1, then the per-maze minimum): bc0_dagger3.
+
+**Stage 2, RL from BC** (`configs/rl_bc.yaml`): DQN with the BC trunk, the
+BC convolutions frozen for the first 500k steps (rl_bc0) or trained from the
+start (rl_bc1, `configs/rl_bc_nofreeze.yaml`); vec / fc / Q heads fresh;
+the buffer pre-filled with 300k steps of the greedy BC policy; eps 0.1 ->
+0.02 over 2M, PER, endgame dot reward (k 20), death -20, 30% of resets from
+heuristic endgame prefixes of all 16 mazes, start_level random:1-16, 20M
+steps, async envs x16 + learner thread (1.55k steps/s each with both
+running). Evals every 2M: 20 games from level 1 and 20 per maze (seeds
+1000..1019, per-maze games cut at 10000 ticks).
+
+| run @ steps | 2M | 4M | 8M | 12M | 16M | 20M |
+|---|---|---|---|---|---|---|
+| rl_bc0: food / levels / mazes cleared > 0% | 118 / 0 / 0 | 118 / 0 / 0 | 132 / 0 / 0 | 144 / 0 / 2 | 161 / 0.05 / 3 | 158 / 0.05 / 6 |
+| rl_bc1: food / levels / mazes cleared > 0% | 110 / 0 / 0 | 116 / 0 / 0 | 121 / 0 / 0 | 104 / 0 / 0 | 132 / 0 / 0 | 146 / 0 / 0 |
+
+The fresh Q heads lose the BC policy at once (2M: ~115 food and 0% where
+the BC eats ~160 per maze game and clears ~66%) and RL then climbs from the
+level of a DQN trained from scratch (mm1: ~120-135 food). With the frozen
+start rl_bc0 got ahead from ~6M; by 20M it clears mazes 7 and 8 about half
+the time and almost nothing else. rl_bc1 stayed at 0% throughout.
+
+**Final** (`docs/levels_v03.png`; RL = rl_bc0 @ 20M: by mean levels then
+per-maze minimum 16M and 20M tie at 0.05 / 0%, the mean per-maze share of
+the training evals breaks the tie, 0.081 vs 0.034):
+
+| agent | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 | M12 | M13 | M14 | M15 | M16 | min | levels in a row from level 1: mean / median / max |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 80% | 84% | 72% | 80% | 88% | 80% | 80% | 96% | 56% | 80% | 72% | 80% | 68% | 72% | 56% | 88% | 56% | 1.58 / 1 / 6 |
+| BC (bc0_dagger3) | 60% | 72% | 72% | 84% | 64% | 80% | 80% | 72% | 40% | 72% | 56% | 72% | 24% | 76% | 52% | 80% | 24% | 0.98 / 1 / 3 |
+| RL (rl_bc0, 20M) | 0% | 4% | 0% | 8% | 4% | 16% | 52% | 76% | 0% | 12% | 0% | 0% | 4% | 0% | 0% | 8% | 0% | 0.05 / 0 / 1 |
+
+Games from level 1 (100, seeds 0..99): heuristic 383 food, level 1 cleared
+82%; BC 291 food, 64%, 3% cut at 30000 ticks (bc0: 282, 68%); RL 159 food,
+5%, 3 lives lost in ~550 ticks on average.
+
+**Verdict: PARTIAL, by BC only.** No agent reaches 50% on every maze. bc0
+and bc0_dagger1 (eps 0) clear >= 30% of every maze (minimum 36% and 40%),
+which is the PARTIAL bar; the version the selection rule passed on
+(bc0_dagger3) does not (24% on maze 13), and the four versions were all
+scored on the same test seeds, so "BC is PARTIAL" rests on the best of four
+noisy minima. RL is FAILURE (0% on 8 mazes) and did not overtake its teacher
+on any maze beyond noise (maze 8: RL 76%, BC 72%, heuristic 96%). No tag,
+no release, no README section.
