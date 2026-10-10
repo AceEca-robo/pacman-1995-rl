@@ -1253,3 +1253,11 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
   from level 1 1.25 levels. BC bc0_dagger1 (session 2): 66.9% / 40% / 1.20.
 - 00:05 Full pytest with dqfd0 running: 89 passed. At 1.4M steps: 4.0-4.3k
   steps/s, Q 46, margin loss 0.06, demo share of the batches 38%.
+- 00:42 **Supervisor @10M (rule 4): per-maze mean 67.8%, min 40%, levels
+  from level 1 0.95, food 257** -> well above the 40% rollback line; no
+  rollback, the config stays as it is. Training evals 2-16M: per-maze mean
+  rises 0.67 (8M) -> 0.68 -> 0.70 -> 0.72 -> 0.72 (16M), min 0.40-0.50,
+  levels 0.95 -> 1.10 (BC 66.9% / 40% / 1.20; heuristic 81.3% / 60% / 1.25).
+- 01:05 Watch: 4.33k steps/s (min 4.31k over the last hour), Q 43.5-47.8,
+  no NaN, demo share of the batches steady at 40%, eps at its floor 0.01
+  since 5M. Disk 44 GB free.
