@@ -920,15 +920,15 @@ RL), PARTIAL >= 30%.
   involved). rl_bc1 never beats rl_bc0 on either key, so "RL best" =
   rl_bc0 @ 20M (`runs/rl_bc0/final_20M.pt`, = ck_20000000.pt; the 16M
   best.pt kept as best_plan_16M.pt).
-- 03:30 Final protocol on rl_bc0 @ 20M started (CPU, 12 workers).
-- 03:30 **Beyond the plan**: the GPU would idle from 03:30 to 08:00 while
+- 03:25 Final protocol on rl_bc0 @ 20M started (CPU, 12 workers).
+- 03:25 **Beyond the plan**: the GPU would idle from 03:30 to 08:00 while
   rl_bc0's maze clears were still rising (7/8: 25 -> 55%), so rl_bc0 goes
   on with `--resume --extend-steps 20000000` (same config, to 40M; the
   replay buffer was not saved, so it refills with 20k steps of the current
   policy and PER restarts). Its own supervisor in `runs/sv_rlbc_ext/`. The
   plan's result stays the 20M checkpoint; the continuation is reported
   separately. rl_bc1 (flat at 0%) is not continued.
-- 03:35 rl_bc0 @ 20M on the final protocol (seeds 0..99 / 25 per maze, 4 min):
+- 03:29 rl_bc0 @ 20M on the final protocol (seeds 0..99 / 25 per maze, 4 min):
   per maze 0/4/0/8/4/16/52/76/0/12/0/0/4/0/0/8% (min 0%), from level 1
   0.05 levels (5 games of 100 clear level 1), food 127-171 per maze game.
   FAILURE. Provisional table and `docs/levels_v03.png` (heuristic / BC
