@@ -1022,3 +1022,9 @@ RL), PARTIAL >= 30%.
   final_40M.pt. Final protocol on 36M started.
 - 05:43 Second extension, to 60M (expected ~08:00; left running at the end
   of the session), supervisor in `runs/sv_rlbc_ext2/`.
+- 05:52 rl_bc0 @ 36M on the final protocol (beyond the plan): per maze
+  20/64/8/56/32/8/64/60/40/44/40/24/12/4/0/8% (min 0%, maze 15; mean of 16
+  30%), from level 1 0.34 levels (median 0, max 2), food 210, level 1 30%.
+  FAILURE as well; RL does not beat BC on any maze beyond noise.
+  `docs/levels_v03.png` redrawn with heuristic / BC / RL 20M / RL 36M,
+  results.md updated (section "v0.3 on 16 mazes", summary rows).

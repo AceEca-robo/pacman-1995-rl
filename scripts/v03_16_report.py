@@ -78,7 +78,9 @@ def plot(results, out):
     b.set(xlabel="levels cleared in a row from level 1", ylabel="games", xticks=bins)
     b.set_title(f"{results[0]['from_level1']['episodes']} games from level 1", loc="left",
                 color=INK)
-    b.legend(frameon=False)
+    tallest = max(np.bincount(r["from_level1"]["levels_cleared"]).max() for r in results)
+    b.set_ylim(0, tallest * (1.2 + 0.1 * k))  # room for the legend above the bars
+    b.legend(frameon=False, fontsize=8, loc="upper right")
     for ax in (a, b):
         ax.grid(axis="y", color="#e4e4e0", zorder=0)
         ax.spines[["top", "right"]].set_visible(False)
