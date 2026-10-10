@@ -1044,7 +1044,7 @@ RL), PARTIAL >= 30%.
   FAILURE. RL vs BC: ahead on mazes 13 (44 vs 24%) and 8 (84 vs 72%), behind
   on 13 mazes; never ahead of the heuristic. Final plot and results.md use
   heuristic / BC / RL 20M (plan) / RL 50M (best, beyond the plan).
-- 07:00 **End of session.** Verdict for the plan's criterion (>= 50% on
+- 06:57 **End of session.** Verdict for the plan's criterion (>= 50% on
   each of 16 mazes): not met. PARTIAL (>= 30% on each) only by BC: bc0
   (min 36%) and bc0_dagger1 (min 40%) at eps 0; the BC selected by the rule
   (bc0_dagger3) and every RL checkpoint are below it (RL 20M min 0%, 50M
