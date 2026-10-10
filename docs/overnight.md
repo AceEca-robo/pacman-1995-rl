@@ -1028,7 +1028,7 @@ RL), PARTIAL >= 30%.
   FAILURE as well; RL does not beat BC on any maze beyond noise.
   `docs/levels_v03.png` redrawn with heuristic / BC / RL 20M / RL 36M,
   results.md updated (section "v0.3 on 16 mazes", summary rows).
-- 06:00 Full pytest with rl_bc0 training next to it: 76 passed, 1 failed:
+- 05:53 Full pytest with rl_bc0 training next to it: 76 passed, 1 failed:
   `test_env.py::test_close_leaves_nothing` saw a `/tmp/pacman-env-*` dir
   created by the training run's envs between its before/after snapshots
   (the test compares the global set of such dirs). Run alone 3 times: 2
