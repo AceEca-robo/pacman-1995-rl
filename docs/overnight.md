@@ -1009,3 +1009,8 @@ RL), PARTIAL >= 30%.
   levels 0.05 / 0 / 0.05, mean per-maze share 0.069 / 0.069 / 0.100
   (maze 8 55-65%, maze 7 40-45%, maze 2 up to 20%, maze 12 15% at 26M).
   2.7-2.9k steps/s alone; 40M expected ~05:35.
+- 04:49 Continuation evals 28M / 30M / 32M: food 205 / 173 / 208, levels
+  from level 1 0.30 / 0.15 / 0.30, mean per-maze share 0.178 / 0.122 /
+  0.284 (32M: maze 10 75%, 8 65%, 7 55%, 2/6/12 45%; mazes 14, 15 0%).
+  The first clear rise since 20M; supervisor @30M (20 games from level 1):
+  food 173, level 1 10%.
