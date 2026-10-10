@@ -426,6 +426,7 @@ Final evaluation of each run's chosen checkpoint: 100 games, seeds 0..99, eps 0,
 | bc0_dagger3 | bc_best.pt (DAgger 3, epoch 2) | v0.3 on 16 mazes: behaviour cloning of the heuristic (3M steps, eps-0.1 play) + 3 DAgger iterations; not RL | 291.3 | 64% | 309.3 | 7910 | 33170 | 3% (30000 ticks) | 929 | - |
 | rl_bc0 | ck_20000000.pt (20.0M) | v0.3 on 16 mazes: DQN from bc0_dagger3's convs (frozen 500k), 300k BC steps in the buffer, eps 0.1 -> 0.02, PER, endgame dot reward, prefixes of all 16 mazes, death -20 | 159.4 | 5% | 102.2 | 1635 | 7085 | 0% (30000 ticks) | 26 | - |
 | rl_bc0 (cont.) | best.pt (36.0M of 40M) | rl_bc0 continued past the plan's 20M (--resume --extend-steps, buffer refilled) | 210.4 | 30% | 158.4 | 1775 | 10745 | 1% (30000 ticks) | 341 | - |
+| rl_bc0 (cont. 2) | best.pt (50.0M of 60M) | the second continuation (still running at the end of the session) | 220.4 | 30% | 179.9 | 1770 | 11080 | 0% (30000 ticks) | 40 | - |
 
 dqn1 over 3 seeds (mean +- std): food 140.6 +- 28.5, reward 23.4 +- 37.4, score 1668.3 +- 157.4, level 1 cleared 0%
 
@@ -731,28 +732,32 @@ the training evals breaks the tie, 0.081 vs 0.034):
 | BC (bc0_dagger3) | 60% | 72% | 72% | 84% | 64% | 80% | 80% | 72% | 40% | 72% | 56% | 72% | 24% | 76% | 52% | 80% | 24% | 0.98 / 1 / 3 |
 | RL (rl_bc0, 20M) | 0% | 4% | 0% | 8% | 4% | 16% | 52% | 76% | 0% | 12% | 0% | 0% | 4% | 0% | 0% | 8% | 0% | 0.05 / 0 / 1 |
 | RL (rl_bc0, 36M, beyond the plan) | 20% | 64% | 8% | 56% | 32% | 8% | 64% | 60% | 40% | 44% | 40% | 24% | 12% | 4% | 0% | 8% | 0% | 0.34 / 0 / 2 |
+| RL (rl_bc0, 50M, beyond the plan) | 28% | 48% | 20% | 20% | 28% | 36% | 80% | 84% | 16% | 52% | 24% | 28% | 44% | 16% | 0% | 8% | 0% | 0.38 / 0 / 2 |
 
 Games from level 1 (100, seeds 0..99): heuristic 383 food, level 1 cleared
 82%; BC 291 food, 64%, 3% cut at 30000 ticks (bc0: 282, 68%); RL 20M 159
 food, 5%, 3 lives lost in ~550 ticks on average; RL 36M 210 food, 30%, 1%
-cut. Mean of the 16 per-maze shares: heuristic 77%, BC 66%, RL 20M 12%,
-RL 36M 30%.
+cut; RL 50M 220 food, 30%, none cut. Mean of the 16 per-maze shares:
+heuristic 77%, BC 66%, RL 20M 12%, RL 36M 30%, RL 50M 33%.
 
 Beyond the plan, rl_bc0 was continued with `--resume --extend-steps`
 (same config; the buffer, not checkpointed, refilled from the current
 policy) while the GPU would otherwise have idled: training evals rose from a
 mean per-maze share of 0.08 (20M) to 0.28-0.38 (32-40M), levels from level 1
-0.25-0.35; mazes 14 and 15 stayed at 0% in every eval. The selection rule
-picks 36M (0.35 levels). A second extension to 60M was still running at the
-end of the session.
+0.25-0.35; mazes 14 and 15 stayed at 0% in every eval to 40M. The
+selection rule picked 36M (0.35 levels); a second extension (to 60M, still
+running at the end of the session) gave 50M (0.35 levels and, for the first
+time, no maze at 0% in the training eval: maze 15 5%), which on the final
+protocol is again 0% on maze 15.
 
 **Verdict: PARTIAL, by BC only.** No agent reaches 50% on every maze. bc0
 and bc0_dagger1 (eps 0) clear >= 30% of every maze (minimum 36% and 40%),
 which is the PARTIAL bar; the version the selection rule passed on
 (bc0_dagger3) does not (24% on maze 13), and the four versions were all
 scored on the same test seeds, so "BC is PARTIAL" rests on the best of four
-noisy minima. RL is FAILURE (20M: 0% on 8 mazes; 36M: 0% on maze 15, 4-12% on
-mazes 3, 6, 13, 14, 16) and did not overtake its teacher (BC) or the
-heuristic on any maze beyond noise (20M maze 8: RL 76%, BC 72%, heuristic
-96%; 36M maze 9: RL 40% = BC 40%). No tag,
-no release, no README section.
+noisy minima. RL is FAILURE (20M: 0% on 8 mazes; 36M: 0% on maze 15,
+4-12% on mazes 3, 6, 13, 14, 16; 50M: 0% on maze 15, 8-20% on mazes 3, 4,
+9, 14, 16). RL did not overtake its teacher: no maze beats the heuristic,
+and against BC the 50M agent is ahead only on maze 13 (44% vs 24%; the
+other BC versions had 40-60% there) and maze 8 (84% vs 72%, 3 games of 25),
+below it on 13 of 16 mazes. No tag, no release, no README section.

@@ -1034,3 +1034,13 @@ RL), PARTIAL >= 30%.
   (the test compares the global set of such dirs). Run alone 3 times: 2
   passed, 1 failed the same way, both with training running -> a race with
   the concurrent run, not a regression (the session touched no env code).
+- 06:52 Second extension evals 42-50M: levels 0.20 / 0.05 / 0.25 / 0.30 /
+  0.35, mean per-maze share 0.21-0.34; at 50M the first eval with no maze at
+  0% (maze 15 5%) -> new best.pt by the rule (0.35 levels as 36M, min 5% >
+  0%), kept as `runs/rl_bc0/best_ext_50M.pt`.
+- 06:56 rl_bc0 @ 50M on the final protocol: per maze
+  28/48/20/20/28/36/80/84/16/52/24/28/44/16/0/8% (min 0%, maze 15; mean
+  33%), from level 1 0.38 levels (median 0, max 2), food 220, level 1 30%.
+  FAILURE. RL vs BC: ahead on mazes 13 (44 vs 24%) and 8 (84 vs 72%), behind
+  on 13 mazes; never ahead of the heuristic. Final plot and results.md use
+  heuristic / BC / RL 20M (plan) / RL 50M (best, beyond the plan).
