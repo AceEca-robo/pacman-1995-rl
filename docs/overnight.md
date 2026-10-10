@@ -1261,3 +1261,12 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
 - 01:05 Watch: 4.33k steps/s (min 4.31k over the last hour), Q 43.5-47.8,
   no NaN, demo share of the batches steady at 40%, eps at its floor 0.01
   since 5M. Disk 44 GB free.
+- 02:06 Watch: 4.30k steps/s mean over the hour (one line at 3.73k next to
+  a supervisor eval), Q 44.5-49.8, no NaN, demo share 40%. Supervisor
+  @20M: 70.3% / min 45% / 0.80 levels; **@30M: 75.9% / min 50% / 1.50
+  levels, food 374** — above BC (66.9 / 40 / 1.20) and the heuristic's
+  levels (1.25), below its per-maze mean (81.3%) and min (60%). Training
+  evals 26M / 28M: 0.77 / 0.78 per maze, min 0.60 both. (The supervisor's
+  30M copy gives min 50% where the training eval at 30M gave 55%: one game
+  on one maze; the copy and the actor's weights at eval time can differ by
+  the last weight sync.)
