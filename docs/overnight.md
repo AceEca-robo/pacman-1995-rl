@@ -934,3 +934,71 @@ RL), PARTIAL >= 30%.
   FAILURE. Provisional table and `docs/levels_v03.png` (heuristic / BC
   bc0_dagger3 / RL rl_bc0 20M) written. The continuation runs alone at
   ~2.8k steps/s (40M expected ~05:35).
+
+## Unclear points and decisions (2026-10-09/10)
+
+- Class weights "when imbalanced": the rule written into `configs/bc.yaml`
+  (weights only if the largest and smallest share of the classes with >= 1%
+  of the labels differ by > 2x; N, ~0.001% of the labels, keeps weight 1).
+  The data was balanced (1.28x), so no weights.
+- Validation "on other seeds": the 100k validation steps use seeds
+  5000000.. (training 100000..1.7M); DAgger shards use 300000.., 2000000..,
+  4000000.. (dagger1's range overlaps the training shards' seeds; different
+  maze draws and policy). No data seed overlaps the eval seeds (0..99,
+  1000..1019).
+- "DAgger if anywhere < 30%" was read over both eps settings: bc0 was >= 30%
+  everywhere at eps 0 but 28% on maze 11 at eps 0.02, so DAgger ran. DAgger
+  play used eps 0.02 (the plan's second eval setting); each iteration
+  fine-tuned the previous BC on the union for 4 epochs, not 10 from scratch.
+- Which BC goes on to RL and into the final table: not specified; the plan's
+  RL selection rule (mean levels from level 1 at eps 0, then the per-maze
+  minimum) was applied -> bc0_dagger3. Picking by the criterion itself
+  (minimum per maze) would have given bc0_dagger1 (40%); both readings are
+  noise-level differences.
+- Final protocol "25 games per maze (seed 0..99)": as last night, 100 games
+  from level 1 on seeds 0..99 and seeds 0..24 on each maze (maze 1's are
+  the first 25 level-1 games).
+- RL warm start "300k transitions of the BC agent itself": greedy BC
+  (eps 0), all 16 envs in one forward pass, prefixes as in training (30% of
+  resets). The transitions carry the env reward of the RL config.
+- "Heads from scratch": everything but `conv.*` (vec layer, fc 1024, value
+  and advantage heads) starts fresh; the convs go into online and target.
+- Per-maze eval games during training are cut at 10000 ticks
+  (`eval_level_max_steps`) so an eval of 340 games stays at ~1 min; the
+  final protocol keeps evaluate.py's 30000.
+- The replay buffer is not checkpointed in stage 2 (two 3.3 GB files against
+  13 GB free disk and the 10 GB rule); a --resume would refill it.
+- "Speed of each >= 1.5k": rl_bc0 1.85-1.9k, rl_bc1 1.75k over the first
+  120k steps; both ~1.55k once both trained their convs.
+- Tie between rl_bc0's 16M and 20M under the plan's two keys: broken by the
+  mean per-maze clear share of the training evals (20M), not by the final
+  test seeds.
+- Verdict: the plan says "BC or RL". bc0 and bc0_dagger1 meet PARTIAL
+  (>= 30% everywhere) at eps 0, the selected BC and RL do not; the session
+  reports PARTIAL with that caveat (best of four BC versions on the same
+  test seeds). PARTIAL is not success: no README section, gif, tag, release
+  or push.
+- The rl_bc0 continuation to 40M is beyond the plan (the GPU would have
+  idled 4.5 hours); it does not replace the 20M result in the verdict.
+
+## Ideas for later (2026-10-10)
+
+(Not tried.)
+
+- RL from BC loses the BC policy in the first 2M steps (fresh Q heads +
+  eps 0.1). Keeping it needs the policy itself in the loss: DQfD-style
+  large-margin loss on the BC / heuristic transitions (Hester et al. 2018),
+  or Q heads pre-trained on the BC data by fitted Q evaluation of the BC's
+  own returns before any acting, or a KL / cross-entropy term towards BC
+  that decays (e.g. AWAC / IQL-style offline-to-online). The frozen convs
+  helped (rl_bc0 vs rl_bc1) but were not enough.
+- BC's weak spot is fragility, not accuracy: 98.8% agreement, yet eps 0.02
+  halves its levels and some games stall to the 30000-tick cut. Noise
+  injection in the data (DART), a larger eps or a few frames of history
+  (the last actions) may make it more robust; per-maze accuracy on the
+  BC's own states (DAgger shards) is the number to watch, not the
+  heuristic-play validation accuracy (flat at 98.6-98.8%).
+- With 25 games per maze, the per-maze minimum over 16 mazes is a noisy
+  statistic (one game = 4 points; the minimum is biased low). 50-100 games
+  per maze for the final protocol, or a criterion on the 16-maze mean plus a
+  looser minimum.
