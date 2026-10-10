@@ -928,3 +928,9 @@ RL), PARTIAL >= 30%.
   policy and PER restarts). Its own supervisor in `runs/sv_rlbc_ext/`. The
   plan's result stays the 20M checkpoint; the continuation is reported
   separately. rl_bc1 (flat at 0%) is not continued.
+- 03:35 rl_bc0 @ 20M on the final protocol (seeds 0..99 / 25 per maze, 4 min):
+  per maze 0/4/0/8/4/16/52/76/0/12/0/0/4/0/0/8% (min 0%), from level 1
+  0.05 levels (5 games of 100 clear level 1), food 127-171 per maze game.
+  FAILURE. Provisional table and `docs/levels_v03.png` (heuristic / BC
+  bc0_dagger3 / RL rl_bc0 20M) written. The continuation runs alone at
+  ~2.8k steps/s (40M expected ~05:35).
