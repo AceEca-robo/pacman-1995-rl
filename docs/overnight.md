@@ -1051,3 +1051,20 @@ RL), PARTIAL >= 30%.
   min 0%). No README section, gif, tag, release or push; commits are local.
   Still running at 08:00 (not to be killed): rl_bc0's second extension to
   60M (tmux `rl_bc0`, supervisor `sv_rlbc_ext2`), expected to end ~08:00.
+
+## Chronology (2026-10-10, session 2: preparation for the long DQfD run)
+
+Decisions from the plan: no intermediate releases; the target is an RL agent
+clearly above the heuristic on all 16 mazes (mean >= 2 levels in a row from
+level 1, no maze below 50% on 100 games per maze); one long run that is
+extended, not restarted. This session only prepares it (no training).
+
+- 13:18 State at start: the machine had rebooted (12:08); rl_bc0's second
+  extension had finished at 08:01 (60M). Its last training evals (50-60M):
+  levels from level 1 0.65 / 0.45 / 0.60, mean per-maze share 0.44 / 0.36 /
+  0.47, per-maze minimum 5% / 0% / 10% (maze 15) — not scored on the final
+  protocol.
+- 13:20 Deleted `runs/v03s0/buffer.npz` (3.2 GB; the only replay buffer left
+  on disk, run finished at 60M). Full pytest on an idle machine: 77 passed,
+  including `test_close_leaves_nothing` (the 05:53 failure was the race with
+  the concurrent training run).
