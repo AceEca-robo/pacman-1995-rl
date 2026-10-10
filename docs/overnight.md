@@ -1014,3 +1014,11 @@ RL), PARTIAL >= 30%.
   0.284 (32M: maze 10 75%, 8 65%, 7 55%, 2/6/12 45%; mazes 14, 15 0%).
   The first clear rise since 20M; supervisor @30M (20 games from level 1):
   food 173, level 1 10%.
+- 05:42 Continuation reached 40M. Evals 34-40M: levels 0.30 / 0.35 / 0.00 /
+  0.25, mean per-maze share 0.275 / 0.312 / 0.256 / 0.384 (40M: maze 7
+  90%, 8 80%, 6 60%, 2 55%); mazes 14 and 15 at 0% in every eval of the
+  night. best.pt (selection rule) = 36M (0.35 levels; the minimum is 0
+  everywhere). Kept as `runs/rl_bc0/best_ext_36M.pt`, the 40M checkpoint as
+  final_40M.pt. Final protocol on 36M started.
+- 05:43 Second extension, to 60M (expected ~08:00; left running at the end
+  of the session), supervisor in `runs/sv_rlbc_ext2/`.
