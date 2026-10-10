@@ -35,6 +35,44 @@ import numpy as np
 
 from agents.dqn import PACKED, SumTree, pack_grid, pack_grids
 
+SHM_PREFIX = "pacrl_"  # segment names: pacrl_<creator pid>_<n>
+_shm_count = 0
+
+
+def create_shm(nbytes):
+    """A new shared memory segment named after this process, so that one left
+    behind by a killed run can be recognized (remove_stale_shm)."""
+    global _shm_count
+    _shm_count += 1
+    return shared_memory.SharedMemory(
+        name=f"{SHM_PREFIX}{os.getpid()}_{_shm_count}", create=True, size=max(1, nbytes))
+
+
+def remove_stale_shm(path="/dev/shm"):
+    """Unlink segments whose creating process is gone (a run killed before
+    its cleanup). Returns the names removed."""
+    gone = []
+    try:
+        names = os.listdir(path)
+    except FileNotFoundError:
+        return gone
+    for name in names:
+        if not name.startswith(SHM_PREFIX):
+            continue
+        try:
+            pid = int(name[len(SHM_PREFIX):].split("_")[0])
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            try:
+                os.unlink(os.path.join(path, name))
+                gone.append(name)
+            except FileNotFoundError:
+                pass
+        except (ValueError, PermissionError):
+            pass
+    return gone
+
+
 FIELDS = {  # name: (per-slot shape suffix, dtype); obs / vec shapes are added
     "act": ((), np.uint8),
     "rew1": ((), np.float32),
@@ -69,7 +107,7 @@ class SharedReplay:
             for k, (shape, dtype) in shapes.items():
                 nbytes = max(1, int(np.prod(shape)) * np.dtype(dtype).itemsize)
                 if create:
-                    shm = shared_memory.SharedMemory(create=True, size=nbytes)
+                    shm = create_shm(nbytes)
                     names[k] = shm.name
                 else:
                     shm = shared_memory.SharedMemory(name=names[k])
@@ -184,10 +222,15 @@ class StreamWriter:
         self.cur, _ = self._write_frames(envs, packed, vecs)
         self._publish()
 
-    def full(self, margin=2):
-        """True when a demo (non-ring) stream has less than margin free frames."""
+    def room(self, margin=2):
+        """Per env: False once its demo (non-ring) stream has less than margin
+        free frames."""
         s = self.streams
-        return bool(((self.count + margin > self.r.cleared[s]) & (s < self.r.n_demo)).any())
+        return ~((self.count + margin > self.r.cleared[s]) & (s < self.r.n_demo))
+
+    def full(self, margin=2):
+        """True when any env's demo stream is full (room)."""
+        return not self.room(margin).all()
 
     def step(self, actions, rewards, next_packed, next_vecs, term, trunc, final_packed,
              final_vecs, ids=None):

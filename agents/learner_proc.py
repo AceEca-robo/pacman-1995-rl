@@ -68,12 +68,11 @@ class LearnerProcess:
     plus state_dict, request_conv_trainable and pull_weights."""
 
     def __init__(self, cfg, device, dims, replay, init, seed, n_updates=0):
-        from multiprocessing import shared_memory
+        from agents.shared_replay import create_shm
         self.cfg, self.replay = cfg, replay
         self.max_lag = cfg.get("async_max_lag") or 4
         self.actor = Actor(cfg, device, *dims)
-        self._shm = [shared_memory.SharedMemory(create=True, size=N_CTRL * 8),
-                     shared_memory.SharedMemory(create=True, size=self.actor.n_params * 4)]
+        self._shm = [create_shm(N_CTRL * 8), create_shm(self.actor.n_params * 4)]
         self.ctrl = np.ndarray(N_CTRL, np.float64, buffer=self._shm[0].buf)
         self.ctrl[:] = 0
         self.ctrl[DONE] = self.ctrl[FLUSHED] = self.ctrl[CREDIT] = n_updates

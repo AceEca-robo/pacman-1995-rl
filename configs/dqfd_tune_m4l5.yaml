@@ -1,0 +1,9 @@
+# DQfD phase 0 tuning (2026-10-10): configs/dqfd.yaml for 100k pretrain
+# updates (compare: margin 0.8, lambda 1 gave a mean per-maze clear share of
+# 22% at 100k and 25% at 200k; BC 67%).
+base: dqfd.yaml
+dqfd:
+  pretrain_updates: 100000
+  pretrain_eval_every: 0
+  margin: 4.0
+  lambda_margin: 5.0

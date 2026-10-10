@@ -68,8 +68,8 @@ class EnvPool:
         self.n, self.n_actions = n, n_actions
         self.min_ready = min_ready or max(1, n // 2)
         self.max_wait = max_wait
-        self._shm = [shared_memory.SharedMemory(create=True, size=n * planes * PACKED),
-                     shared_memory.SharedMemory(create=True, size=n * vec_dim * 4)]
+        from agents.shared_replay import create_shm
+        self._shm = [create_shm(n * planes * PACKED), create_shm(n * vec_dim * 4)]
         self.grid = np.ndarray((n, planes, PACKED), np.uint8, buffer=self._shm[0].buf)
         self.vec = np.ndarray((n, vec_dim), np.float32, buffer=self._shm[1].buf)
         ctx = mp.get_context("fork")

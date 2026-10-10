@@ -1,0 +1,85 @@
+# DQfD (Hester et al. 2018) on all 16 mazes: one long run, continued with
+# `--resume --extend-steps N` instead of restarts (2026-10-10 plan).
+#
+# Phase 0 (pretrain): 1M transitions of the BC agent bc0_dagger1 playing
+# greedily in the training envs (rewards of this config) fill the demo part of
+# the replay (saved as runs/<run>/demo.npz, reloaded on --resume). The Q
+# network gets the BC convolutions, everything else fresh; 500k updates on the
+# demo transitions only with 1-step TD + n-step TD + large-margin
+# classification (towards the demo action; the plan's margin 0.8 was tuned to
+# 4.0 with weight 5, see dqfd below) + L2 1e-5.
+# Phase 1 (RL): the demo transitions stay in the replay for good with their
+# PER priority raised by eps_demo; the margin loss only on demo samples;
+# eps 0.02 -> 0.01, PER, endgame dot reward (k 20), 20% of resets from the
+# heuristic endgame prefixes of all 16 mazes, start_level random:1-16,
+# death -20.
+#
+# Speed (part A, 2026-10-10): learner in its own process with the replay in
+# shared memory, env pool without a step barrier (32 envs, 24 per actor
+# batch: the forward pass waits ~3 ms for its GPU time slice next to the
+# learner, so it is amortized over many envs), batch 128 every
+# 32 env steps (4 samples per env step as batch 64 / 16), CPU pinning for
+# the i7-13650HX (cpus 0-11 = 6 P-cores x 2, 12-19 = E-cores).
+base: dqn_mm_wide.yaml
+total_steps: 50000000        # first leg; extend with --resume --extend-steps
+learner_process: true
+vector_env: pool
+num_envs: 32
+pool_min_ready: 24         # results per actor batch (of 32 envs)
+batch_size: 128
+train_every: 32
+fast_learner: true
+async_max_lag: 4
+weight_sync_every: 50        # updates between weight pushes to the actor
+replay_guard: 1024           # free slots kept ahead of each env's writer
+cpu_affinity:
+  actor: [4, 5]
+  learner: [6, 7]
+  envs: [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+buffer_size: 1008000         # agent frames (31500 per env); the demo part comes on top
+checkpoint_buffer: false     # not saved (~3.4 GB); a --resume refills it, the demo part is demo.npz
+learning_starts: 20000
+epsilon_start: 0.02
+epsilon_end: 0.01
+epsilon_steps: 5000000
+per:
+  enabled: true
+  alpha: 0.6
+  beta_start: 0.4
+  beta_end: 1.0
+  beta_steps: 50000000       # fixed, so extending total_steps does not change it
+init_conv_from: runs/bc0_dagger1/bc_best.pt
+warm_start: 0
+dqfd:
+  enabled: true
+  demo_agent: runs/bc0_dagger1/bc_best.pt
+  demo_file: runs/dqfd_demo/demo.npz   # generated once, shared by runs with this env config
+  demo_transitions: 1000000
+  demo_epsilon: 0.0          # the BC policy itself (greedy)
+  pretrain_updates: 500000
+  pretrain_target_update: 1000   # updates between target syncs in phase 0
+  pretrain_eval_every: 100000
+  pretrain_log_every: 10000
+  # tuned on phase 0 (2026-10-10, 100k updates, configs/dqfd_tune_*.yaml):
+  # margin 0.8 / lambda 1 cleared 22% of the per-maze games (25% at 200k),
+  # 4.0 / 1 56%, 0.8 / 5 53%, 4.0 / 5 63% (BC 67%): our Q values are ~35-40
+  # (dots 1, endgame dots up to 21, level 50, death -20), so a margin of 0.8
+  # and a weight of 1 are small against the TD terms
+  margin: 4.0
+  lambda_margin: 5.0
+  lambda_1step: 1.0
+  lambda_nstep: 1.0
+  l2: 1.0e-5                 # loss l2 * ||theta||^2 / 2 (Adam weight_decay)
+  eps_demo: 1.0              # added to |TD| + eps of demo transitions' priorities
+best_metric: levels_cleared_min_maze
+eval_every: 2000000
+eval_levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+eval_level_episodes: 20
+eval_level_max_steps: 10000
+eval_envs: 20
+env_config:
+  start_level: random:1-16
+  prefix_prob: 0.2
+  prefix_file: data/endgame_prefixes_all.json
+  reward:
+    death: -20.0

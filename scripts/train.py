@@ -14,6 +14,7 @@ import contextlib
 import functools
 import json
 import os
+import signal
 import sys
 import threading
 import time
@@ -30,7 +31,8 @@ from agents.bc import BCAgent  # noqa: E402
 from agents.dqn import DQNLearner, NStep, make_buffer, n_planes, pack_grid, pack_grids  # noqa: E402
 from agents.env_pool import EnvPool  # noqa: E402
 from agents.learner_proc import LearnerProcess  # noqa: E402
-from agents.shared_replay import SharedReplay, StreamWriter, make_packed_env  # noqa: E402
+from agents.shared_replay import (SharedReplay, StreamWriter, make_packed_env,  # noqa: E402
+                                  remove_stale_shm)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
 from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims, parse_start_level  # noqa: E402
 
@@ -227,10 +229,16 @@ class PoolCollector(FrameCollector):
     def set_start_level(self, spec):
         self.envs.call_async("set_start_level", spec)
 
-    def step(self, actions, log_step, prefix="episode"):
+    def step(self, actions, log_step, prefix="episode", ids=None):
+        """ids: send the actions to these envs only (default self.ids); the
+        other ready envs stay parked."""
         pool = self.envs
-        self.actions[self.ids] = actions
-        pool.send(self.ids, actions)
+        send = self.ids if ids is None else ids
+        self.actions[send] = actions
+        pool.send(send, actions)
+        if not pool.busy.any():
+            self.ids, self.last_n = np.zeros(0, np.int64), 0
+            return 0
         ids, res = pool.recv()
         rew = np.array([x[0] for x in res])
         term = np.array([x[1] for x in res])
@@ -428,12 +436,23 @@ def generate_demo(make_collector, cfg, replay, n_actions, seed, device):
     col = make_collector(stream, 10**9 + seed)
     rng = np.random.default_rng([seed, 7])
     t0, steps, eps = time.perf_counter(), 0, dq.get("demo_epsilon") or 0.0
-    while stream.size < dq["demo_transitions"] and not stream.full():
-        ids = col.ids
-        actions = agent.act_batch(col.cur[ids], col.obs["vec"][ids])
+    pool = isinstance(col, PoolCollector)
+    while stream.size < dq["demo_transitions"]:
+        # the pool steps envs unevenly: an env whose stream is full is parked
+        # (vector envs step together: stop at the first full stream)
+        ids = col.ids[stream.room()[col.ids]] if pool else col.ids
+        if not pool and stream.full():
+            break
+        if pool and not len(ids) and not col.envs.busy.any():
+            break  # every stream full
+        actions = agent.act_batch(col.cur[ids], col.obs["vec"][ids]) if len(ids) \
+            else np.zeros(0, np.int64)
         rand = rng.random(len(ids)) < eps
         actions[rand] = rng.integers(n_actions, size=int(rand.sum()))
-        col.step(actions, steps, prefix="demo")
+        if pool:
+            col.step(actions, steps, prefix="demo", ids=ids)
+        else:
+            col.step(actions, steps, prefix="demo")
         steps += col.last_n
         if steps % 100_000 < col.last_n:
             print(f"demo: {steps} steps, {stream.size} transitions "
@@ -587,6 +606,16 @@ def main():
     p.add_argument("--pretrain-only", action="store_true",
                    help="dqfd: stop after phase 0 (checkpoint.pt; --resume continues with RL)")
     args = p.parse_args()
+
+    # tmux kill-session (SIGHUP) / kill (SIGTERM): exit through the finally
+    # blocks, which stop the learner process and unlink the shared memory
+    def _exit(signum, frame):
+        raise SystemExit(f"signal {signum}")
+    signal.signal(signal.SIGTERM, _exit)
+    signal.signal(signal.SIGHUP, _exit)
+    stale = remove_stale_shm()  # left behind by a run killed harder (SIGKILL, OOM)
+    if stale:
+        print(f"removed {len(stale)} stale shared memory segments")
 
     run_dir = os.path.join(ROOT, "runs", args.run_name)
     ck_path = os.path.join(run_dir, "checkpoint.pt")

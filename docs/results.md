@@ -793,3 +793,34 @@ noisy minima. RL is FAILURE (20M: 0% on 8 mazes; 36M: 0% on maze 15,
 and against BC the 50M agent is ahead only on maze 13 (44% vs 24%; the
 other BC versions had 40-60% there) and maze 8 (84% vs 72%, 3 games of 25),
 below it on 13 of 16 mazes. No tag, no release, no README section.
+
+### DQfD phase 0 (2026-10-10, preparation of the long run)
+
+`configs/dqfd.yaml`: the replay holds 1M transitions of greedy BC
+bc0_dagger1 played in the training envs (prefix_prob 0.2, start_level
+random:1-16, death -20, endgame dot k 20) as demo transitions; the Q network
+gets the BC convolutions, the rest fresh; phase 0 = updates on the demo
+transitions only with 1-step TD + 3-step TD + large-margin classification
+(demo samples) + L2 1e-5 (batch 128, PER, target sync every 1000 updates).
+Scored on the training eval protocol (20 games from level 1 and 20 started
+on each maze, seeds 1000..1019, per-maze games cut at 10000 ticks;
+`scripts/train_eval.py` for BC). Agreement = greedy action equal to the demo
+action on 100k demo states (`scripts/demo_agreement.py`).
+
+| phase 0 setting | updates | per-maze mean | per-maze min | levels from level 1 | food | agreement |
+|---|---|---|---|---|---|---|
+| BC bc0_dagger1 (reference) | - | 66.9% | 40% | 1.20 | 333 | - |
+| margin 0.8, lambda_margin 1 (plan) | 100k | 22% | 0% | 0.10 | 151 | - |
+| margin 0.8, lambda_margin 1 (plan) | 200k | 25% | 5% | 0.15 | 147 | - |
+| margin 4.0, lambda_margin 1 | 100k | 56% | 20% | 0.75 | 263 | 98.5% |
+| margin 0.8, lambda_margin 5 | 100k | 53% | 25% | 0.70 | 246 | 98.9% |
+| margin 4.0, lambda_margin 5 | 100k | 63% | 40% | 0.90 | 273 | 99.6% |
+| **margin 4.0, lambda_margin 5 (configs/dqfd.yaml, run dqfd0)** | 500k | 59% | 25% | 0.95 | 294 | 99.97% |
+
+dqfd0 at 100k-500k updates: per-maze mean 63 / 59 / 56 / 59 / 59%, min 40 /
+35 / 20 / 25 / 25% (20 games per maze: +-10 points). Per maze at 500k:
+60/65/50/75/85/50/65/70/55/75/55/80/25/55/25/60% (BC on the same games:
+85/70/60/80/65/80/85/85/55/80/40/50/40/60/40/95%). The plan's margin 0.8 is
+small against Q values of ~35-40 (dots 1, endgame dots up to 21, level 50,
+death -20); a larger margin and weight together bring the greedy policy to
+BC's actions. Phase 1 (RL) runs at 4.3k steps/s with this loss (learner-bound).

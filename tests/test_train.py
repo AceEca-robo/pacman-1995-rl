@@ -356,9 +356,8 @@ def test_conv_freeze_keeps_weights():
 
 
 def shm_segments():
-    """Python shared_memory segments of this user."""
-    return {p for p in os.listdir("/dev/shm") if p.startswith("psm_")
-            and os.stat(os.path.join("/dev/shm", p)).st_uid == os.getuid()}
+    """Shared memory segments of train.py's learner_process runs."""
+    return {p for p in os.listdir("/dev/shm") if p.startswith("pacrl_")}
 
 
 def test_learner_process(tmp_path):
@@ -440,3 +439,41 @@ def test_dqfd_pool(tmp_path):
         assert "pretrain " not in out.stdout
     finally:
         subprocess.run(["rm", "-rf", run_dir])
+
+
+def test_signal_cleans_shared_memory(tmp_path):
+    """SIGHUP (tmux kill-session) mid-run: the learner process stops and the
+    shared memory is unlinked; a segment of a dead process is removed at the
+    next start."""
+    from agents.shared_replay import SHM_PREFIX, remove_stale_shm
+    cfg = tmp_path / "tiny_sig.yaml"
+    cfg.write_text(yaml.safe_dump({**TINY, "base": os.path.relpath(TINY["base"], tmp_path),
+                                   "total_steps": 10**6, "num_envs": 4, "vector_env": "pool",
+                                   "learner_process": True, "buffer_size": 4000,
+                                   "replay_guard": 64, "checkpoint_buffer": False}))
+    name = f"test-sig-{os.getpid()}"
+    run_dir = os.path.join(ROOT, "runs", name)
+    try:
+        p = subprocess.Popen([sys.executable, os.path.join(ROOT, "scripts", "train.py"),
+                              "--run-name", name, "--config", str(cfg)],
+                             stdout=subprocess.PIPE, text=True)
+        for line in p.stdout:
+            if "steps/s" in line:  # learning
+                break
+        mine = {s for s in shm_segments() if s.startswith(f"{SHM_PREFIX}{p.pid}_")}
+        assert mine
+        p.send_signal(signal.SIGHUP)
+        p.wait(timeout=60)
+        assert not mine & shm_segments()
+    finally:
+        if p.poll() is None:
+            p.kill()
+        subprocess.run(["rm", "-rf", run_dir])
+    # a dead creator's segment
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    path = f"/dev/shm/{SHM_PREFIX}{dead.pid}_1"
+    with open(path, "wb") as f:
+        f.write(b"x")
+    assert f"{SHM_PREFIX}{dead.pid}_1" in remove_stale_shm()
+    assert not os.path.exists(path)

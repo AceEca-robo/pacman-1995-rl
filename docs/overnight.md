@@ -1118,3 +1118,111 @@ extended, not restarted. This session only prepares it (no training).
   equal NStep's transitions, ring overwrite consistency, demo not evicted,
   demo save/load, margin loss, env pool equals the env; train tests for
   learner_process and DQfD).
+- 15:00 **Part B, DQfD** (`configs/dqfd.yaml`, run `dqfd0`): BC bc0_dagger1
+  scored on the training eval protocol of this config (20 games from level
+  1 + 20 per maze, seeds 1000..1019, per-maze games cut at 10000 ticks;
+  `scripts/train_eval.py`): per maze 85/70/60/80/65/80/85/85/55/80/40/50/40/
+  60/40/95%, mean 66.9%, min 40%, from level 1 1.20 levels, food 333 — the
+  reference for "close to BC".
+- 15:01 First demo generation stopped at 878,509 transitions: the env pool
+  steps envs unevenly and the first full demo stream ended it. Fixed (an env
+  whose stream is full is parked); the killed run (tmux kill-session = SIGHUP)
+  also left 7 GB of shared memory behind -> SIGHUP / SIGTERM now exit through
+  the cleanup, segments are named pacrl_<pid>_<n> and a dead creator's are
+  removed at the next start (test_signal_cleans_shared_memory).
+- 15:06 Demo: 1,000,012 transitions of greedy bc0_dagger1 in 65 s (32 envs,
+  prefix_prob 0.2, start_level random:1-16; `runs/dqfd_demo/demo.npz`, 33 MB
+  compressed). 904 finished episodes: mean length 1076, 69% cleared at least
+  one level (mean 1.06); 7 were cut at 10000 ticks (BC stuck in a loop), i.e.
+  ~7% of the demo transitions are such loops (kept: the plan asks for the
+  BC's own play).
+- 15:07-15:28 Phase 0 as planned (margin 0.8, all weights 1, L2 1e-5,
+  batch 128, target sync every 1000 updates, PER as in RL): 161 updates/s;
+  mean per-maze clear share 22% at 100k updates (min 0%), 25% at 200k (min
+  5%), margin loss 0.10 -> 0.07. Far from 55%; stopped at 200k
+  (`runs/dqfd_m08_200k`) to tune instead.
+- 15:28-16:05 Tuning, 100k updates each (`configs/dqfd_tune_*.yaml`; mean
+  per-maze share / min / levels from level 1 / greedy agreement with the demo
+  actions on 100k demo states, `scripts/demo_agreement.py`):
+  margin 0.8, lambda 1: 22% / 0% / 0.10 / -;
+  margin 4.0, lambda 1: 56% / 20% / 0.75 / 98.5%;
+  margin 0.8, lambda 5: 53% / 25% / 0.70 / 98.9%;
+  **margin 4.0, lambda 5: 63% / 40% / 0.90 / 99.6%**.
+  What helped: scale. Our Q values are ~35-40 (dots 1, endgame dots up to
+  21, level 50, death -20), TD errors of a few units saturate the Huber
+  gradients of both TD terms, and a margin of 0.8 with weight 1 is small
+  against them (DQfD's Atari setting has clipped rewards). Both a larger
+  margin and a larger weight help; together they bring the greedy policy to
+  99.6% agreement with BC. configs/dqfd.yaml now uses margin 4.0 / lambda 5.
+- 16:07 Final phase 0 of `dqfd0` started (500k updates, evals every 100k,
+  `--pretrain-only`).
+- 17:00 dqfd0 phase 0 finished (500k updates, 161 updates/s, 52 min):
+  evals at 100k / 200k / 300k / 400k / 500k: per-maze mean 63 / 59 / 56 /
+  59 / 59%, min 40 / 35 / 20 / 25 / 25%, levels from level 1 0.90 / 0.90 /
+  0.65 / 0.55 / 0.95. At 500k: per maze 60/65/50/75/85/50/65/70/55/75/55/80/
+  25/55/25/60% (BC 85/70/60/80/65/80/85/85/55/80/40/50/40/60/40/95%), level
+  1 cleared 60%, food 294; greedy agreement with the demo actions 99.97%
+  (median lead of Q(s, a_demo) 14.4). Meets ">= 55% on average"; a plateau
+  from 100k updates on (20 games per maze: +-10 points). `runs/dqfd0/
+  checkpoint.pt` (= pretrain.pt) is where the long run continues
+  (`--resume`).
+- 17:02 Phase-1 speed probe (a copy of dqfd0 resumed for 4.5 min, then
+  deleted): 4.30-4.35k steps/s with long episodes; the learner is the limit
+  (busy 92%, the actor waits 20%), the DQfD update with its s_{t+1} pass is
+  ~6.1 ms of GPU at batch 128 (5.0 ms without). Shutdown by tmux
+  kill-session left no shared memory.
+
+## Unclear points and decisions (2026-10-10, session 2)
+
+- ">= 4.5k steps/s with the wide network on 16 mazes": batch 64 every 16 env
+  steps cannot pass ~3.5k on this GPU (one update ~4.6 ms of GPU) in any
+  process layout, so the speed setting is batch 128 every 32 env steps (the
+  same 4 samples per env step, half the gradient steps). The 2M smoke at
+  that setting averaged 4,484 steps/s (5.1k while the convs were frozen,
+  4.4k after); 32 envs with 24 per actor batch reach 5.0k with trainable
+  convs (configs/dqfd.yaml). The DQfD loss (an extra s_{t+1} pass) costs
+  ~20% more GPU per update: phase 1 of dqfd0 runs at 4.3k steps/s, below
+  4.5k (learner-bound); not changed without asking (train_every 34-36, or
+  a cheaper 1-step target, would cross it).
+- "Compare the curve with the current async mode on the same seed": the
+  same config and seed 0 in both, but the runs are not deterministic
+  (thread / process timing), so "the same" means within noise; compared on
+  the training episode reward per 250k steps and the evals at 0.5-2M.
+- L2 1e-5: as TF's l2_loss convention, loss 1e-5 * ||theta||^2 / 2, i.e.
+  Adam weight_decay 1e-5 (coupled), on all parameters.
+- n-step: 3 as in every run so far (DQfD used 10).
+- Priorities: from the n-step |TD|; demo: (|TD| + eps + eps_demo)^alpha with
+  eps_demo 1.0 (DQfD's value); the IS weights apply to the whole per-sample
+  loss.
+- Phase 0 "target network": synced every 1000 updates (no env steps in
+  phase 0); phase 1 keeps target_update 10000 env steps (312 updates).
+- Demo: greedy bc0_dagger1 in the phase-1 env config (prefixes, random
+  start maze, death -20, endgame dot bonus), so the demo rewards are the RL
+  rewards. ~7% of the demo transitions come from 7 episodes where BC looped
+  until the 10000-tick cut; kept, since the plan asks for the BC's own play.
+- "Close to BC (>= 55% on average)": measured on the training eval protocol
+  (seeds 1000..1019, 20 per maze), where BC scores 66.9%; the plan's margin
+  0.8 gave 22-25%, the tuned margin 4.0 / weight 5 63% at 100k updates.
+  The tuning was done at 100k updates (11 min each); the final phase 0 ran
+  the plan's 500k with the tuned values.
+- The plan's run at margin 0.8 was stopped at 200k updates (trend 22% ->
+  25%) to spend the GPU on tuning.
+- Phase 1 eps 0.02 -> 0.01 over 5M steps (length not in the plan); PER beta
+  0.4 -> 1.0 over a fixed 50M steps, so extending the run does not change
+  the schedule.
+- The agent part of the replay (1.008M frames) and the demo part (1.1M
+  frames) live in /dev/shm (7.3 GB); only the demo is on disk; a --resume
+  refills the agent part (learning_starts 20000).
+
+## Ideas for later (2026-10-10, session 2)
+
+(Not tried.)
+
+- Drop demo episodes that end truncated (BC loops) or weight demo
+  transitions by their episode's outcome.
+- Rescale rewards (or clip TD errors less aggressively) so DQfD's Atari
+  margins apply; the margin had to grow with the Q scale here.
+- CUDA MPS (or acting inside the learner process on a high-priority stream)
+  would remove the ~3 ms GPU time-slice wait of the actor's forward pass.
+- If the learner is the limit in phase 1: the target network's s_{t+1} /
+  s_{t+n} passes could share one forward with the online no-grad pass.
