@@ -5,8 +5,9 @@ Replay storage: every grid plane of PacmanEnv is either 0/1 or a count/4
 channel and three per count channel, 35 planes x 759 cells -> 3325 bytes
 (the float32 grid is 63756 bytes). The optional food-distance channel
 (env obs.food_distance) holds d / D_max with integer d <= D_max = 86 and is
-stored as 7 more bit planes of d (42 planes). Decoding happens on the GPU
-per batch.
+stored as 7 more bit planes of d (42 planes); the optional cell-safety
+channel (env obs.cell_safety, 0/1) as one more plane after it. Decoding
+happens on the GPU per batch.
 """
 
 import contextlib
@@ -20,7 +21,7 @@ import torch.nn.functional as F
 import yaml
 
 from agents.base import Agent
-from env.pacman_env import CHANNELS, HEIGHT, ROOT, WIDTH, d_max, obs_dims
+from env.pacman_env import CHANNELS, HEIGHT, ROOT, WIDTH, d_max, grid_extras, obs_dims
 
 DEFAULT_CONFIG = os.path.join(ROOT, "configs", "dqn.yaml")
 N_ACTIONS = 5  # default; the env's "actions" (4 or 5) decides
@@ -30,11 +31,27 @@ BINARY_CH = [i for i in range(len(CHANNELS)) if i not in COUNT_CH]
 COUNT_BITS = 3  # k in 0..4
 N_PLANES = len(BINARY_CH) + COUNT_BITS * len(COUNT_CH)
 DIST_BITS = 7  # food distance d in 0..D_max (86)
+EXTRA_BITS = {"food_distance": DIST_BITS, "cell_safety": 1}
 PACKED = (CELLS + 7) // 8
 
 
-def n_planes(n_channels):
-    return N_PLANES + DIST_BITS * (n_channels - len(CHANNELS))
+def default_extras(n_channels, extras=None):
+    """The optional grid planes after CHANNELS (env grid_extras); None:
+    food distance for each extra channel (all there was before cell_safety)."""
+    if extras is None:
+        extras = ("food_distance",) * (n_channels - len(CHANNELS))
+    assert len(extras) == n_channels - len(CHANNELS), (n_channels, extras)
+    return tuple(extras)
+
+
+def cfg_extras(cfg):
+    """grid_extras of a training config's env_config."""
+    from env.pacman_env import load_env_config
+    return grid_extras(load_env_config(cfg.get("env_config") or {}))
+
+
+def n_planes(n_channels, extras=None):
+    return N_PLANES + sum(EXTRA_BITS[e] for e in default_extras(n_channels, extras))
 
 
 def large_margin(q_all, act, margin):
@@ -63,32 +80,38 @@ def load_config(path=None):
 
 # --- observation packing ---------------------------------------------------
 
-def pack_grids(grids):
-    """float32 (B, C, H, W) grids -> uint8 (B, n_planes(C), PACKED); C is 21,
-    or 22 with the food-distance channel last."""
+def pack_grids(grids, extras=None):
+    """float32 (B, C, H, W) grids -> uint8 (B, n_planes(C, extras), PACKED);
+    C is 21 plus the optional planes `extras` (default_extras)."""
     c = grids.shape[1]
+    extras = default_extras(c, extras)
     flat = grids.reshape(len(grids), c, CELLS)
     counts = np.rint(flat[:, COUNT_CH] * 4).astype(np.uint8)
     bits = [flat[:, BINARY_CH] > 0]
     bits += [(counts >> b) & 1 for b in range(COUNT_BITS)]
-    if c > len(CHANNELS):
-        dist = np.rint(flat[:, len(CHANNELS):] * d_max()).astype(np.uint8)
-        bits += [(dist >> b) & 1 for b in range(DIST_BITS)]
+    for i, name in enumerate(extras):
+        plane = flat[:, len(CHANNELS) + i:len(CHANNELS) + i + 1]
+        if name == "food_distance":
+            dist = np.rint(plane * d_max()).astype(np.uint8)
+            bits += [(dist >> b) & 1 for b in range(DIST_BITS)]
+        else:
+            bits.append(plane > 0)
     return np.packbits(np.concatenate(bits, 1).astype(np.uint8), axis=-1)
 
 
-def pack_grid(grid):
-    """float32 (C, H, W) grid -> uint8 (N_PLANES, PACKED)."""
-    return pack_grids(grid[None])[0]
+def pack_grid(grid, extras=None):
+    """float32 (C, H, W) grid -> uint8 (n_planes, PACKED)."""
+    return pack_grids(grid[None], extras)[0]
 
 
 class GridDecoder:
     """uint8 (B, n_planes, PACKED) tensor -> float32 (B, C, H, W) on device."""
 
-    def __init__(self, device, n_channels=len(CHANNELS)):
+    def __init__(self, device, n_channels=len(CHANNELS), extras=None):
         self.n_channels = n_channels
-        self.dist = n_channels > len(CHANNELS)
-        if self.dist:
+        self.extras = default_extras(n_channels, extras)
+        self.dist = bool(self.extras)
+        if "food_distance" in self.extras:
             self.d_max = float(d_max())
             self.dist_weights = torch.tensor([2.0 ** b for b in range(DIST_BITS)], device=device)
         self.shifts = torch.arange(7, -1, -1, dtype=torch.uint8, device=device)
@@ -104,9 +127,17 @@ class GridDecoder:
         counts = bits[:, nb:N_PLANES].reshape(b, COUNT_BITS, len(COUNT_CH), CELLS)
         counts = (counts * self.weights.view(1, -1, 1, 1)).sum(1)
         grid = torch.cat([bits[:, :nb], counts], 1)[:, self.inverse]
-        if self.dist:  # same float32 division as the env: d / D_max
-            d = (bits[:, N_PLANES:] * self.dist_weights.view(1, -1, 1)).sum(1, keepdim=True)
-            grid = torch.cat([grid, d / self.d_max], 1)
+        if self.dist:
+            planes, i = [grid], N_PLANES
+            for name in self.extras:
+                if name == "food_distance":  # same float32 division as the env: d / D_max
+                    d = (bits[:, i:i + DIST_BITS] * self.dist_weights.view(1, -1, 1)).sum(
+                        1, keepdim=True)
+                    planes.append(d / self.d_max)
+                else:
+                    planes.append(bits[:, i:i + 1])
+                i += EXTRA_BITS[name]
+            grid = torch.cat(planes, 1)
         return grid.reshape(b, self.n_channels, HEIGHT, WIDTH)
 
 
@@ -275,7 +306,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 def make_buffer(cfg, n_channels=len(CHANNELS), vec_dim=3):
     per = cfg.get("per", {})
-    planes = n_planes(n_channels)
+    planes = n_planes(n_channels, cfg_extras(cfg) if "env_config" in cfg else None)
     if per.get("enabled"):
         return PrioritizedReplayBuffer(cfg["buffer_size"], per["alpha"], per["eps"], vec_dim, planes)
     return ReplayBuffer(cfg["buffer_size"], vec_dim, planes)
@@ -352,7 +383,8 @@ class DQNLearner:
         # L2 on the weights: loss l2 * ||theta||^2 / 2 = coupled weight decay l2
         self.opt = torch.optim.Adam(self.online.parameters(), lr=cfg["lr"], eps=cfg["adam_eps"],
                                     weight_decay=l2, fused=cuda)
-        self.decode = GridDecoder(device, n_channels)
+        self.decode = GridDecoder(device, n_channels,
+                                  cfg_extras(cfg) if "env_config" in cfg else None)
         self.amp = cuda and cfg.get("bf16", False)
         self._loss = torch.compile(self._loss_fn) if cfg.get("compile", False) else self._loss_fn
         self._floss = torch.compile(self._frame_loss_fn) if cfg.get("compile", False) \

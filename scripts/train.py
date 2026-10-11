@@ -34,7 +34,8 @@ from agents.learner_proc import LearnerProcess  # noqa: E402
 from agents.shared_replay import (SharedReplay, StreamWriter, make_packed_env,  # noqa: E402
                                   remove_stale_shm)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
-from env.pacman_env import CH, PacmanEnv, load_env_config, obs_dims, parse_start_level  # noqa: E402
+from env.pacman_env import (CH, PacmanEnv, grid_extras, load_env_config, obs_dims,  # noqa: E402
+                             parse_start_level)
 
 
 def load_config(path):
@@ -78,6 +79,22 @@ def dqfd_schedule(cfg, steps):
     def lerp(ab):
         return None if ab is None else ab[0] + frac * (ab[1] - ab[0])
     return lerp(an.get("demo_frac")), lerp(an.get("lambda_margin"))
+
+
+def expand_first_conv(learner_state):
+    """In place: the first convolution of online, target and the Adam
+    moments gets one more input channel (the new last grid plane) with zero
+    weights, so the network computes what it did before."""
+    old_shape = learner_state["online"]["conv.0.weight"].shape
+    for net in ("online", "target"):
+        w = learner_state[net]["conv.0.weight"]
+        learner_state[net]["conv.0.weight"] = torch.cat([w, w.new_zeros(w[:, :1].shape)], 1)
+    # conv.0.weight is the online network's first parameter: optimizer state 0
+    st = learner_state["opt"]["state"].get(0, {})
+    for k in ("exp_avg", "exp_avg_sq"):
+        if k in st:
+            assert st[k].shape == old_shape, (k, st[k].shape, old_shape)
+            st[k] = torch.cat([st[k], st[k].new_zeros(st[k][:, :1].shape)], 1)
 
 
 def per_beta(cfg, steps):
@@ -517,12 +534,15 @@ def eval_tasks(cfg):
     """(seed, start level, stop at the first level up) per eval game:
     eval_episodes games from level 1 (to game over or eval_max_episode_steps),
     then eval_level_episodes games started on each of cfg["eval_levels"],
-    stopped once the start maze is cleared (same seeds)."""
+    stopped once the start maze is cleared (same seeds; with eval_seed_blocks
+    maze lv on its own seeds eval_seed + (lv - 1) * eval_level_episodes ..,
+    as evaluate.py --seed-blocks)."""
     seeds = range(cfg["eval_seed"], cfg["eval_seed"] + cfg["eval_episodes"])
     tasks = [(s, 1, False) for s in seeds]
     k = cfg.get("eval_level_episodes") or cfg["eval_episodes"]
     for lv in cfg.get("eval_levels") or []:
-        tasks += [(s, lv, True) for s in range(cfg["eval_seed"], cfg["eval_seed"] + k)]
+        s0 = cfg["eval_seed"] + ((lv - 1) * k if cfg.get("eval_seed_blocks") else 0)
+        tasks += [(s, lv, True) for s in range(s0, s0 + k)]
     return tasks
 
 
@@ -541,7 +561,8 @@ def evaluate(learner, envs, cfg):
         if tasks:
             live.append(start(env, tasks.pop(0)))
     while live:
-        q = learner.q_values(pack_grids(np.stack([e[1]["grid"] for e in live])),
+        q = learner.q_values(pack_grids(np.stack([e[1]["grid"] for e in live]),
+                                        live[0][0].grid_extras),
                              np.stack([e[1]["vec"] for e in live]))
         for e, a in zip(list(live), q.argmax(1)):
             obs, r, term, trunc, info = e[0].step(a)
@@ -658,9 +679,14 @@ def main():
         if args.resume_from:
             ck = torch.load(args.resume_from, map_location=device, weights_only=False)
             seed = ck["seed"]
-            if cfg["network"] != ck["config"]["network"] or \
-                    cfg["env_config"] != ck["config"]["env_config"]:
+            env_old = ck["config"]["env_config"]
+            if cfg.get("resume_add_cell_safety"):
+                # the old run's env config plus obs.cell_safety: one more input plane
+                env_old = {**env_old, "obs": {**(env_old.get("obs") or {}), "cell_safety": True}}
+            if cfg["network"] != ck["config"]["network"] or cfg["env_config"] != env_old:
                 sys.exit(f"{args.resume_from}: network or env config differs from {args.config}")
+            if cfg.get("resume_add_cell_safety"):
+                expand_first_conv(ck["learner"])
             if ck["steps"] >= cfg["total_steps"]:
                 sys.exit(f"{args.resume_from} is at {ck['steps']} steps >= total_steps")
             print(f"continuing {args.resume_from} ({ck['steps']} steps) as {args.run_name}")
@@ -680,7 +706,10 @@ def main():
     if cfg.get("eval_max_episode_steps"):
         eval_env_cfg["max_episode_steps"] = cfg["eval_max_episode_steps"]
     n_channels, vec_dim = obs_dims(env_cfg)
+    extras = grid_extras(env_cfg)
     proc = bool(cfg.get("learner_process"))
+    if "cell_safety" in extras and not proc:
+        sys.exit("obs.cell_safety needs learner_process: true")
     dq = cfg.get("dqfd") or {}
     if dq.get("enabled") and not proc:
         sys.exit("dqfd needs learner_process: true")
@@ -723,7 +752,7 @@ def main():
             per_stream = int(np.ceil(dq["demo_transitions"] / n * 1.1)) + 64
             demo_sizes = [per_stream] * n
         replay = SharedReplay.create([cfg["buffer_size"] // n] * n, demo_sizes,
-                                     n_planes(n_channels), vec_dim)
+                                     n_planes(n_channels, extras), vec_dim)
     else:
         learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
         if "online" in init:
@@ -750,7 +779,7 @@ def main():
             parse_start_level(spec)
         print(f"start_level {level_spec}")
     if proc:  # the grid is packed in the env workers
-        make = functools.partial(make_packed_env, env_cfg, n_planes(n_channels))
+        make = functools.partial(make_packed_env, env_cfg, n_planes(n_channels, extras))
     else:
         make = functools.partial(PacmanEnv, config=env_cfg)
     envs = bg = None
@@ -762,7 +791,7 @@ def main():
         if cfg.get("vector_env", "sync") == "pool":
             if not proc:
                 sys.exit("vector_env pool needs learner_process: true")
-            envs = EnvPool(make, n, n_planes(n_channels), vec_dim, n_actions,
+            envs = EnvPool(make, n, n_planes(n_channels, extras), vec_dim, n_actions,
                            min_ready=cfg.get("pool_min_ready"))
         elif cfg.get("vector_env", "sync") == "async":
             # one process per env copy, observations through shared memory

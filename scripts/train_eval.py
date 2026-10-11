@@ -23,7 +23,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 from agents.bc import load_bc  # noqa: E402
 from agents.dqn import GridDecoder, QNetwork  # noqa: E402
-from env.pacman_env import PacmanEnv, load_env_config, obs_dims  # noqa: E402
+from env.pacman_env import PacmanEnv, grid_extras, load_env_config, obs_dims  # noqa: E402
 from train import evaluate, load_config  # noqa: E402
 
 
@@ -40,7 +40,8 @@ class Scorer:
             self.net = QNetwork(ck["config"]["network"], ck.get("n_actions", 5), vec_dim,
                                 n_channels).to(device).eval()
             self.net.load_state_dict(ck["learner"]["online"])
-        self.decode = GridDecoder(device, obs_dims(ck.get("env_config") or {})[0])
+        env_cfg = ck.get("env_config") or {}
+        self.decode = GridDecoder(device, obs_dims(env_cfg)[0], grid_extras(env_cfg))
 
     @torch.no_grad()
     def q_values(self, packed, vecs):
@@ -56,10 +57,17 @@ def main():
     p.add_argument("--out", default=None, help="append the summary here (JSON lines)")
     p.add_argument("--episodes", type=int, default=None,
                    help="games from level 1 and per maze (default the config's), seeds eval_seed..")
+    p.add_argument("--seed", type=int, default=None, help="eval_seed (default the config's)")
+    p.add_argument("--seed-blocks", action="store_true",
+                   help="maze lv on seeds seed + (lv - 1) * episodes .. (evaluate.py --seed-blocks)")
+    p.add_argument("--games-out", default=None, help="write every game's result here (JSON)")
     args = p.parse_args()
     cfg = load_config(args.config)
     if args.episodes:
         cfg["eval_episodes"] = cfg["eval_level_episodes"] = args.episodes
+    if args.seed is not None:
+        cfg["eval_seed"] = args.seed
+    cfg["eval_seed_blocks"] = args.seed_blocks
     env_cfg = load_env_config(cfg["env_config"])
     eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False},
                     "hunger_limit": 0, "prefix_prob": 0.0, "endgame_dot": {"enabled": False},
@@ -78,7 +86,10 @@ def main():
               for lv in cfg.get("eval_levels") or []}
     out = {"label": args.label or args.checkpoint, "config": args.config,
            "episodes": cfg["eval_level_episodes"],
+           "seed": cfg["eval_seed"], "seed_blocks": args.seed_blocks,
            "mean_levels_cleared": float(np.mean([r["levels_cleared"] for r in lv1])),
+           "median_levels_cleared": float(np.median([r["levels_cleared"] for r in lv1])),
+           "max_levels_cleared": int(max(r["levels_cleared"] for r in lv1)),
            "level1_cleared": float(np.mean([r["level"] >= 2 for r in lv1])),
            "mean_food": float(np.mean([r["food"] for r in lv1])),
            "mean_maze_cleared": float(np.mean(list(shares.values()))) if shares else None,
@@ -91,6 +102,9 @@ def main():
     if args.out:
         with open(args.out, "a") as f:
             f.write(json.dumps(out) + "\n")
+    if args.games_out:
+        with open(args.games_out, "w") as f:
+            json.dump({**out, "games": res}, f, default=int)
 
 
 if __name__ == "__main__":

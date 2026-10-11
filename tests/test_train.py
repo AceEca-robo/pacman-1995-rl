@@ -510,3 +510,34 @@ def test_dqfd_schedule():
     assert dqfd_schedule(cfg, 50) == pytest.approx((0.4, 5.0))
     assert dqfd_schedule(cfg, 200) == pytest.approx((0.25, 3.0))
     assert dqfd_schedule(cfg, 10**9) == pytest.approx((0.1, 1.0))
+
+
+def test_expand_first_conv_keeps_the_network_function():
+    """resume_add_cell_safety: one more zero input channel in online, target
+    and the Adam moments; the Q values ignore the new plane."""
+    import torch
+    from agents.dqn import DQNLearner, load_config as dqn_config
+    from env.pacman_env import CHANNELS
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from train import expand_first_conv
+    cfg = dqn_config()
+    old = DQNLearner(cfg, "cpu", 5, len(CHANNELS), 3)
+    g, v = torch.rand(4, len(CHANNELS), 23, 33), torch.rand(4, 3)
+    loss = old.online(g, v).sum()
+    loss.backward()
+    old.opt.step()  # the optimizer state exists
+    state = {"online": old.online.state_dict(), "target": old.target.state_dict(),
+             "opt": old.opt.state_dict()}
+    expand_first_conv(state)
+    cfg_new = {**cfg, "env_config": {**(cfg.get("env_config") or {}),
+                                     "obs": {"cell_safety": True}}}
+    new = DQNLearner(cfg_new, "cpu", 5, len(CHANNELS) + 1, 3)
+    new.online.load_state_dict(state["online"])
+    new.target.load_state_dict(state["target"])
+    new.opt.load_state_dict(state["opt"])
+    extra = torch.cat([g, torch.rand(4, 1, 23, 33)], 1)
+    with torch.no_grad():
+        assert torch.allclose(new.online(extra, v), old.online(g, v), atol=1e-5)
+    st = new.opt.state_dict()["state"]
+    assert st[0]["exp_avg"].shape[1] == len(CHANNELS) + 1 and not st[0]["exp_avg"][:, -1].any()
+    assert st[2]["exp_avg"].shape == old.opt.state_dict()["state"][2]["exp_avg"].shape

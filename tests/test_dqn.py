@@ -108,6 +108,28 @@ def test_pack_roundtrip_with_food_distance():
     assert np.array_equal(dec(torch.as_tensor(packed)).numpy(), np.stack(grids))
 
 
+def test_pack_roundtrip_with_cell_safety():
+    from agents.dqn import n_planes
+    extras = ("food_distance", "cell_safety")
+    env = PacmanEnv(config={"obs": {"food_distance": True, "cell_safety": True}})
+    dec = GridDecoder("cpu", len(CHANNELS) + 2, extras)
+    try:
+        assert env.grid_extras == extras
+        obs, _ = env.reset(seed=2)
+        grids = [obs["grid"]]
+        for a in np.random.default_rng(2).integers(5, size=300):
+            obs, *_ = env.step(a)
+            grids.append(obs["grid"])
+    finally:
+        env.close()
+    packed = np.stack([pack_grid(g, extras) for g in grids])
+    assert packed.shape[1] == n_planes(len(CHANNELS) + 2, extras) == 43
+    assert np.array_equal(dec(torch.as_tensor(packed)).numpy(), np.stack(grids))
+    assert np.stack(grids)[:, -1].sum() > 0
+    # safety only: one bit plane
+    assert n_planes(len(CHANNELS) + 1, ("cell_safety",)) == 36
+
+
 def test_add_batch_matches_add():
     """add_batch == add one by one, wrap-around and PER priorities included."""
     from agents.dqn import N_PLANES, PACKED, PrioritizedReplayBuffer, ReplayBuffer

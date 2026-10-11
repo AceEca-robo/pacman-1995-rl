@@ -106,13 +106,77 @@ def d_max():
 
 FOOD_DISTANCE_CH = len(CHANNELS)  # index of the optional food-distance plane
 HUNGER_SCALE = 200                # steps_since_food is reported / this, clipped to 1
+GRID_EXTRAS = ("food_distance", "cell_safety")  # optional grid planes, in this order
+
+
+def grid_extras(env_cfg):
+    """Names of the optional grid planes after CHANNELS that an env config
+    switches on, in plane order."""
+    obs = env_cfg.get("obs") or {}
+    return tuple(name for name in GRID_EXTRAS if obs.get(name))
 
 
 def obs_dims(env_cfg):
     """(grid channels, vec size) of the observation for an env config."""
     obs = env_cfg.get("obs") or {}
-    return (len(CHANNELS) + bool(obs.get("food_distance")),
+    return (len(CHANNELS) + len(grid_extras(env_cfg)),
             3 + bool(obs.get("steps_since_food")))
+
+
+def _ghost_neighbours(cells):
+    """Neighbour lists (flat indices) for ghosts: every cell but walls ('#');
+    ghosts pass the house gate ('-') both ways in any state (game/ghost.cc
+    only stops at classWall)."""
+    free = [c != "#" for c in cells]
+    nbrs = [[] for _ in cells]
+    for c in range(len(cells)):
+        if not free[c]:
+            continue
+        y, x = divmod(c, WIDTH)
+        for nx, ny in ((x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)):
+            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and free[ny * WIDTH + nx]:
+                nbrs[c].append(ny * WIDTH + nx)
+    return nbrs
+
+
+def _bfs_levels(nbrs, sources, n):
+    """BFS steps from the nearest of `sources` to every cell (list of n;
+    -1 where unreachable)."""
+    dist = [-1] * n
+    frontier = []
+    for c in sources:
+        if dist[c] < 0:
+            dist[c] = 0
+            frontier.append(c)
+    d = 0
+    while frontier:
+        d += 1
+        nxt = []
+        for c in frontier:
+            for nb in nbrs[c]:
+                if dist[nb] < 0:
+                    dist[nb] = d
+                    nxt.append(nb)
+        frontier = nxt
+    return dist
+
+
+def cell_safety_field(pac_nbrs, ghost_nbrs, pacman, normal_ghosts, super_on):
+    """Safety plane, float32 (H*W,): 1 on each cell pacman reaches (BFS,
+    walls and the gate block) strictly before every normal ghost (BFS from
+    all of them at once, only walls block), else 0; with super_on (supertime
+    > 0) every cell pacman can reach is 1. pacman and normal_ghosts are flat
+    cell indices. Hunted ghosts and eyes are no threat."""
+    n = len(pac_nbrs)
+    dp = _bfs_levels(pac_nbrs, [pacman], n)
+    if super_on or not normal_ghosts:
+        return (np.array(dp) >= 0).astype(np.float32)
+    dg = _bfs_levels(ghost_nbrs, normal_ghosts, n)
+    out = np.zeros(n, np.float32)
+    for c in range(n):
+        if dp[c] >= 0 and (dg[c] < 0 or dp[c] < dg[c]):
+            out[c] = 1.0
+    return out
 
 
 def food_distance_field(cells, nbrs):
@@ -227,6 +291,8 @@ class PacmanEnv(gym.Env):
             self._prefixes = data["prefixes"]
         obs_cfg = self.cfg.get("obs") or {}
         self._food_distance = bool(obs_cfg.get("food_distance"))
+        self._cell_safety = bool(obs_cfg.get("cell_safety"))
+        self.grid_extras = grid_extras(self.cfg)
         self._steps_since_food = bool(obs_cfg.get("steps_since_food"))
         if self._food_distance:
             self._d_max = d_max()
@@ -464,7 +530,7 @@ class PacmanEnv(gym.Env):
 
     def _obs(self, st):
         cells = np.frombuffer("".join(st["grid"]).encode(), np.uint8).reshape(HEIGHT, WIDTH)
-        grid = np.zeros((len(CHANNELS) + self._food_distance, HEIGHT, WIDTH), np.float32)
+        grid = np.zeros((len(CHANNELS) + len(self.grid_extras), HEIGHT, WIDTH), np.float32)
         grid[CH["walls"]] = cells == ord("#")
         grid[CH["gate"]] = cells == ord("-")
         grid[CH["food"]] = cells == ord(".")
@@ -483,6 +549,8 @@ class PacmanEnv(gym.Env):
             grid[CH["bonus"], st["bonus"]["y"], st["bonus"]["x"]] = 1
         if self._food_distance:
             grid[FOOD_DISTANCE_CH] = self._food_field(st)
+        if self._cell_safety:
+            grid[-1] = self._safety_field(st)
         vec = [min(st["lives"], MAX_LIVES) / 3, st["supertime_left"] / SUPERTIME,
                min(st["level"], LEVELS) / LEVELS]
         if self._steps_since_food:
@@ -501,6 +569,20 @@ class PacmanEnv(gym.Env):
             field = (dist / np.float32(self._d_max)).reshape(HEIGHT, WIDTH)
             self._field_cache = (cells, field)
         return self._field_cache[1]
+
+    def _safety_field(self, st):
+        """Cell safety plane (cell_safety_field) of a state."""
+        cells = "".join(st["grid"])
+        layout = cells.replace(".", " ").replace("o", " ")
+        nb = self._neighbours.get(("safety", layout))
+        if nb is None:
+            nb = self._neighbours[("safety", layout)] = (_passable_neighbours(layout),
+                                                         _ghost_neighbours(layout))
+        p = st["pacman"]
+        ghosts = [g["y"] * WIDTH + g["x"] for g in st["ghosts"] if g["state"] == "normal"]
+        field = cell_safety_field(nb[0], nb[1], p["y"] * WIDTH + p["x"], ghosts,
+                                  st["supertime_left"] > 0)
+        return field.reshape(HEIGHT, WIDTH)
 
     @staticmethod
     def _info(st):

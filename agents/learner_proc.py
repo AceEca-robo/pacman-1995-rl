@@ -25,7 +25,7 @@ import torch
 import torch.multiprocessing as mp
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
-from agents.dqn import DQNLearner, GridDecoder, QNetwork
+from agents.dqn import DQNLearner, GridDecoder, QNetwork, cfg_extras
 
 # ctrl fields
 CREDIT, BETA, SYNC_REQ, STOP = 0, 1, 2, 3  # actor
@@ -46,7 +46,8 @@ class Actor:
             torch.backends.cudnn.allow_tf32 = True
         self.net = QNetwork(cfg["network"], n_actions, vec_dim, n_channels).to(device).eval()
         self.net.requires_grad_(False)
-        self.decode = GridDecoder(device, n_channels)
+        self.decode = GridDecoder(device, n_channels,
+                                  cfg_extras(cfg) if "env_config" in cfg else None)
         self.n_params = sum(p.numel() for p in self.net.parameters())
 
     def _t(self, x):

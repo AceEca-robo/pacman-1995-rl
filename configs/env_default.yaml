@@ -34,6 +34,11 @@ hunger_limit: 0
 obs:
   food_distance: false    # grid channel 21: BFS steps to the nearest food / D_max (86)
   steps_since_food: false # vec[3]: steps since the last dot/energizer / 200, clipped to 1
+  # last grid channel: 1 on each cell pacman reaches (BFS; walls and the gate
+  # block) strictly before every normal ghost (BFS from all of them; only
+  # walls block, ghosts use the gate both ways), else 0; while supertime > 0
+  # every cell pacman can reach is 1. Not for checkpoints trained without it.
+  cell_safety: false
 
 # false: the ghosts never leave their house (game --no-ghosts), so pacman
 # cannot die. Diagnostics only.

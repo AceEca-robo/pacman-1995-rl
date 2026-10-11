@@ -382,6 +382,82 @@ def test_food_distance_channel_real_board():
         e.close()
 
 
+def _safety(rows, pac, ghosts, super_on=False):
+    from env.pacman_env import _ghost_neighbours, _passable_neighbours, cell_safety_field
+    cells = "".join(rows)
+    flat = lambda xy: xy[1] * WIDTH + xy[0]  # noqa: E731
+    f = cell_safety_field(_passable_neighbours(cells), _ghost_neighbours(cells), flat(pac),
+                          [flat(g) for g in ghosts], super_on)
+    return f.reshape(HEIGHT, WIDTH)
+
+
+def safety_rows():
+    rows = ["#" * WIDTH] * HEIGHT
+    rows[5] = "#" + " " * 12 + "#" * (WIDTH - 13)        # corridor x=1..12
+    for y in range(6, 11):                                # dead end x=8, y=6..10
+        rows[y] = "#" * 8 + " " + "#" * (WIDTH - 9)
+    return rows
+
+
+def test_cell_safety_dead_end_with_ghost_at_the_entrance():
+    rows = safety_rows()
+    f = _safety(rows, pac=(1, 5), ghosts=[(8, 6)])
+    assert not f[6:11, 8].any()                           # the dead end: all 0
+    assert f[5, 1:5].all()                                # pacman's side of the corridor
+    assert not f[5, 6:13].any()                           # the ghost gets there first (ties too)
+    assert not f[0].any() and not f[:, 0].any()           # walls 0
+    f = _safety(rows, pac=(1, 5), ghosts=[(8, 6)], super_on=True)
+    assert f[6:11, 8].all() and f[5, 1:13].all()          # supertime: every reachable cell 1
+
+
+def test_cell_safety_no_ghosts_all_ones():
+    rows = safety_rows()
+    f = _safety(rows, pac=(1, 5), ghosts=[])
+    free = np.array([[ch == " " for ch in r] for r in rows])
+    assert np.array_equal(f > 0, free)
+
+
+def test_cell_safety_ghosts_use_the_gate():
+    rows = safety_rows()
+    rows[11] = "#" * 8 + "-" + "#" * (WIDTH - 9)          # a gate under the dead end
+    rows[12] = "#" * 8 + " " + "#" * (WIDTH - 9)          # the ghost below it
+    f = _safety(rows, pac=(1, 5), ghosts=[(8, 12)])
+    assert f[11, 8] == 0                                  # pacman never enters the gate
+    assert not f[6:11, 8].any()                           # the ghost comes up through it
+    assert f[5, 1:8].all() and not f[5, 8:13].any()       # (8, 5): 7 steps each, a tie is 0
+
+
+def test_cell_safety_channel_real_board():
+    from env.pacman_env import _passable_neighbours
+    e = PacmanEnv(config={"obs": {"cell_safety": True}})
+    try:
+        obs, _ = e.reset(seed=3)
+        rng = np.random.default_rng(3)
+        seen_unsafe = False
+        for _ in range(400):
+            obs, _, term, _, _ = e.step(int(rng.integers(5)))
+            if term:
+                break
+            g = obs["grid"]
+            assert g.shape[0] == len(CHANNELS) + 1 and e.observation_space.contains(obs)
+            plane = g[-1]
+            assert set(np.unique(plane)) <= {0.0, 1.0}
+            cells = "".join(e._state["grid"])
+            assert not plane.ravel()[[c for c, ch in enumerate(cells) if ch in "#-"]].any()
+            p = e._state["pacman"]
+            assert plane[p["y"], p["x"]] == 1 or any(
+                gh["state"] == "normal" and (gh["x"], gh["y"]) == (p["x"], p["y"])
+                for gh in e._state["ghosts"])
+            if e._state["supertime_left"] > 0:
+                reach = _passable_neighbours(cells)
+                assert plane.sum() > 0 and all(plane.ravel()[n] for n in reach[p["y"] * WIDTH + p["x"]])
+            seen_unsafe |= bool(e._state["supertime_left"] == 0 and (plane == 0).sum()
+                                > sum(ch in "#-" for ch in cells))
+        assert seen_unsafe
+    finally:
+        e.close()
+
+
 def test_steps_since_food_in_vec():
     e = PacmanEnv(config={"obs": {"steps_since_food": True}, "ghosts": False})
     try:

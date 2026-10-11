@@ -1472,3 +1472,71 @@ maze (final protocol, seeds 0..1599).
   no final-protocol run yet. dqfd0 is stopped at 200M (resumable).
 - `scripts/pick_best_food.py` carries an older uncommitted `--prune` change
   that is not from these sessions (committed separately on request).
+
+## Chronology (2026-10-11/12, session 5: night — final protocol, death analysis, dqfd2 with a cell-safety channel)
+
+Plan (night prompt): (1) let dqfd1 finish by its rule, re-score the 4 best
+dqfd0/dqfd1 checkpoints plus the heuristic and BC on 100 games per maze
+(seeds 2000..3599 in blocks of 100) and 100 games from level 1, best ->
+`runs/best_v03/best.pt`; (2) analyse the deaths of best_v03 (16 mazes x 50
+games); (3) an optional cell-safety plane in the observation; (4) dqfd2 from
+best_v03 with that plane (60M steps); (5) hourly watch. Rules as before:
+disk > 10 GB before every start or extension, one --resume per crash.
+
+- 23:09 dqfd1 resumed from its 150M checkpoint (tmux `dqfd1`), supervisor
+  (`sv_dqfd1`, state kept: plateau confirmation 1 at 140M) and keep_good
+  (`keep_dqfd1`) restarted. Disk 42 GB free.
+- 23:10 Final protocol on the GPU instead of CPU workers: `evaluate.py
+  --levels` (one CPU process per game, ~8 min for a BC on 25 games per
+  maze) would take hours for 6 agents at 100 games per maze and would slow
+  dqfd1 down, so `train_eval.py` (train.py's batched evaluate(), 20 envs,
+  one GPU forward per tick) got `--seed`, `--seed-blocks` (maze lv on seeds
+  seed + (lv-1) * episodes .., as `evaluate.py --seed-blocks`) and
+  `--games-out` (every game, for the confidence intervals). Same games as
+  evaluate.py: greedy, from level 1 to game over or 30000 ticks, per-maze
+  games stopped at the clear (cut at 10000 ticks, the eval protocol; the
+  CPU suite cuts at 30000 — a game still on its start maze after 10000
+  ticks is stuck either way). The heuristic (no network) runs through
+  `evaluate.py --levels --seed-blocks --stop-at-clear` on the same seeds.
+  Queue in tmux `evals` (`runs/v03_final/`, nice 10): heuristic, BC
+  (bc0_dagger3, the BC row of the summary table), dqfd0@80M, dqfd1@110M (the
+  two candidates certain to be in the top 4); the rest once dqfd1 stops.
+  dqfd1 dropped from 4.35k to ~3.8k steps/s while an evaluation shares the
+  GPU (above the 3.5k floor).
+- 23:15 Cell-safety plane (step 3), `env/pacman_env.py`: `obs.cell_safety`
+  (default off) appends one grid plane: 1 on each cell pacman reaches (BFS;
+  walls and the gate block) strictly before every normal ghost (BFS from all
+  normal ghosts at once; only walls block: game/ghost.cc stops ghosts at
+  classWall only, so ghosts pass the house gate both ways), else 0; ties
+  are 0; while supertime > 0 every cell pacman can reach is 1. Hunted
+  ghosts and eyes are ignored. The replay stores it as one more bit plane:
+  pack/decode now take the list of optional planes (`grid_extras`), the
+  default keeps the old meaning (an extra channel = food distance), so old
+  checkpoints and runs are unchanged. Tests: dead end with a ghost at its
+  entrance -> 0 inside; no ghosts -> 1 on every reachable cell; the ghost
+  comes through the gate; real board plane is 0/1 and 0 on walls; pack/
+  decode round trip with both optional planes.
+- 23:17 `--resume-from` with `resume_add_cell_safety: true` (train.py
+  `expand_first_conv`): the checkpoint's first convolution (online and
+  target) and its Adam moments get one more input channel of zeros, so the
+  network starts as exactly the old one (test: same Q values whatever the
+  new plane holds). The env config may differ from the checkpoint's only by
+  obs.cell_safety.
+- 23:17 The demo part for dqfd2: `tools/convert_demo.py` adds the safety
+  plane to the 1.1M stored demo frames (computed from the frame's own walls,
+  gate, pacman and normal-ghost planes and supertime; test: equal to the
+  env's plane on 600 real frames) and recomputes the n-step fields for
+  n 5 / gamma 0.995 from the stored 1-step rewards (check: n 3 / 0.99
+  reproduces the original file exactly). `runs/dqfd_demo/demo_safety_n5.npz`:
+  999,948 transitions (was 1,000,012; 64 at the stream ends lose their
+  window), 1 minute.
+- 23:25 `scripts/death_report.py` (step 2): per-maze games with every
+  death classified from the state before it (food left, supertime, tick,
+  squeezed / head-on / from behind / standing / supertime ran out). First
+  version over-counted "squeezed": a radius-5 BFS from each exit reaches the
+  same ghost around the maze's short loops, so the cells within the radius
+  are now split between the exits by shortest path (one ghost blocks one
+  direction). Smoke test on dqfd1@110M (3 games per maze): still 93% of the
+  deaths squeezed (two different normal ghosts at distance 1-2 on both sides;
+  three printed snapshots confirm), 7% "supertime ran out" (pacman next to a
+  hunted ghost on the tick supertime ends) — the same as seen on screen.

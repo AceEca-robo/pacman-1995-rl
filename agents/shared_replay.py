@@ -423,7 +423,7 @@ class PackedObs(gym.Wrapper):
         return {k: info[k] for k in INFO_KEYS if k in info}
 
     def _obs(self, obs):
-        return {"grid": pack_grid(obs["grid"]), "vec": obs["vec"]}
+        return {"grid": pack_grid(obs["grid"], self.env.unwrapped.grid_extras), "vec": obs["vec"]}
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
