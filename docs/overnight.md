@@ -1438,3 +1438,37 @@ maze (final protocol, seeds 0..1599).
   against the start dqfd0 @80M 76.7% / 55% / 1.25: +1.4 points on the mean
   (about one standard error of a 640-game mean), the minimum up; not near
   81%, so no final protocol run yet. Q 53.8-57.3, no NaN, 4.24k steps/s.
+- 18:43 **Stopped on request (urgent break).** Supervisor and keep_good
+  stopped first (18:38), then dqfd1 waited for its 150M checkpoint
+  (checkpoint.pt is written every 2M at each training eval, not every 10M;
+  the 10M copies are the supervisor's) and was stopped with Ctrl-C in tmux
+  at 150.09M (18:43). Ctrl-C does not save a checkpoint (train.py exits
+  through its cleanup on a signal), so the resume point is the 150M save:
+  `runs/dqfd1/checkpoint.pt` = 150,000,017 steps, written 18:42:42;
+  total_steps 170,000,018. Clean exit: no train.py process, no pacrl_*
+  shared memory, GPU 15 MiB. Training eval at 150M: per-maze mean 0.75,
+  min 0.55, levels 1.10 (the supervisor did not score 150M).
+
+### State for the next (night) prompt
+
+- dqfd1: 150M of 170M (second leg, 20M left, ~80 min at 4.3k steps/s).
+  Resume: `tmux new-session -d -s dqfd1 "cd ~/projects/pacman-rl &&
+  .venv/bin/python scripts/train.py --run-name dqfd1 --resume 2>&1 | tee -a
+  runs/dqfd1.log"` (the agent replay refills, 20k steps; demo share 10% and
+  lam_m 1 hold, the anneal ended at 100M).
+- Supervisor: `scripts/supervisor.py dqfd1 --every 10000000 --train-eval
+  --extend --min-speed 3500 --log-dir runs/sv_dqfd1` (tmux `sv_dqfd1`, start
+  it before or right after the run). Its state (`runs/sv_dqfd1/
+  supervisor_state.json`) keeps the extension history: plateau
+  confirmation 1 at 140M, restarts 0, evaluated up to 140M; at its first
+  poll it scores the 150M checkpoint. At 170M: a rise on either metric
+  (160/170M vs 140/150M) -> +50M; otherwise plateau confirmation 2 -> +30M;
+  a third in a row -> stop.
+- keep_good: `scripts/keep_good.py dqfd1` (tmux `keep_dqfd1`).
+- Goal still open: >= 81% mean and >= 60% min per maze on 100 games per
+  maze (`evaluate.py --levels --seed-blocks --seed 0 --episodes 100
+  --level-episodes 100 --stop-at-clear`). Best so far on 40 games per maze
+  (seeds 1000..1039): dqfd1 @110M 78.1% / 62% (`runs/dqfd1/ck_110000016.pt`);
+  no final-protocol run yet. dqfd0 is stopped at 200M (resumable).
+- `scripts/pick_best_food.py` carries an older uncommitted `--prune` change
+  that is not from these sessions (committed separately on request).
