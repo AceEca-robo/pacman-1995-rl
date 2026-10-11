@@ -1411,3 +1411,18 @@ maze (final protocol, seeds 0..1599).
   from 48-50 to 52.6-55.5 (less margin pull), no NaN; 4.21k steps/s mean
   over the last 240 lines (4.36k between evals). Goal (>= 81% / >= 60% on
   100 games per maze) not in sight on the 20-game evals.
+- 16:38 **dqfd1, 20M report (100 -> 120M, demo share 10%, lam_m 1).**
+  Supervisor: 110M 78.4% / min 55% / 1.25 levels, food 331; 120M 75.3% /
+  40% / 1.30, food 342. Training evals 102-120M: per-maze mean 0.73-0.82
+  (114M 0.80 / min 0.60, 116M 0.79 / 0.65, **118M 0.82 / 0.60** — the
+  first evals of either run at the goal's level), levels 0.90-1.50. Q
+  53.8-58.8, no NaN, 4.28k steps/s mean (4.37k between evals). Slightly
+  above dqfd0's band, within the noise of single 20-game evals.
+- 16:38 The 114-118M weights are gone (train.py keeps only the latest
+  checkpoint.pt, the supervisor copies every 10M). New
+  `scripts/keep_good.py` (tmux `keep_dqfd1`, log `runs/keep_dqfd1.out`):
+  copies checkpoint.pt to `good_<steps>.pt` whenever the training eval
+  written with it reaches per-maze mean >= 80% and min >= 55%. These, and
+  supervisor evals at that level, are the candidates for the final
+  protocol (100 games per maze, seeds 0..1599, `evaluate.py --levels
+  --seed-blocks`); monitoring only, the run is untouched.
