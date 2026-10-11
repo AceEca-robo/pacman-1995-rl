@@ -1402,3 +1402,12 @@ maze (final protocol, seeds 0..1599).
   --level N --record ...`): `docs/dqfd0_80M_level7.gif` (still on level 7
   with 3 lives at tick 400, score 2910), `docs/dqfd0_80M_level13.gif` (2
   lives left, score 2080); 0.5 MB each.
+- 15:16 **dqfd1, 20M report (80 -> 100M, the anneal leg).** Supervisor:
+  80M (start, dqfd0) 79.1% / min 55% / 1.45 levels; 90M 73.4% / 55% /
+  1.10; **100M 75.9% / 60% / 1.35, food 348**. Training evals 82-100M:
+  per-maze mean 0.71-0.76, min 0.30-0.60, levels 0.90-1.60 — the dqfd0
+  band (0.70-0.79), no dip while the demo share fell (the plan's worry) and
+  no rise yet. Demo share 39.8% -> 10.2% at 100M, lam_m 5 -> 1; Q rose
+  from 48-50 to 52.6-55.5 (less margin pull), no NaN; 4.21k steps/s mean
+  over the last 240 lines (4.36k between evals). Goal (>= 81% / >= 60% on
+  100 games per maze) not in sight on the 20-game evals.
