@@ -1282,3 +1282,8 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
   30/40 with 10/20 (same decision). Fixed (`< total + every / 2`), the
   supervisor alone restarted (03:29, state kept); the fixed rule on the
   same data gives the line above.
+- 04:25 Full pytest (supervisor fix, run alongside): 89 passed. Watch at
+  64M: 4.38k steps/s, Q 47.0-50.3, no NaN, demo share 40.6%. Supervisor
+  @60M: 73.4% / min 40% / 1.20 levels, food 326. Training evals 52-64M:
+  per-maze mean 0.72-0.74, min 0.35-0.60, levels 1.00-1.25: flat since
+  ~24M (0.76-0.78 at 24-28M was the top so far).
