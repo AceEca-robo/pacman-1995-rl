@@ -1540,3 +1540,24 @@ disk > 10 GB before every start or extension, one --resume per crash.
   deaths squeezed (two different normal ghosts at distance 1-2 on both sides;
   three printed snapshots confirm), 7% "supertime ran out" (pacman next to a
   hunted ghost on the tick supertime ends) — the same as seen on screen.
+- 23:35 Smoke start of the dqfd2 setup (`configs/dqfd2.yaml` with
+  dqfd1@110M standing in for best_v03, 60k steps, deleted afterwards):
+  the first conv expanded, demo_safety_n5.npz loaded (999,948 transitions),
+  demo share 10.2%, lam_m 1.00, Q 53-58 (as the checkpoint), eval and
+  checkpoint written. A learner-side check prints the safety plane's fill
+  in the batch at the first update and every 100k: 171 cells per frame in
+  the agent samples, 140 in the demo samples, nonzero in every frame. (2k
+  steps/s while dqfd1 shared the machine.) `resume_add_cell_safety` now
+  allows other env changes (prefixes, rewards: step 4's conditions) as long
+  as actions and observation are the checkpoint's plus the plane, and
+  prints them.
+- 23:41 First final-protocol rows (100 games per maze, seeds 2000..3599 in
+  blocks; 100 games from level 1, seeds 2000..2099; `scripts/final_table.py`,
+  95% bootstrap intervals): heuristic 78.2% [76.1, 80.2] / min 58% (maze 15)
+  / levels 1.28; BC (bc0_dagger3) 68.4% / 45% / 0.92; dqfd0@80M 74.2%
+  [72.1, 76.3] / 58% / 1.28; dqfd1@110M 75.2% [73.2, 77.4] / 52% / 1.11.
+  The 40-game picks (78-79%) were optimistic: picking the best of many noisy
+  20/40-game evals selects the lucky ones. On 100 games the RL checkpoints
+  sit ~3-4 points under the heuristic on the per-maze mean, equal on the
+  minimum and on levels in a row (dqfd0@80M). dqfd0@140M and dqfd1@130M
+  queued (tmux `evals2`).
