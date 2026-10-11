@@ -1287,3 +1287,8 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
   @60M: 73.4% / min 40% / 1.20 levels, food 326. Training evals 52-64M:
   per-maze mean 0.72-0.74, min 0.35-0.60, levels 1.00-1.25: flat since
   ~24M (0.76-0.78 at 24-28M was the top so far).
+- 05:25 Watch at 79M: 4.38k steps/s, Q 47.0-49.7, no NaN, demo share
+  40.6%. Supervisor @70M: 73.1% / min 50% / 1.35 levels, food 353.
+  Training evals 66-78M: per-maze mean 0.72-0.76, levels 0.70-1.25.
+  New `scripts/dqfd_report.py` (table of the supervisor evals with BC and
+  the heuristic on the same seeds; `--plot` draws the curve).
