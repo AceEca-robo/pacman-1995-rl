@@ -497,6 +497,8 @@ class DQNLearner:
         margin weight for this update (default the config's). Returns device
         tensors (loss, mean max Q, |n-step TD| per sample, demo margin loss)."""
         self._apply_conv_request()
+        if "cell_safety" in self.decode.extras:
+            self._safety_check(b)
         frames = ("obs", "obs1", "obsn") if self.lam_1 else ("obs", "obsn")
         loss, mean_q, td, je = self._floss(
             self._t(np.concatenate([b[k] for k in frames])),
@@ -506,6 +508,20 @@ class DQNLearner:
             self._t(weights), self._t(self.lam_m if lam_m is None else lam_m, torch.float32))
         self._step(loss)
         return loss.detach(), mean_q, td, je
+
+    def _safety_check(self, b):
+        """Prints, at the first update and every 100k after, the share of
+        cells set in the batch's cell-safety plane (the last stored plane),
+        agent and demo samples apart: shows the plane reaches the learner."""
+        self._n_frame_updates = getattr(self, "_n_frame_updates", -1) + 1
+        if self._n_frame_updates % 100_000:
+            return
+        ones = np.unpackbits(b["obs"][:, -1], axis=-1)[:, :CELLS].sum(1)
+        demo = np.asarray(b["demo"]) > 0
+        parts = [f"{name} {ones[m].mean():.1f} cells/frame ({(ones[m] > 0).mean():.0%} nonzero)"
+                 for name, m in (("agent", ~demo), ("demo", demo)) if m.any()]
+        print(f"cell_safety in the batch (update {self._n_frame_updates}): " + ", ".join(parts),
+              flush=True)
 
     def _apply_conv_request(self):
         flag = getattr(self, "_conv_request", None)

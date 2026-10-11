@@ -1,0 +1,32 @@
+# dqfd2: best_v03 (the best dqfd0/dqfd1 checkpoint on the final protocol,
+# runs/best_v03/best.pt) continued with the cell-safety plane in the
+# observation (2026-10-12 night plan). best_v03 loses mostly by being
+# squeezed between two normal ghosts in a corridor (scripts/death_report.py);
+# the plane marks the cells pacman reaches strictly before every normal
+# ghost. The first convolution gets the new input channel with zero weights
+# (resume_add_cell_safety), so training starts from best_v03's exact policy.
+# n_step 3 -> 5 and gamma 0.99 -> 0.995 (a squeeze is decided several steps
+# before the death); demo share fixed at 10% and margin weight 1 (dqfd1's
+# end values), eps 0.01, lr and optimizer state as in the checkpoint. The
+# demo transitions: runs/dqfd_demo/demo.npz with the plane added and the
+# n-step fields recomputed (tools/convert_demo.py).
+# Started with: train.py --run-name dqfd2 --config configs/dqfd2.yaml
+#   --resume-from runs/best_v03/best.pt; later legs --resume --extend-steps.
+base: dqfd.yaml
+total_steps: 0               # set to best_v03's steps + 60M before the start
+resume_add_cell_safety: true
+epsilon_start: 0.01
+epsilon_end: 0.01
+n_step: 5
+gamma: 0.995
+dqfd:
+  demo_file: runs/dqfd_demo/demo_safety_n5.npz
+  lambda_margin: 1.0
+  anneal:                    # fixed: 10% demo samples per batch, margin weight 1
+    from_step: 0
+    steps: 1
+    demo_frac: [0.10, 0.10]
+    lambda_margin: [1.0, 1.0]
+env_config:
+  obs:
+    cell_safety: true
