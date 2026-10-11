@@ -1580,3 +1580,12 @@ disk > 10 GB before every start or extension, one --resume per crash.
   (1.92), 9, 15, 12, 3, 13 (1.70) ... 8 (1.18).
   Step 4 conditions: endgame (< 20 food) 27% <= 40% -> no own prefixes;
   supertime > 0 0% (16% at its end) <= 30% -> ghost_eaten stays 5.
+- 00:39 dqfd1 @170M (supervisor): 75.6% / min 50% / levels 1.25. Rule at
+  170M: 160/170M vs 140/150M per-maze mean 0.748 -> 0.766 (a rise; levels
+  1.225 -> 1.050) -> **extended by 50M to 220M** by the supervisor (disk 41
+  GB free). Followed as written ("wait for dqfd1 to stop by its rule"),
+  though the rise is within the noise of 20-game evals and the final
+  protocol shows no gain from 80M to 130M. Cost: dqfd2 starts ~04:15
+  instead of ~02:00 and will be at ~45M of its 60M by 07:30 (it goes on
+  after the session). dqfd1@160M ties for 4th on the supervisor's mean
+  (77.5%, as dqfd0@140M and dqfd1@130M) -> also on the final protocol.
