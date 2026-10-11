@@ -47,6 +47,22 @@ def pick(run):
     return steps, foods[steps]
 
 
+def prune(run):
+    """Deletes ck_*.pt after best_food.pt has been chosen; returns bytes freed."""
+    import glob
+    if not os.path.exists(os.path.join(RUNS, run, "best_food.pt")):
+        return 0
+    freed = 0
+    for f in glob.glob(os.path.join(RUNS, run, "ck_*.pt")):
+        freed += os.path.getsize(f)
+        os.remove(f)
+    return freed
+
+
 if __name__ == "__main__":
-    for run in sys.argv[1:]:
+    args = sys.argv[1:]
+    do_prune = "--prune" in args
+    for run in [a for a in args if not a.startswith("--")]:
         print(run, pick(run))
+        if do_prune:
+            print(f"  pruned {prune(run) / 1e9:.1f} GB")
