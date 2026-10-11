@@ -437,8 +437,29 @@ def test_dqfd_pool(tmp_path):
         assert out.returncode == 0, out.stderr
         assert re.search(r"demo: \d+ transitions from .*demo.npz", out.stdout), out.stdout
         assert "pretrain " not in out.stdout
+        # a new run from this checkpoint (4500 steps) with an annealed demo share / margin weight
+        cfg2 = tmp_path / "tiny_dqfd_anneal.yaml"
+        d2 = yaml.safe_load(cfg.read_text())
+        d2["total_steps"] = 7500
+        d2["dqfd"]["anneal"] = {"from_step": 4500, "steps": 1500, "demo_frac": [0.4, 0.1],
+                                "lambda_margin": [1.0, 0.2]}
+        cfg2.write_text(yaml.safe_dump(d2))
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "train.py"),
+                              "--run-name", name + "-b", "--config", str(cfg2), "--resume-from",
+                              os.path.join(run_dir, "checkpoint.pt")],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        assert re.search(r"continuing .* \((45\d\d) steps\)", out.stdout), out.stdout
+        assert "pretrain " not in out.stdout
+        tail = [ln for ln in out.stdout.splitlines() if "lam_m" in ln]
+        assert tail and "lam_m 0.20" in tail[-1], out.stdout
+        demo = float(re.search(r"demo ([\d.]+)%", tail[-1]).group(1))
+        assert abs(demo - 10.0) < 3.0, tail[-1]
+        ck = torch.load(os.path.join(ROOT, "runs", name + "-b", "checkpoint.pt"),
+                        weights_only=False)
+        assert ck["steps"] >= 7500 and ck["config"]["dqfd"]["anneal"]["from_step"] == 4500
     finally:
-        subprocess.run(["rm", "-rf", run_dir])
+        subprocess.run(["rm", "-rf", run_dir, run_dir + "-b"])
 
 
 def test_signal_cleans_shared_memory(tmp_path):
@@ -477,3 +498,15 @@ def test_signal_cleans_shared_memory(tmp_path):
         f.write(b"x")
     assert f"{SHM_PREFIX}{dead.pid}_1" in remove_stale_shm()
     assert not os.path.exists(path)
+
+
+def test_dqfd_schedule():
+    import pytest
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from train import dqfd_schedule
+    assert dqfd_schedule({"dqfd": {"enabled": True}}, 10) == (None, None)
+    cfg = {"dqfd": {"anneal": {"from_step": 100, "steps": 200, "demo_frac": [0.4, 0.1],
+                               "lambda_margin": [5.0, 1.0]}}}
+    assert dqfd_schedule(cfg, 50) == pytest.approx((0.4, 5.0))
+    assert dqfd_schedule(cfg, 200) == pytest.approx((0.25, 3.0))
+    assert dqfd_schedule(cfg, 10**9) == pytest.approx((0.1, 1.0))

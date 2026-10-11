@@ -338,18 +338,43 @@ class Sampler:
         r.cleared[clear] = target[clear]
         return added
 
-    def sample(self, rng, batch, beta):
-        """-> (batch dict of numpy arrays, slots, importance weights)."""
+    def sample(self, rng, batch, beta, demo_frac=None):
+        """-> (batch dict of numpy arrays, slots, importance weights).
+        demo_frac: a fixed share of the batch from the demo slots (PER within
+        the demo part and within the agent part; the importance weights use
+        the resulting probabilities); None: PER over everything."""
         total = self.tree.total
-        prefix = (np.arange(batch) + rng.random(batch)) * (total / batch)  # stratified
+        demo_mass = self.tree.prefix_sum(self.r.demo_frames) if demo_frac is not None else 0.0
+        if demo_frac is None or demo_mass <= 0 or demo_mass >= total:
+            prefix = (np.arange(batch) + rng.random(batch)) * (total / batch)  # stratified
+            share = None
+        else:  # demo slots are the first leaves: prefixes below demo_mass hit them
+            k = min(batch, max(0, int(round(demo_frac * batch))))
+            share = k / batch
+            prefix = np.concatenate([
+                (np.arange(k) + rng.random(k)) * (demo_mass / max(k, 1)),
+                demo_mass + (np.arange(batch - k) + rng.random(batch - k))
+                * ((total - demo_mass) / max(batch - k, 1))])
         idx = np.minimum(self.tree.find(prefix), self.r.frames - 1)
         p = self.tree.get(idx)
         bad = p <= 0  # float rounding at a boundary: take another sample's slot
         if bad.any():
             good = np.flatnonzero(~bad)
-            idx[bad] = idx[good[rng.integers(len(good), size=int(bad.sum()))]]
+            if share is not None:  # from the same part
+                demo = idx < self.r.demo_frames
+                for part in (True, False):
+                    b_, g_ = np.flatnonzero(bad & (demo == part)), good[demo[good] == part]
+                    if len(b_) and len(g_):
+                        idx[b_] = idx[g_[rng.integers(len(g_), size=len(b_))]]
+            else:
+                idx[bad] = idx[good[rng.integers(len(good), size=int(bad.sum()))]]
             p = self.tree.get(idx)
-        w = (self.n_valid * p / self.tree.total) ** -beta
+        if share is None:
+            prob = p / total
+        else:
+            demo = idx < self.r.demo_frames
+            prob = np.where(demo, share * p / demo_mass, (1 - share) * p / (total - demo_mass))
+        w = (self.n_valid * prob) ** -beta
         return self.gather(idx), idx, (w / w.max()).astype(np.float32)
 
     def gather(self, idx):

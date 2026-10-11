@@ -1352,3 +1352,53 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
   per maze at the 10M points would make the rule steadier.
 - Score the best supervisor checkpoints (80M: 79.1%) on the final protocol
   (100 games per maze) before reading anything into single evals.
+
+## Chronology (2026-10-11, session 4: dqfd1, less demonstration pressure)
+
+Task: continue from dqfd0's best checkpoint with the demo share of the batch
+annealed 40% -> 10% and the margin weight 5 -> 1 over 20M (eps 0.01, lr as
+before), 60M with the same supervisor and extension rule; GIFs of dqfd0 on
+levels 7 and 13; goal >= 81% mean and >= 60% min per maze on 100 games per
+maze (final protocol, seeds 0..1599).
+
+- 13:24 State at start: dqfd0 had gone on past 130M by the rule (130M: rise
+  100/110 -> 120/130M, +50M; 180M: rise, +50M to 230M) and was at 194M;
+  supervisor evals 110-190M: 72.2-77.5% per maze, min 40-60%, levels
+  0.95-1.50 (the same band as 30-100M).
+- 13:41 **Start checkpoint.** Candidates: the top three of 30-130M by the
+  20-game per-maze mean (80M 79.1%, 30M 75.9%, 120M 75.3%) plus the top of
+  140-200M (140M 77.5%, 190M 75.9%; 200M 74.7% not in the top three),
+  re-scored with 40 games per maze + 40 from level 1, seeds 1000..1039
+  (`train_eval.py --episodes 40`, `runs/dqfd0_pick/evals40.jsonl`):
+  80M 76.7% / min 55% / 1.25 levels; 140M 75.8% / 60% / 1.32; 120M 73.9% /
+  52% / 1.15; 190M 73.4% / 52% / 1.27; 30M 73.3% / 48% / 1.15.
+  -> **dqfd0 @ 80M** (`runs/dqfd0/start_dqfd1.pt` = ck_80000018.pt).
+- 13:50 dqfd0 stopped at its 200M point (supervisor first, then the run;
+  SIGHUP exit, shared memory freed; `runs/dqfd0/checkpoint.pt` = 200M stays
+  resumable). Supervisor @200M: 74.7% / min 45% / 1.45.
+- 13:50 **dqfd1 started** (tmux `dqfd1`): `train.py --run-name dqfd1
+  --config configs/dqfd1.yaml --resume-from runs/dqfd0/start_dqfd1.pt`,
+  80,000,018 -> 140,000,018 steps (60M); supervisor (tmux `sv_dqfd1`, its
+  state seeded with the points <= 80M, the 80M start eval as the first row).
+  First lines: 4.33-4.36k steps/s, demo share 39.8% (51 of 128), lam_m
+  4.98, Q 48-50.
+- New code (93 tests pass): `Sampler.sample(demo_frac=...)` (a fixed demo
+  share: stratified PER separately over the demo leaves, which come first
+  in the sum tree, and the agent leaves; IS weights from
+  share * p / demo mass resp. (1 - share) * p / agent mass;
+  `SumTree.prefix_sum`); the margin weight is a tensor argument of the
+  compiled loss (a schedule does not recompile it); `dqfd.anneal` in the
+  config, handed to the learner process through two ctrl slots;
+  `train.py --resume-from CHECKPOINT` (a new run continuing another run's
+  weights, optimizer, step counts and schedules; best.pt starts fresh);
+  `play.py --level`; `evaluate.py --levels --seed-blocks` (level lv on
+  seeds seed + (lv - 1) * level_episodes.., for the final protocol 16 x 100
+  games on seeds 0..1599); `train_eval.py --episodes`.
+- 13:56 Speed 5 min in: 4.36k steps/s over the last 20 lines (the first
+  line 1.2k is the start-up), demo share 38.3%, lam_m 4.74, Q 48.9.
+- 13:55 GIFs of dqfd0 @ 80M (the dqfd1 start), seed 0, 400 ticks each, game
+  window under Xvfb (`xvfb-run -a -s "-screen 0 1280x1024x24" python
+  scripts/play.py --agent dqn --checkpoint runs/dqfd0/start_dqfd1.pt
+  --level N --record ...`): `docs/dqfd0_80M_level7.gif` (still on level 7
+  with 3 lives at tick 400, score 2910), `docs/dqfd0_80M_level13.gif` (2
+  lives left, score 2080); 0.5 MB each.

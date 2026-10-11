@@ -54,8 +54,12 @@ def main():
     p.add_argument("--checkpoint", required=True)
     p.add_argument("--label", default=None)
     p.add_argument("--out", default=None, help="append the summary here (JSON lines)")
+    p.add_argument("--episodes", type=int, default=None,
+                   help="games from level 1 and per maze (default the config's), seeds eval_seed..")
     args = p.parse_args()
     cfg = load_config(args.config)
+    if args.episodes:
+        cfg["eval_episodes"] = cfg["eval_level_episodes"] = args.episodes
     env_cfg = load_env_config(cfg["env_config"])
     eval_env_cfg = {**env_cfg, "shaping": {**env_cfg["shaping"], "enabled": False},
                     "hunger_limit": 0, "prefix_prob": 0.0, "endgame_dot": {"enabled": False},
@@ -73,6 +77,7 @@ def main():
     shares = {lv: float(np.mean([r["levels_cleared"] >= 1 for r in res if r.get("maze") == lv]))
               for lv in cfg.get("eval_levels") or []}
     out = {"label": args.label or args.checkpoint, "config": args.config,
+           "episodes": cfg["eval_level_episodes"],
            "mean_levels_cleared": float(np.mean([r["levels_cleared"] for r in lv1])),
            "level1_cleared": float(np.mean([r["level"] >= 2 for r in lv1])),
            "mean_food": float(np.mean([r["food"] for r in lv1])),

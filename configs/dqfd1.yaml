@@ -1,0 +1,21 @@
+# dqfd1: dqfd0 continued from its best checkpoint (picked on 40 games per
+# maze, seeds 1000..1039) with less demonstration pressure (2026-10-11 plan).
+# dqfd0 sat at ~74% per maze from 30M on, the demo transitions ~40% of every
+# batch (PER with eps_demo 1.0) and the margin loss at weight 5. Here, over
+# the first 20M after the start checkpoint: the demo share of the batch is
+# fixed and annealed 40% -> 10% (PER within the demo part and within the
+# agent part, importance weights from the two-part probabilities), the margin
+# weight 5 -> 1; then held. eps 0.01, lr as before (the optimizer state
+# continues), everything else as dqfd0.
+# Started with: train.py --run-name dqfd1 --config configs/dqfd1.yaml
+#   --resume-from runs/dqfd0/ck_80000018.pt (S0 = 80000018); later legs --resume --extend-steps.
+base: dqfd.yaml
+total_steps: 140000018
+epsilon_start: 0.01
+epsilon_end: 0.01
+dqfd:
+  anneal:
+    from_step: 80000018
+    steps: 20000000
+    demo_frac: [0.40, 0.10]
+    lambda_margin: [5.0, 1.0]

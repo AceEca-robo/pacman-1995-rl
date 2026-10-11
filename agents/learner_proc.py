@@ -31,7 +31,8 @@ from agents.dqn import DQNLearner, GridDecoder, QNetwork
 CREDIT, BETA, SYNC_REQ, STOP = 0, 1, 2, 3  # actor
 DONE, SYNC_DONE, FLUSHED, WVER, ERROR = 4, 5, 6, 7, 8  # learner
 LOSS_SUM, Q_SUM, JE_SUM, STAT_N, BUSY_S, DEMO_SUM = 9, 10, 11, 12, 13, 14  # learner, running sums
-N_CTRL = 16
+DEMO_FRAC, LAM_M = 15, 16  # actor: DQfD schedules (-1 = off: PER share, config weight)
+N_CTRL = 18
 
 
 class Actor:
@@ -75,6 +76,7 @@ class LearnerProcess:
         self._shm = [create_shm(N_CTRL * 8), create_shm(self.actor.n_params * 4)]
         self.ctrl = np.ndarray(N_CTRL, np.float64, buffer=self._shm[0].buf)
         self.ctrl[:] = 0
+        self.ctrl[DEMO_FRAC] = self.ctrl[LAM_M] = -1.0  # schedules off
         self.ctrl[DONE] = self.ctrl[FLUSHED] = self.ctrl[CREDIT] = n_updates
         self.weights = np.ndarray(self.actor.n_params, np.float32, buffer=self._shm[1].buf)
         self._wver = -1
@@ -121,6 +123,12 @@ class LearnerProcess:
             self._wait(lambda: self.ctrl[CREDIT] - self.ctrl[DONE] < self.max_lag + 1)
             self.wait_s += time.perf_counter() - t0
         self.pull_weights()
+
+    def set_dqfd_schedule(self, demo_frac, lam_m):
+        """Share of demo samples per batch and margin weight for the next
+        updates (None: PER decides the share / the config's weight)."""
+        self.ctrl[DEMO_FRAC] = -1.0 if demo_frac is None else demo_frac
+        self.ctrl[LAM_M] = -1.0 if lam_m is None else lam_m
 
     def request_target_sync(self):
         self.ctrl[SYNC_REQ] += 1
@@ -312,8 +320,10 @@ def learner_main(cfg, device, dims, replay_spec, ctrl_name, weights_name, n_para
             if ctrl[CREDIT] - ctrl[DONE] >= 1 and sampler.n_valid >= cfg["batch_size"]:
                 idle = 0
                 t_busy = time.perf_counter()
-                batch, idx, w = sampler.sample(rng, cfg["batch_size"], float(ctrl[BETA]) or 0.4)
-                loss, mq, td, je = learner.update_frames(batch, w)
+                frac, lam = float(ctrl[DEMO_FRAC]), float(ctrl[LAM_M])
+                batch, idx, w = sampler.sample(rng, cfg["batch_size"], float(ctrl[BETA]) or 0.4,
+                                               frac if frac >= 0 else None)
+                loss, mq, td, je = learner.update_frames(batch, w, lam if lam >= 0 else None)
                 if cuda:
                     td, done = td.to("cpu", non_blocking=True), torch.cuda.Event()
                     done.record()

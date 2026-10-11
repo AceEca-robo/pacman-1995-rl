@@ -46,3 +46,19 @@ def test_levels_suite_range_stop_at_clear(tmp_path):
             assert g["levels_cleared"] <= 1
     assert sorted((g["start_level"], g["seed"]) for g in res["games"]) == \
         [(1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1)]
+
+
+def test_levels_suite_seed_blocks(tmp_path):
+    """--seed-blocks: each level on its own block of seeds (level 1's block
+    is the from-level-1 games' seeds)."""
+    out = tmp_path / "lv.json"
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "evaluate.py"),
+                        "--agent", "heuristic", "--levels", str(out), "--episodes", "2",
+                        "--level-episodes", "2", "--level-range", "1-3", "--stop-at-clear",
+                        "--seed-blocks", "--seed", "10", "--workers", "2", "--max-steps", "3000"],
+                       capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stderr
+    res = json.loads(out.read_text())
+    assert res["seed_blocks"]
+    assert sorted((g["start_level"], g["seed"]) for g in res["games"]) == \
+        [(1, 10), (1, 11), (2, 12), (2, 13), (3, 14), (3, 15)]

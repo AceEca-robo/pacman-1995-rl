@@ -65,6 +65,21 @@ def start_level_at(cfg, steps):
     return spec
 
 
+def dqfd_schedule(cfg, steps):
+    """(demo share of the batch, margin weight) at this step from
+    cfg["dqfd"]["anneal"] ({from_step, steps, demo_frac: [start, end],
+    lambda_margin: [start, end]}, linear from from_step over steps, then the
+    end values); (None, None) without it (PER's share, the config's weight)."""
+    an = (cfg.get("dqfd") or {}).get("anneal")
+    if not an:
+        return None, None
+    frac = min(1.0, max(0.0, (steps - an["from_step"]) / an["steps"]))
+
+    def lerp(ab):
+        return None if ab is None else ab[0] + frac * (ab[1] - ab[0])
+    return lerp(an.get("demo_frac")), lerp(an.get("lambda_margin"))
+
+
 def per_beta(cfg, steps):
     per = cfg["per"]
     frac = min(1.0, steps / (per["beta_steps"] or cfg["total_steps"]))
@@ -603,6 +618,9 @@ def main():
     p.add_argument("--resume", action="store_true", help="continue runs/<run-name>/checkpoint.pt")
     p.add_argument("--extend-steps", type=int, default=0,
                    help="with --resume: add this many steps to the run's total_steps")
+    p.add_argument("--resume-from", metavar="CHECKPOINT",
+                   help="start a new run (--config) from another run's checkpoint: weights, "
+                        "optimizer, step counts and schedules continue (no replay)")
     p.add_argument("--pretrain-only", action="store_true",
                    help="dqfd: stop after phase 0 (checkpoint.pt; --resume continues with RL)")
     args = p.parse_args()
@@ -637,6 +655,15 @@ def main():
         if os.path.exists(ck_path):
             sys.exit(f"{run_dir} already has a checkpoint; use --resume or another --run-name")
         cfg, seed, ck = load_config(args.config), args.seed, None
+        if args.resume_from:
+            ck = torch.load(args.resume_from, map_location=device, weights_only=False)
+            seed = ck["seed"]
+            if cfg["network"] != ck["config"]["network"] or \
+                    cfg["env_config"] != ck["config"]["env_config"]:
+                sys.exit(f"{args.resume_from}: network or env config differs from {args.config}")
+            if ck["steps"] >= cfg["total_steps"]:
+                sys.exit(f"{args.resume_from} is at {ck['steps']} steps >= total_steps")
+            print(f"continuing {args.resume_from} ({ck['steps']} steps) as {args.run_name}")
         os.makedirs(run_dir, exist_ok=True)
         with open(os.path.join(run_dir, "config.yaml"), "w") as f:
             yaml.safe_dump(cfg, f)
@@ -685,6 +712,8 @@ def main():
         steps, n_updates, episodes, best = ck["steps"], ck["n_updates"], ck["episodes"], ck["best"]
         rng.bit_generator.state = ck["rng"]
         torch.set_rng_state(ck["torch_rng"].cpu())  # map_location moved it to the device
+        if args.resume_from:  # best.pt is this run's own
+            best = -np.inf
     n = cfg["num_envs"]
     learner = buffer = replay = None
     if proc:
@@ -843,6 +872,7 @@ def main():
         per = cfg["per"]["enabled"]
         min_buffer = min(cfg["learning_starts"], cfg["buffer_size"]) if ck else cfg["batch_size"]
 
+        dq_sched = bool(dq.get("anneal"))
         freeze_steps = cfg.get("freeze_conv_steps") or 0
         conv_frozen = steps < freeze_steps
         if conv_frozen:
@@ -893,6 +923,8 @@ def main():
             if steps >= cfg["learning_starts"] and fill() >= min_buffer:
                 beta = per_beta(cfg, steps) if per else None
                 if bg:
+                    if dq_sched:
+                        bg.set_dqfd_schedule(*dqfd_schedule(cfg, steps))
                     bg.give(col.last_n / cfg["train_every"], beta)
                 else:
                     update_credit += col.last_n / cfg["train_every"]
@@ -951,6 +983,11 @@ def main():
                         writer.add_scalar("train/margin_loss", bg.last_margin_loss, steps)
                         writer.add_scalar("train/demo_frac", bg.last_demo_frac, steps)
                         msg += f"  margin {bg.last_margin_loss:.4f}  demo {bg.last_demo_frac:.1%}"
+                        if dq_sched:
+                            lam = dqfd_schedule(cfg, steps)[1]
+                            if lam is not None:
+                                writer.add_scalar("train/lambda_margin", lam, steps)
+                                msg += f"  lam_m {lam:.2f}"
                     losses, qs = [], []
                 print(msg, flush=True)
                 next_log += cfg["log_every"]

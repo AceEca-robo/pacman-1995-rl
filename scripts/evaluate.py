@@ -201,7 +201,10 @@ def levels_suite(args, label):
     lo, hi = (int(x) for x in args.level_range.split("-"))
     levels = range(lo, hi + 1)
     tasks = [(1, args.seed + i, False) for i in range(max(args.episodes, args.level_episodes))]
-    tasks += [(lv, args.seed + i, args.stop_at_clear) for lv in levels if lv != 1
+    # --seed-blocks: level lv on seeds seed + (lv - 1) * level_episodes + i (16 x 100 games
+    # cover seeds 0..1599); otherwise every level on the same seeds seed..
+    block = (lambda lv: (lv - 1) * args.level_episodes) if args.seed_blocks else (lambda lv: 0)
+    tasks += [(lv, args.seed + block(lv) + i, args.stop_at_clear) for lv in levels if lv != 1
               for i in range(args.level_episodes)]
     # long games first, so the pool does not end on one straggler
     tasks.sort(key=lambda t: t[0] != 1)
@@ -230,6 +233,7 @@ def levels_suite(args, label):
         "max_steps": args.max_steps,
         "levels": list(levels),
         "stop_at_clear": bool(args.stop_at_clear),
+        "seed_blocks": bool(args.seed_blocks),
         "from_level1": {
             "episodes": len(from1),
             "mean_levels_cleared": float(cleared.mean()),
@@ -319,6 +323,9 @@ def main():
     p.add_argument("--workers", type=int, default=8, help="--levels: processes (CPU)")
     p.add_argument("--level-range", default=f"1-{LEVELS}",
                    help="--levels: start levels a-b of the per-level games")
+    p.add_argument("--seed-blocks", action="store_true",
+                   help="--levels: each level on its own seeds (level lv: seed + (lv-1) * "
+                        "level-episodes ..), not all on seed..")
     p.add_argument("--stop-at-clear", action="store_true",
                    help="--levels: end the per-level games once the start level is cleared")
     args = p.parse_args()

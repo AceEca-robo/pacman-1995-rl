@@ -170,6 +170,42 @@ def test_demo_stays(replay):
         drive(dw, 1, 100, np.random.default_rng(5))
 
 
+def test_sumtree_prefix_sum():
+    from agents.dqn import SumTree
+    rng = np.random.default_rng(0)
+    t = SumTree(1000)
+    v = rng.random(1000)
+    t.set(np.arange(1000), v)
+    for n in (0, 1, 2, 511, 512, 513, 999, 1000):
+        assert t.prefix_sum(n) == pytest.approx(v[:n].sum(), abs=1e-9)
+
+
+def test_demo_frac_sampling(replay):
+    """A fixed demo share: exactly round(frac * batch) demo samples per
+    batch, and the importance weights follow the two-part probabilities."""
+    r = replay([200, 200], demo_sizes=[300])
+    drive(StreamWriter(r, [0], 3, 0.9), 1, 250, np.random.default_rng(3))
+    s = Sampler(r, 0.6, 1e-6, eps_demo=1.0, guard=16, n=3)
+    aw = StreamWriter(r, [1, 2], 3, 0.9, timeout=5)
+    drive(aw, 2, 150, np.random.default_rng(1), after=s.register, start=10**6)
+    s.register()
+    rng = np.random.default_rng(2)
+    s.update_priorities(np.flatnonzero(s.tree.get(np.arange(r.frames)) > 0),
+                        rng.random(s.n_valid) * 3)
+    demo_mass = s.tree.prefix_sum(r.demo_frames)
+    total = s.tree.total
+    for frac in (0.0, 0.1, 0.4, 1.0):
+        b, idx, w = s.sample(rng, 40, 1.0, demo_frac=frac)
+        k = int(round(frac * 40))
+        assert int(b["demo"].sum()) == k
+        p = s.tree.get(idx)
+        prob = np.where(b["demo"], (k / 40) * p / demo_mass, (1 - k / 40) * p / (total - demo_mass))
+        want = 1.0 / (s.n_valid * prob)
+        assert np.allclose(w, want / want.max(), rtol=1e-5)
+    _, _, w = s.sample(rng, 40, 1.0)  # None: plain PER
+    assert w.max() == pytest.approx(1.0)
+
+
 def test_demo_save_load(replay, tmp_path):
     r = replay([64], demo_sizes=[200, 200])
     drive(StreamWriter(r, [0, 1], 3, 0.9), 2, 150, np.random.default_rng(6))
@@ -230,7 +266,8 @@ def test_margin_loss_only_on_demo():
         learner._t(np.concatenate([bb["obs"], bb["obsn"]])),
         learner._t(np.concatenate([bb["vec"], bb["vecn"]])), learner._t(bb["act"], torch.long),
         learner._t(bb["rew1"]), learner._t(bb["disc1"]), learner._t(bb["ret"]),
-        learner._t(bb["discn"]), learner._t(bb["demo"], torch.float32), learner._t(w))
+        learner._t(bb["discn"]), learner._t(bb["demo"], torch.float32), learner._t(w),
+        learner._t(np.float32(learner.lam_m)))
     loss, _, _, je = learner._frame_loss_fn(*args(b))
     assert float(loss.detach()) == 0.0 and float(je) == 0.0
     b["demo"] = np.ones(16, bool)
@@ -240,6 +277,9 @@ def test_margin_loss_only_on_demo():
     want = large_margin(q, learner._t(b["act"], torch.long), 0.8).mean()
     assert float(loss.detach()) == pytest.approx(float(want), rel=1e-5)
     assert float(je) == pytest.approx(float(want), rel=1e-5)
+    half = args(b)[:-1] + (learner._t(np.float32(learner.lam_m / 2)),)  # scheduled weight
+    loss, _, _, _ = learner._frame_loss_fn(*half)
+    assert float(loss.detach()) == pytest.approx(float(want) / 2, rel=1e-5)
 
 
 def test_margin_loss_learns_demo_actions():

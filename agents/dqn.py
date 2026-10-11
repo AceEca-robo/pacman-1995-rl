@@ -202,6 +202,19 @@ class SumTree:
             self.tree[pos] = self.tree[2 * pos] + self.tree[2 * pos + 1]
             pos = np.unique(pos // 2)
 
+    def prefix_sum(self, n):
+        """Sum of the priorities of leaves [0, n)."""
+        lo, hi, s = self.leaves, self.leaves + n, 0.0
+        while lo < hi:
+            if lo & 1:
+                s += self.tree[lo]
+                lo += 1
+            if hi & 1:
+                hi -= 1
+                s += self.tree[hi]
+            lo, hi = lo // 2, hi // 2
+        return s
+
     def find(self, prefix):
         """Leaf index where the running sum of priorities passes each prefix."""
         prefix = np.array(prefix, np.float64)
@@ -414,12 +427,14 @@ class DQNLearner:
         the next update() (so it happens in the thread that runs updates)."""
         self._conv_request = flag
 
-    def _frame_loss_fn(self, obs, vec, act, rew1, disc1, ret, discn, demo, weights):
+    def _frame_loss_fn(self, obs, vec, act, rew1, disc1, ret, discn, demo, weights, lam_m):
         """DQfD-style loss on frame batches (Hester et al. 2018): n-step double
         DQN TD (Huber) * lam_n + 1-step TD * lam_1 + large-margin
         classification * lam_m on demo samples only:
         max_a [Q(s, a) + margin * (a != a_demo)] - Q(s, a_demo).
         obs/vec: s, then s_{t+1} (only with lam_1), then s_{t+n}, stacked.
+        lam_m: the margin weight as a 0-d tensor (scheduled values do not
+        recompile the compiled loss).
         Returns (importance-weighted loss, mean max Q(s), |n-step TD| per
         sample, mean margin loss over the demo samples)."""
         n = act.shape[0]
@@ -440,13 +455,14 @@ class DQNLearner:
             loss = loss + self.lam_1 * F.smooth_l1_loss(q, target_1, reduction="none")
         je = large_margin(q_all, act, self.margin)
         if self.lam_m:
-            loss = loss + self.lam_m * je * demo
+            loss = loss + lam_m * je * demo
         loss = (weights * loss).mean()
         je_demo = (je.detach() * demo).sum() / demo.sum().clamp(min=1.0)
         return loss, q_all.detach().max(1).values.mean(), (q.detach() - target_n).abs(), je_demo
 
-    def update_frames(self, b, weights):
-        """b: a batch dict of agents/shared_replay.py Sampler. Returns device
+    def update_frames(self, b, weights, lam_m=None):
+        """b: a batch dict of agents/shared_replay.py Sampler; lam_m: the
+        margin weight for this update (default the config's). Returns device
         tensors (loss, mean max Q, |n-step TD| per sample, demo margin loss)."""
         self._apply_conv_request()
         frames = ("obs", "obs1", "obsn") if self.lam_1 else ("obs", "obsn")
@@ -455,7 +471,7 @@ class DQNLearner:
             self._t(np.concatenate([b["vec" + k[3:]] for k in frames])),
             self._t(b["act"], torch.long), self._t(b["rew1"]), self._t(b["disc1"]),
             self._t(b["ret"]), self._t(b["discn"]), self._t(b["demo"], torch.float32),
-            self._t(weights))
+            self._t(weights), self._t(self.lam_m if lam_m is None else lam_m, torch.float32))
         self._step(loss)
         return loss.detach(), mean_q, td, je
 

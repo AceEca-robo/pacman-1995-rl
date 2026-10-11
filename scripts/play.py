@@ -4,6 +4,8 @@
     python scripts/play.py --agent heuristic --seed 0 --display :0
     python scripts/play.py --agent dqn --checkpoint runs/dqn0/best.pt --seed 0 \\
         --display :0 --record docs/dqn0.gif --max-steps 400
+    xvfb-run -a -s "-screen 0 1280x1024x24" python scripts/play.py --agent dqn \
+        --checkpoint runs/dqfd0/best.pt --level 7 --record docs/x.gif --max-steps 400
 
 The game runs without --fast (0.25 s per tick, half while pacman is super).
 With --record, the game window is grabbed (xwd) once per tick, after the
@@ -78,6 +80,7 @@ def main():
     p.add_argument("--max-steps", type=int, default=None,
                    help="stop after this many ticks (a full heuristic game is ~1250, 5 min)")
     p.add_argument("--scale", type=float, default=1.0, help="GIF frame scale")
+    p.add_argument("--level", type=int, default=None, help="start on this level (maze), 1-16")
     args = p.parse_args()
 
     agent = make_agent(args)
@@ -85,7 +88,8 @@ def main():
                     config={"max_episode_steps": None, **agent.env_overrides})
     frames, durations = [], []
     try:
-        obs, info = env.reset(seed=args.seed)
+        obs, info = env.reset(seed=args.seed, options=(
+            {"start_level": args.level} if args.level else None))
         agent.reset(seed=args.seed)
         window = find_window(args.display) if args.record else None
         total, steps, t_prev = 0.0, 0, time.perf_counter()
