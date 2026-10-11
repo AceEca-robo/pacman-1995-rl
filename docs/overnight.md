@@ -1589,3 +1589,9 @@ disk > 10 GB before every start or extension, one --resume per crash.
   instead of ~02:00 and will be at ~45M of its 60M by 07:30 (it goes on
   after the session). dqfd1@160M ties for 4th on the supervisor's mean
   (77.5%, as dqfd0@140M and dqfd1@130M) -> also on the final protocol.
+- 01:00 Final protocol: dqfd1@160M 74.6% / min 55% / levels 1.20 — no
+  better than dqfd1@110M (75.2% / 52%).
+- 01:23 dqfd1 @180M (supervisor): 75.3% / min 40% / levels 0.85; 02:06
+  @190M: 71.6% / min 30% / levels 1.00 — below the top 4 (>= 77.5%), not
+  re-evaluated. Health (hourly, `runs/health_night.log`): 00:40, 01:38,
+  02:37 ok — 4.3k steps/s, Q 55-57, no NaN, 43 GB free.
