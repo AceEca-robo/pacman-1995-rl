@@ -1426,3 +1426,15 @@ maze (final protocol, seeds 0..1599).
   supervisor evals at that level, are the candidates for the final
   protocol (100 games per maze, seeds 0..1599, `evaluate.py --levels
   --seed-blocks`); monitoring only, the run is untouched.
+- 18:01 **dqfd1, 20M report (120 -> 140M) and plateau confirmation 1.**
+  Supervisor: 130M 77.5% / min 40% / 1.20, food 313; 140M 74.4% / 55% /
+  1.35, food 342. Training evals 122-140M: per-maze mean 0.74-0.79
+  (best 134M 0.791 / 0.55), min 0.40-0.55; keep_good.py kept none (no
+  eval >= 0.80 since 118M). Rule at 140M: 130/140M vs 110/120M per-maze
+  mean 0.769 -> 0.759, levels 1.275 -> 1.275 -> no rise, **plateau
+  confirmation 1 -> extended by 30M to 170M** (18:00, by the supervisor).
+  Re-scored on 40 games per maze (seeds 1000..1039, as the start pick):
+  dqfd1 @110M **78.1% / min 62%** / 1.23 levels, @130M 75.6% / 55% / 1.15,
+  against the start dqfd0 @80M 76.7% / 55% / 1.25: +1.4 points on the mean
+  (about one standard error of a 640-game mean), the minimum up; not near
+  81%, so no final protocol run yet. Q 53.8-57.3, no NaN, 4.24k steps/s.
