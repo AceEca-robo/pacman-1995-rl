@@ -1561,3 +1561,22 @@ disk > 10 GB before every start or extension, one --resume per crash.
   sit ~3-4 points under the heuristic on the per-maze mean, equal on the
   minimum and on levels in a row (dqfd0@80M). dqfd0@140M and dqfd1@130M
   queued (tmux `evals2`).
+- 23:53 Final protocol: dqfd0@140M 73.7% [71.6, 75.7] / min 54% / levels
+  1.07; dqfd1@130M 75.2% [73.2, 77.3] / 48% / 1.23. All four RL candidates
+  within 73.7-75.2% — inside each other's intervals.
+- 23:59 dqfd1 @160M (supervisor, 20 games): 77.5% / min 40% / levels 0.85.
+  The supervisor had logged 3.42-3.44k steps/s at 23:19 and 23:31 (the
+  evaluations and the smoke start sharing the machine; back to 4.28k).
+- 00:02 Death report on the current leader dqfd1@110M (best on the final
+  protocol so far: 75.2%, ties dqfd1@130M on the mean, higher minimum; run
+  now so step 4 does not wait if it stays best): 16 mazes x 50 games, seeds
+  5000.. in blocks of 50, 155 s. 800 games, 76.1% cleared; of the 191 lost
+  games 188 are game overs and 3 stuck (cut at 10000 ticks, all on maze 2).
+  1258 deaths: 82.4% squeezed (normal ghosts within 5 steps on every way
+  out), 16.3% "supertime ran out" (the tick supertime ends, next to a ghost
+  still hunted), 1.0% from behind, 0.2% head-on; supertime > 0 at the
+  death 0%. Food left: median 52 (quartiles 17-105), < 20 food 27.1%; tick
+  <= 200 of the game 31%, of the life 57%. Mazes by deaths per game: 11
+  (1.92), 9, 15, 12, 3, 13 (1.70) ... 8 (1.18).
+  Step 4 conditions: endgame (< 20 food) 27% <= 40% -> no own prefixes;
+  supertime > 0 0% (16% at its end) <= 30% -> ghost_eaten stays 5.
