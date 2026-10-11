@@ -310,7 +310,8 @@ def check(run, st, args, save):
 
 
 def extend_or_stop(run, st, total, args):
-    rows = [r for r in sv_evals(run) if r["steps"] <= total]
+    # checkpoints overshoot their step by up to one actor batch (50000003)
+    rows = [r for r in sv_evals(run) if r["steps"] < total + args.every // 2]
     mm = [r["mean_maze_cleared"] for r in rows]
     lv = [r["mean_levels_cleared"] for r in rows]
     if len(rows) >= 4:

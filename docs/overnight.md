@@ -1270,3 +1270,15 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
   30M copy gives min 50% where the training eval at 30M gave 55%: one game
   on one maze; the copy and the actor's weights at eval time can differ by
   the last weight sync.)
+- 03:06 Watch at 45M: 4.34k steps/s, Q 46.6-49.9, no NaN, demo share 40%.
+  Supervisor @40M: 73.8% / min 60% / 1.50 levels, food 378.
+- 03:27 **50M reached.** Supervisor @50M: 70.6% / min 35% / 1.20 levels,
+  food 330 (training evals 46-50M dip too). Extension rule: 40/50M vs
+  20/30M: per-maze mean 0.722 vs 0.731 (no rise), levels 1.35 vs 1.15
+  (rise) -> **extended by 50M to 100M** (`--resume --extend-steps
+  50000000`, 03:27; the agent replay refills, demo share of the batches
+  54% at first). Bug: the supervisor's rule filtered evals by `steps <=
+  total_steps`, and the 50M copy is at 50,000,003 steps, so it compared
+  30/40 with 10/20 (same decision). Fixed (`< total + every / 2`), the
+  supervisor alone restarted (03:29, state kept); the fixed rule on the
+  same data gives the line above.
