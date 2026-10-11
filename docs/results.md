@@ -824,3 +824,38 @@ dqfd0 at 100k-500k updates: per-maze mean 63 / 59 / 56 / 59 / 59%, min 40 /
 small against Q values of ~35-40 (dots 1, endgame dots up to 21, level 50,
 death -20); a larger margin and weight together bring the greedy policy to
 BC's actions. Phase 1 (RL) runs at 4.3k steps/s with this loss (learner-bound).
+
+### DQfD phase 1, dqfd0 (2026-10-11, the long run)
+
+Supervisor evaluations every 10M of phase 1 (`scripts/dqfd_report.py`;
+the run's eval protocol: 20 games on each of the 16 mazes, stopped at the
+clear and cut at 10000 ticks, + 20 games from level 1, seeds 1000..1019,
+greedy). 0M = the phase-0 checkpoint. References on the same seeds: BC
+bc0_dagger1 (`scripts/train_eval.py`), the heuristic (`evaluate.py --levels
+--seed 1000 --episodes 20 --level-episodes 20 --stop-at-clear --max-steps
+10000`). Curve with the training's own evals every 2M: `docs/dqfd0_curve.png`.
+
+| | per-maze mean | per-maze min | levels from level 1 | food from level 1 |
+|---|---|---|---|---|
+| dqfd0 @ 0M | 59.4% | 25% | 0.95 | 294 |
+| dqfd0 @ 10M | 67.8% | 40% | 0.95 | 257 |
+| dqfd0 @ 20M | 70.3% | 45% | 0.80 | 263 |
+| dqfd0 @ 30M | 75.9% | 50% | 1.50 | 374 |
+| dqfd0 @ 40M | 73.8% | 60% | 1.50 | 378 |
+| dqfd0 @ 50M | 70.6% | 35% | 1.20 | 330 |
+| dqfd0 @ 60M | 73.4% | 40% | 1.20 | 326 |
+| dqfd0 @ 70M | 73.1% | 50% | 1.35 | 353 |
+| dqfd0 @ 80M | 79.1% | 55% | 1.45 | 358 |
+| dqfd0 @ 90M | 75.0% | 55% | 1.15 | 315 |
+| dqfd0 @ 100M | 71.9% | 50% | 1.15 | 311 |
+| BC bc0_dagger1 | 66.9% | 40% | 1.20 | 333 |
+| heuristic | 81.2% | 60% | 1.25 | 341 |
+
+Extensions: 50M -> 100M (levels 40/50M vs 20/30M rose 1.15 -> 1.35),
+100M -> 130M (plateau confirmation 1: 70/80M vs 90/100M, per-maze mean
+0.761 -> 0.734, levels 1.40 -> 1.15). From 30M on the per-maze mean stays
+at 71-79% (mean of the eight evals 74.1%, one eval of 320 games is +-2.5
+points), the minimum at 35-60%, levels from level 1 at 1.15-1.50 (mean
+1.31): above BC on the per-maze mean (+7 points), level with both
+references on levels (BC 1.20, heuristic 1.25; 20 games are +-0.2), below
+the heuristic's 81% / 60% per maze.

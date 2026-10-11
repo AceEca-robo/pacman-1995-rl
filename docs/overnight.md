@@ -1296,3 +1296,59 @@ watch checks, until 08:00. Disk 45 GB free, nothing running at the start.
   eval), Q 47.1-50.5, no NaN, demo share 40.7%. Supervisor **@80M: 79.1% /
   min 55% / 1.45 levels, food 358** (best so far; heuristic 81.3% / 60% /
   1.25), @90M: 75.0% / min 55% / 1.15 levels, food 315.
+- 06:54 **100M reached.** Supervisor @100M: 71.9% / min 50% / 1.15
+  levels, food 311. Rule: 90/100M vs 70/80M: per-maze mean 0.761 -> 0.734,
+  levels 1.40 -> 1.15, no rise on either -> **plateau confirmation 1,
+  extended by 30M to 130M** (06:54, expected ~08:55).
+- 07:05 Report: `docs/dqfd0_curve.png`, section "DQfD phase 1, dqfd0" in
+  docs/results.md (table of the 10M evals with BC and the heuristic on the
+  same seeds). Summary: phase 1 lifted the per-maze mean from 59% (phase 0)
+  to 74% on average over 30-100M (best 79.1% @80M), above BC (66.9%), below
+  the heuristic (81.3%); the per-maze minimum 35-60% (BC 40%, heuristic
+  60%); levels from level 1 1.15-1.50 (BC 1.20, heuristic 1.25). Flat from
+  ~30M; the training evals every 2M show the same band (0.70-0.79).
+- 07:05 **End of session.** No crash, no rollback, no restart from
+  scratch; watch checks all within limits the whole night (speed 4.3-4.4k
+  steps/s, Q 38-50.5, no NaN, demo share of the batches ~40% at a steady
+  state, 54% right after each resume while the agent replay refills). Left
+  running (not to be touched): dqfd0 to 130M (tmux `dqfd0`) and its
+  supervisor (tmux `sv_dqfd0`), which applies the rule at 130M on its own
+  (a second plateau confirmation -> +30M, a third -> stop). Disk 43 GB
+  free. Kept: runs/dqfd0/ck_<10M multiples>.pt (118 MB each),
+  phase1_start.pt.
+
+## Unclear points and decisions (2026-10-11, session 3)
+
+- "Levels in a row" = mean levels cleared per game started on level 1
+  (`mean_levels_cleared`, 20 games); "mean over mazes" = mean of the 16
+  per-maze clear shares (20 games each, cut at 10000 ticks).
+- Extension rule: "the last two evaluations vs the two before" = means of
+  the supervisor's last two 10M evaluations vs the two before them (at 50M:
+  40/50M vs 20/30M); a rise is a strictly larger mean on either metric.
+  Read as: rise -> +50M and the plateau count resets; no rise -> plateau
+  confirmation; confirmations 1 and 2 -> +30M each ("one dip is noise"),
+  the third in a row -> stop. Implemented in `supervisor.py --extend`.
+- Rule 4 "first eval after 10M": the supervisor's 10M evaluation. The
+  training's own evals every 2M (same protocol, `eval_every` unchanged) are
+  watched too but do not trigger the rollback.
+- Watch checks: Q is the learner's mean max-Q over the batch (log line);
+  the demo share is the share of demo transitions in the sampled batches
+  (PER with eps_demo 1.0, so it stays far above the demo's ~52% share of
+  the replay's frames).
+- The supervisor's 10M evals and the training's 2M evals at the same step
+  can differ by a game or two (30M: min 50% vs 55%): the copy of
+  checkpoint.pt vs the actor's weights at eval time.
+
+## Ideas for later (2026-10-11, session 3)
+
+(Not tried.)
+
+- The plateau at ~74% per maze from 30M with eps 0.01 and a 40% demo share
+  of the batches: the margin loss keeps the policy near BC's actions on
+  demo states. A decaying lambda_margin or eps_demo (less demo in the
+  batches) is the obvious lever once the plateau is confirmed.
+- 20 games per maze make a 10M eval +-2.5 points on the mean and noisy on
+  the minimum; the extension rule reacts to that noise (50M dip). 50 games
+  per maze at the 10M points would make the rule steadier.
+- Score the best supervisor checkpoints (80M: 79.1%) on the final protocol
+  (100 games per maze) before reading anything into single evals.
