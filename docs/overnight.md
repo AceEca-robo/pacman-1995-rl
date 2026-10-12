@@ -1628,3 +1628,8 @@ disk > 10 GB before every start or extension, one --resume per crash.
   the first 200k steps (gamma 0.995 lengthens the horizon; watched).
   Supervisor `sv_dqfd2` (every 10M, train_eval, --extend, failed once at
   start: runs/sv_dqfd2 did not exist, created) and keep_good `keep_dqfd2`.
+- 04:42 dqfd2 health ok: 116.3M, 4.28k steps/s, no NaN, 42 GB. Q settled
+  at 100-104 from ~113M on (54 at the start; gamma 0.99 -> 0.995 doubles
+  the horizon) — inside -50..200. Supervisor's first eval (its 110M point,
+  checkpoint 112M, 2M after the start): 80.0% / min 55% / levels 1.35
+  (best_v03 on the same seeds: see the ref row in runs/best_v03).
