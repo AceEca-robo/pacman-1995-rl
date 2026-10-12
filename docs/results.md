@@ -902,3 +902,26 @@ Deaths of best_v03 (`scripts/death_report.py`, 16 x 50 games, seeds
 5000..): 82% squeezed between normal ghosts in a corridor, 16% at the end
 of supertime, 1% from behind; 27% with < 20 food left; supertime > 0 at
 the death 0%. `docs/v03_deaths_summary.png`, `docs/v03_deaths_mazes.png`.
+
+### dqfd2 (from best_v03, cell_safety plane, n 5, gamma 0.995), same protocol
+
+| agent | games | per-maze mean [95% CI] | min [95% CI] (maze) | levels in a row: mean [95% CI] / median / max |
+|---|---|---|---|---|
+| heuristic | 100 per maze, 100 from level 1 | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
+| dqfd1@110M | 100 per maze, 100 from level 1 | 75.2% [73.2%, 77.3%] | 52% [42%, 60%] (15) | 1.11 [0.93, 1.29] / 1 / 3 |
+| dqfd2@130M | 100 per maze, 100 from level 1 | 79.6% [77.7%, 81.5%] | 57% [46%, 62%] (13) | 1.43 [1.20, 1.67] / 1 / 8 |
+| dqfd2@134M | 100 per maze, 100 from level 1 | 81.1% [79.4%, 83.0%] | 55% [45%, 65%] (15) | 1.41 [1.22, 1.61] / 1 / 4 |
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 72% | 87% | 71% | 84% | 83% | 88% | 81% | 90% | 79% | 79% | 75% | 70% | 64% | 82% | 58% | 88% |
+| dqfd1@110M | 71% | 84% | 72% | 84% | 85% | 89% | 76% | 88% | 61% | 83% | 71% | 66% | 67% | 79% | 52% | 76% |
+| dqfd2@130M | 79% | 89% | 72% | 86% | 89% | 95% | 87% | 92% | 73% | 90% | 70% | 76% | 57% | 78% | 57% | 84% |
+| dqfd2@134M | 83% | 92% | 77% | 91% | 90% | 88% | 87% | 90% | 77% | 88% | 76% | 75% | 69% | 76% | 55% | 84% |
+
+Picked from the 2M training evals by keep_good (>= 80% / >= 55% on seeds
+1000..1019), so the pick has some selection, but the 100-game seeds are
+disjoint from those. dqfd2@134M is the first RL checkpoint above the
+heuristic on the per-maze mean (+2.9 points, intervals barely overlap) and
+above it on levels in a row within the intervals; the minimum is level.
+Curve: `docs/dqfd2_curve.png`.

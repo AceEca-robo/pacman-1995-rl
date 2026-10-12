@@ -1639,3 +1639,40 @@ disk > 10 GB before every start or extension, one --resume per crash.
   levels 1.0-1.65 (mean 1.37); best_v03 on these seeds 78.4% / 55% / 1.25.
   So far level with the start, no rise on the mean; levels slightly up
   (within the noise). keep_good kept nothing (118M had 81.2% but min 50%).
+- 06:33 dqfd2 health ok (141.2M, 4.28k, Q 101.3, 42 GB). Supervisor @130M:
+  80.6% / 55% / levels 2.25; @140M: 79.1% / 50% / 1.90. keep_good kept
+  good_130000013.pt and good_134000003.pt.
+- 06:52 Final protocol (100 per maze, seeds 2000..3599; 100 from level 1):
+  **dqfd2@130M 79.6% [77.7, 81.5] / min 57% (13) / levels 1.43 / max 8;
+  dqfd2@134M 81.1% [79.4, 83.0] / min 55% (15) / levels 1.41 [1.22,
+  1.61]** — against best_v03 75.2% / 52% / 1.11 and the heuristic 78.2%
+  [76.1, 80.2] / 58% / 1.28. +6 points over its start within 24M steps,
+  first RL agent above the heuristic on the per-maze mean; levels in a row
+  above (inside the intervals), minimum level. Mazes up most: 6 (89 ->
+  95%), 7, 9, 10, 12; 13 is down (67 -> 57% at 130M). Curve
+  docs/dqfd2_curve.png (20-game evals: per-maze mean noisy 75-82% around
+  the start's 78.4%, levels clearly up 1.25 -> 1.4-2.25). Health 06:52 ok
+  (145M, disk 39 GB). dqfd2 keeps running to 170M and its supervisor rule
+  after the session.
+
+### Unclear points
+
+- Which of the cell_safety plane, n_step 5 and gamma 0.995 made the gain:
+  all three were switched on together (as asked). The 20-game curve shows
+  the gain mostly in levels in a row, the 100-game protocol in both.
+- The supervisor's 170M rule decisions run on 20 games and have twice
+  called noise a rise (dqfd1 at 170M; 220M would have been the third);
+  dqfd1 was stopped at 220M by hand for that reason.
+- dqfd2@130/134M were picked by 20-game training evals; disjoint seeds keep
+  the 100-game numbers honest, but the best of ~13 evals still favours a
+  lucky checkpoint a little.
+
+### Ideas for later
+
+- Ablate the three dqfd2 changes (cell_safety alone vs n 5 / gamma 0.995
+  alone), 30M each from best_v03.
+- Supervisor rule on 2 x 20-game evals or on the mean of the last 5
+  training evals, to cut the noisy rises.
+- Death report of dqfd2@134M: does the squeeze share drop from 82%?
+- Maze 13 and 15 stay at 55-60% for every agent including the heuristic:
+  look at their layouts (long dead-end corridors?).
