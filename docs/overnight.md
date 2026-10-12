@@ -1793,3 +1793,12 @@ per crash).
   supervisor): 188M —, 190M **82.7% / 55% / 1.68 (kept)**, 192M 80.3% /
   45%, 194M 78.9% / 52%. Final protocol so far: **140M 81.9% / min 56% /
   levels 1.70**, 150M 80.7% / 65% / 1.57.
+- 23:56 **Rule at 200M (40 games): 170/180M -> 190/200M per-maze mean
+  0.788 -> 0.802 (a rise; levels 1.738 -> 1.538) -> extended by 50M to
+  250M**, plateau count back to 0 (supervisor). 40-game evals 196M 79.4% /
+  60%, 198M **80.6% / 62% / 1.58 (kept)**, 200M 77.8-78.3% / 55%. Followed
+  as written: the 40-game rule is the point of tonight's change. Cost:
+  dqfd2 holds the GPU to ~03:40; the ablation waits for it (parallel runs
+  get ~2k each), so with another rise at 250M the ablation would not run
+  tonight at all. Noted for the morning; no hand stop this time (the rule
+  and the priority are the prompt's).
