@@ -1676,3 +1676,32 @@ disk > 10 GB before every start or extension, one --resume per crash.
 - Death report of dqfd2@134M: does the squeeze share drop from 82%?
 - Maze 13 and 15 stay at 55-60% for every agent including the heuristic:
   look at their layouts (long dead-end corridors?).
+
+## 2026-10-12 (day): stopped for the day
+
+- 08:45 The supervisor rule at 170M: plateau confirmation 1 (140/150M ->
+  160/170M per-maze mean 0.803 -> 0.783, levels 1.750 -> 1.675) ->
+  extended by 30M to 200M. 170M training eval 77% / 50% / 1.50; supervisor
+  @180M 80.9% / 40% / 1.80; training eval @184M 80% / 55%.
+- 09:4x Stopped by hand to free the machine: sv_dqfd2 and keep_dqfd2 first,
+  then train.py (Ctrl-C) right after the 184M eval and save. tmux empty, no
+  training processes, GPU free. **runs/dqfd2/checkpoint.pt = 184000013
+  steps**, loads (learner, rng, config present); resume with
+  `train.py --run-name dqfd2 --resume` (total_steps of the extension is
+  200000016 in runs/dqfd2/config.yaml; the supervisor state is in
+  runs/sv_dqfd2). Kept checkpoints: ck_112..180M (every 10M), good_130,
+  134, 150, 156, 162, 176, 178M.
+- **Candidate v0.4: runs/dqfd2/good_134000003.pt** (81.1% [79.4, 83.0] /
+  min 55% / levels 1.41 on the final protocol). The good_150..178M
+  checkpoints are not yet on the final protocol.
+
+### Waiting for the evening
+
+- Death report of dqfd2 (good_134000003.pt, same 16 x 50 games, seeds
+  5000..): did the squeeze share drop from 82%?
+- Ablation from best_v03, one change at a time: abl_safe (cell_safety
+  only, n 3 / gamma 0.99), abl_horizon (n 5 / gamma 0.995, no plane),
+  abl_demo (demo 10% / margin 1 as in dqfd2, no plane, old horizon).
+- The supervisor's extension rule on 40 games per eval instead of 20 (two
+  of its "rises" were noise).
+- Final protocol for good_150..178M and the remaining dqfd2 leg.
