@@ -1819,3 +1819,9 @@ per crash).
   1.36; 206M 80.4% / 64% / 1.52 (its 40-game 83.8% was 3.4 points
   optimistic). From 134M to 206M dqfd2 is flat at 79-82% per maze on 100
   games; the minimum per maze has risen (55% at 134M -> 61-67% from 184M).
+- 02:09 Health ok: dqfd2 227.8M, 3.98k steps/s (eval queue `evq4` beside
+  it), Q 100.8, no NaN, 36 GB. Supervisor 220M (40 games) 79.4% / 65% /
+  1.52; keep_good kept 224M (80.9% / 55% / 1.58). Final protocol 210M
+  80.9% / 61% / 1.55; 220M and 224M queued. docs/dqfd2_curve.png redrawn
+  (scripts/plot_curve.py: 40-game supervisor points as squares, final-
+  protocol points as orange diamonds, best_v03's final row dotted).
