@@ -1812,3 +1812,10 @@ per crash).
   57% / 1.32. On 100 games dqfd2 peaks at 140-156M and sits 1-3 points
   lower after 160M; the 40-game "rise" at 200M (190M's 82.7%) is to be
   checked on the same protocol (queued: 190, 198, 200M; tmux `evq2`).
+- 01:29 Health ok: dqfd2 219.1M, 4.31k steps/s (eval queue done), Q 99.2,
+  no NaN, 37 GB. 40-game evals 208-218M 76.6-79.4%, none kept since 206M.
+  Final protocol: 184M 78.9% / 61% / 1.51; 186M 80.9% / 61% / 1.80; 190M
+  81.2% / 65% / 1.40; 198M **81.8% / 67% / 1.48**; 200M 79.6% / 62% /
+  1.36; 206M 80.4% / 64% / 1.52 (its 40-game 83.8% was 3.4 points
+  optimistic). From 134M to 206M dqfd2 is flat at 79-82% per maze on 100
+  games; the minimum per maze has risen (55% at 134M -> 61-67% from 184M).
