@@ -1595,3 +1595,15 @@ disk > 10 GB before every start or extension, one --resume per crash.
   @190M: 71.6% / min 30% / levels 1.00 — below the top 4 (>= 77.5%), not
   re-evaluated. Health (hourly, `runs/health_night.log`): 00:40, 01:38,
   02:37 ok — 4.3k steps/s, Q 55-57, no NaN, 43 GB free.
+- 02:48 dqfd1 @200M (supervisor): 75.6% / min 30% / levels 1.55; 03:30
+  @210M: 76.6% / 45% / 1.30. 03:35 health ok (212M, 4.3k, Q 55.7, 43 GB).
+- 03:37 **Supervisor of dqfd1 stopped by hand; dqfd1 ends at 220M.** At
+  220M the rule compares 210/220M with 190/200M (per-maze mean 0.736): any
+  220M eval above ~71% is a "rise" and would extend to 270M (~08:00), so
+  dqfd2 — the night's main step — would not start at all. The rule's rises
+  are noise here: on the final protocol nothing after 110M beats it
+  (130M 75.2%, 160M 74.6%). Conservative choice: let the run finish its
+  current 220M as configured, no further extension; recorded. The 220M
+  checkpoint is evaluated by hand the same way (train_eval, seeds
+  1000..1019, appended to sv_evals.jsonl); a crash before 220M would get
+  the one --resume by hand.
