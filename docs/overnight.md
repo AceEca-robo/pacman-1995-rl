@@ -1788,3 +1788,8 @@ per crash).
   squeezes: they are still 85% of the deaths, down only 6% per game.**
   `scripts/compare_deaths.py`; docs/dqfd2_deaths_compare.png,
   dqfd2_deaths_mazes.png, dqfd2_deaths_summary.png.
+- 23:25 Health ok: dqfd2 194.5M, 3.74k steps/s (eval queue beside it), Q
+  100.9-106.7, no NaN, 35 GB free. 40-game evals (keep_good merge / the
+  supervisor): 188M —, 190M **82.7% / 55% / 1.68 (kept)**, 192M 80.3% /
+  45%, 194M 78.9% / 52%. Final protocol so far: **140M 81.9% / min 56% /
+  levels 1.70**, 150M 80.7% / 65% / 1.57.
