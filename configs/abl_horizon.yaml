@@ -1,0 +1,10 @@
+# abl_horizon: ablation of dqfd2 — only the longer horizon (n_step 5, gamma
+# 0.995), no cell_safety plane; otherwise as abl_ctrl. The demo transitions'
+# n-step fields recomputed for n 5 / gamma 0.995 (tools/convert_demo.py).
+# Started with: train.py --run-name abl_horizon --config configs/abl_horizon.yaml
+#   --resume-from runs/best_v03/best.pt
+base: abl_ctrl.yaml
+n_step: 5
+gamma: 0.995
+dqfd:
+  demo_file: runs/dqfd_demo/demo_n5.npz

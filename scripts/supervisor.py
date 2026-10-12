@@ -18,8 +18,9 @@ state (restart counts, done evals) in runs/supervisor_state.json.
 
 --train-eval scores the copies with scripts/train_eval.py on the run's own
 eval protocol instead (games from level 1 + games on each maze, seeds
-eval_seed..; train.py's evaluate()) and appends the summaries with "steps" to
-runs/<run>/sv_evals.jsonl (no results.md row, no plot).
+eval_seed..; train.py's evaluate()), --episodes games from level 1 and per
+maze, and appends the summaries with "steps" to runs/<run>/sv_evals.jsonl
+(no results.md row, no plot).
 
 --extend applies the long-run rule when a run reaches its total_steps: if the
 mean of the last two evaluations beats the mean of the two before on the
@@ -111,14 +112,15 @@ def sv_evals(run):
     return sorted(rows, key=lambda r: r["steps"])
 
 
-def train_eval(run, steps, ck):
+def train_eval(run, steps, ck, episodes=None):
     tmp = os.path.join(RUNS, run, "sv_evals.tmp.jsonl")
     if os.path.exists(tmp):
         os.remove(tmp)
     out = subprocess.run(
         [PY, os.path.join(ROOT, "scripts", "train_eval.py"),
          "--config", os.path.join(RUNS, run, "config.yaml"), "--checkpoint", ck,
-         "--label", f"{run}@{steps}", "--out", tmp],
+         "--label", f"{run}@{steps}", "--out", tmp,
+         *(["--episodes", str(episodes)] if episodes else [])],
         capture_output=True, text=True, cwd=ROOT)
     if out.returncode != 0:
         log(f"{run}: train_eval.py failed at {steps}: {out.stderr.strip()[-500:]}")
@@ -143,7 +145,7 @@ def evaluate(run, steps, episodes, train_eval_mode=False):
         os.remove(ck)
         return
     if train_eval_mode:
-        train_eval(run, steps, ck)
+        train_eval(run, steps, ck, episodes)
         return
     algo = run_algo(run)
     label = f"{algo} {run}@{steps / 1e6:05.2f}M"
@@ -201,7 +203,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("runs", nargs="+")
     p.add_argument("--every", type=int, default=500_000)
-    p.add_argument("--episodes", type=int, default=20)
+    p.add_argument("--episodes", type=int, default=20,
+                   help="games per evaluation (with --train-eval: from level 1 and per maze)")
     p.add_argument("--poll", type=float, default=15.0, help="seconds between checks")
     p.add_argument("--min-speed", type=int, default=1500)
     p.add_argument("--eval-seed", type=int, default=1000,
@@ -287,6 +290,10 @@ def check(run, st, args, save):
 
     if alive(run):
         return
+    # re-read: the run may have written its last eval line after the read above
+    text = run_log(run)
+    evals_at = [int(s) for s in re.findall(r"eval @ (\d+):", text)]
+    finished = bool(evals_at) and max(evals_at) >= total
     extended_here = bool(st.get("extensions")) and st["extensions"][-1][0] == total
     if finished and args.extend and extended_here:
         log(f"{run}: the extension from {total} did not start (config.yaml not extended); "

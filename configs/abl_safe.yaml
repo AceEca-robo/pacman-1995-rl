@@ -1,0 +1,12 @@
+# abl_safe: ablation of dqfd2 — only the cell_safety plane (first conv +1
+# zero channel), n_step 3 / gamma 0.99 as best_v03; otherwise as abl_ctrl.
+# The demo frames get the plane (tools/convert_demo.py --add-cell-safety).
+# Started with: train.py --run-name abl_safe --config configs/abl_safe.yaml
+#   --resume-from runs/best_v03/best.pt
+base: abl_ctrl.yaml
+resume_add_cell_safety: true
+dqfd:
+  demo_file: runs/dqfd_demo/demo_safety_n3.npz
+env_config:
+  obs:
+    cell_safety: true

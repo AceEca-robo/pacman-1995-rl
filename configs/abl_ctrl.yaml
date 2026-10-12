@@ -1,0 +1,19 @@
+# abl_ctrl: ablation control for dqfd2 (2026-10-12 night plan). best_v03
+# (runs/best_v03/best.pt = dqfd1@110000016) continued for 30M with dqfd2's
+# fixed settings (demo share 10%, margin weight 1, eps 0.01) but none of its
+# three changes: no cell_safety plane, n_step 3, gamma 0.99, the original
+# demo file. abl_safe and abl_horizon each add one change back.
+# Started with: train.py --run-name abl_ctrl --config configs/abl_ctrl.yaml
+#   --resume-from runs/best_v03/best.pt
+base: dqfd.yaml
+total_steps: 140000016    # best_v03 (110000016) + 30M
+epsilon_start: 0.01
+epsilon_end: 0.01
+dqfd:
+  demo_file: runs/dqfd_demo/demo.npz
+  lambda_margin: 1.0
+  anneal:                    # fixed: 10% demo samples per batch, margin weight 1
+    from_step: 0
+    steps: 1
+    demo_frac: [0.10, 0.10]
+    lambda_margin: [1.0, 1.0]

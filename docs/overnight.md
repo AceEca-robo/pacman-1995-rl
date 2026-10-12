@@ -1705,3 +1705,56 @@ disk > 10 GB before every start or extension, one --resume per crash.
 - The supervisor's extension rule on 40 games per eval instead of 20 (two
   of its "rises" were noise).
 - Final protocol for good_150..178M and the remaining dqfd2 leg.
+
+## Chronology (2026-10-12/13, session 6: night — dqfd2 resumed, 40-game supervisor, ablation, v0.4)
+
+Plan (night prompt): (1) the supervisor's extension rule on 40 games per
+maze (seeds 1000..1039), keep_good at mean >= 80% and min >= 55% on the
+same 40 games; (2) dqfd2 resumed from runs/dqfd2/checkpoint.pt, extended by
+the rule, stop at the third plateau confirmation, speed >= 3.5k; (3) in
+parallel, one at a time (each >= 3k, else after dqfd2): ablation from
+best_v03, 30M each — abl_safe (cell_safety only), abl_horizon (n 5 /
+gamma 0.995 only), abl_ctrl (neither), each scored at its end on 100 games
+per maze (seeds 2000..3599); (4) death report of dqfd2@134M; (5) hourly
+watch. By 07:30: every dqfd2 good_*/ck_* after 134M on the final protocol,
+best -> runs/best_v04/best.pt. Rules as before (disk > 10 GB, one --resume
+per crash).
+
+- 22:24 Disk 36 GB free, tmux empty. 22:25 dqfd2 resumed (tmux `dqfd2`,
+  `train.py --run-name dqfd2 --resume`, 184000013 of 200000016).
+- 22:27 Supervisor on 40 games: `supervisor.py --episodes N` now reaches
+  train_eval.py in --train-eval mode (before it always used the config's
+  20). The rule compares the last two evaluations with the two before, so
+  the old 20-game rows were moved to `runs/dqfd2/sv_evals_20games.jsonl`
+  and ck_150/160/170/180M re-scored on 40 games (seeds 1000..1039) into
+  sv_evals.jsonl: at 200M the rule compares 170/180M with 190/200M, all on
+  40 games. Plateau state kept (confirmation 1 from 170M).
+- 22:27 Supervisor race fixed: at 08:45 it logged "CRASHED ... restarting"
+  for the 170M leg that had ended normally (the run's log was read before
+  its last eval line was written and the tmux session ended in between),
+  spent its one restart on a no-op `--resume` (train.py exits at
+  total_steps) and extended on the next poll. It now re-reads the log once
+  the session is gone. restarts reset to 0 for this session (one --resume
+  per crash, as the rules say). tmux `sv_dqfd2` (`--every 10000000
+  --train-eval --episodes 40 --extend --min-speed 3500 --log-dir
+  runs/sv_dqfd2`).
+- 22:27 keep_good on 40 games: the training eval (every 2M) plays seeds
+  1000..1019 on each maze and from level 1, the first half of the 40-game
+  set, so `keep_good.py --extra-episodes 20` plays only seeds 1020..1039
+  (train_eval.py --seed 1020) and joins the two (per-maze shares and levels
+  as the mean over the 40 games); half the GPU time of a full 40-game eval
+  every 2M. Merged rows: `runs/dqfd2/evals_merged.jsonl` (a 40-game curve
+  every 2M). tmux `keep_dqfd2`. First: **184M 80.5% / min 55% / levels
+  1.52 -> kept (good_184000013.pt)**.
+- 22:30 Ablation configs `configs/abl_ctrl.yaml` (best_v03 + dqfd2's fixed
+  demo 10% / margin 1 / eps 0.01, n 3, gamma 0.99, demo.npz, no plane),
+  `abl_horizon.yaml` (+ n 5 / gamma 0.995, demo_n5.npz), `abl_safe.yaml`
+  (+ cell_safety via resume_add_cell_safety, demo_safety_n3.npz); total
+  140000016 (110M + 30M). Checked: each differs from dqfd2 only in its
+  plane / n / gamma / demo file. Demo files from demo.npz with
+  tools/convert_demo.py (n 5 / 0.995: 999,948 transitions; safety plane
+  only: n-step fields untouched).
+- 22:34 dqfd2 speed 5 min after the resume: 3.9-3.96k steps/s while the
+  re-scoring and pytest shared the machine (>= 3.5k). pytest 101 passed.
+- 22:34 abl_safe started (tmux `abl_safe`, `--resume-from
+  runs/best_v03/best.pt`), first of the three.
