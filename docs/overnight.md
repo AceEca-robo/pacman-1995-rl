@@ -1607,3 +1607,24 @@ disk > 10 GB before every start or extension, one --resume per crash.
   checkpoint is evaluated by hand the same way (train_eval, seeds
   1000..1019, appended to sv_evals.jsonl); a crash before 220M would get
   the one --resume by hand.
+- 04:10 dqfd1 ended at 220M (keep_dqfd1 stopped). 220M on seeds 1000..1019:
+  77.5% / 55% / 1.50 — ties the top 4 -> final protocol: 73.5% / min 42% /
+  levels 1.18. **best_v03 = dqfd1@110M** (75.2% [73.2, 77.3] / 52% / 1.11),
+  copied to `runs/best_v03/best.pt`. Table in docs/results.md ("Final
+  protocol v0.3"); death plots copied to docs/v03_deaths_*.png.
+  **Main conclusion of the loss analysis: 82% of best_v03's deaths are
+  squeezes — normal ghosts within 5 steps on every way out of its corridor —
+  while endgame (27% < 20 food) and supertime (0% during it) are secondary,
+  so the agent needs to see where it can still get out, not more food or
+  ghost-eating signal.**
+- 04:14 dqfd2 started (tmux `dqfd2`; `--resume-from runs/best_v03/best.pt`,
+  configs/dqfd2.yaml total_steps 170000016 = 110M + 60M; disk 40 GB free).
+  Enabled: cell_safety plane (first conv +1 zero channel), n_step 5, gamma
+  0.995, demo 10% (demo_safety_n5.npz), lambda_margin 1, eps 0.01, lr as
+  in the checkpoint; prefix_prob 0.2 heuristic prefixes and ghost_eaten 5
+  as in dqfd1 (step 4 conditions not met, see 00:02). Check after 1 min:
+  4.27k steps/s, "cell_safety in the batch (update 0): agent 156.7
+  cells/frame (100% nonzero), demo 139.9 (100% nonzero)"; Q 54 -> 64 in
+  the first 200k steps (gamma 0.995 lengthens the horizon; watched).
+  Supervisor `sv_dqfd2` (every 10M, train_eval, --extend, failed once at
+  start: runs/sv_dqfd2 did not exist, created) and keep_good `keep_dqfd2`.

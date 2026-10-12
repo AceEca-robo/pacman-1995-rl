@@ -859,3 +859,46 @@ points), the minimum at 35-60%, levels from level 1 at 1.15-1.50 (mean
 1.31): above BC on the per-maze mean (+7 points), level with both
 references on levels (BC 1.20, heuristic 1.25; 20 games are +-0.2), below
 the heuristic's 81% / 60% per maze.
+
+## Final protocol v0.3: 100 games per maze (2026-10-12)
+
+100 games per start maze (seeds 2000..3599, a block of 100 per maze), 100
+games from level 1 (seeds 2000..2099); `scripts/train_eval.py --seed 2000
+--seed-blocks --games-out`, heuristic via `evaluate.py --levels`; table by
+`scripts/final_table.py` (95% bootstrap intervals over games). The
+candidates are the top 4 of the 20-game supervisor evals of dqfd0/dqfd1
+(seeds 1000..1019) plus the late dqfd1 points that tied them.
+
+| agent | games | per-maze mean [95% CI] | min [95% CI] (maze) | levels in a row: mean [95% CI] / median / max |
+|---|---|---|---|---|
+| heuristic | 100 per maze, 100 from level 1 | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
+| bc0_dagger3 | 100 per maze, 100 from level 1 | 68.4% [66.1%, 70.8%] | 45% [36%, 52%] (13) | 0.92 [0.72, 1.12] / 1 / 4 |
+| dqfd0@80M | 100 per maze, 100 from level 1 | 74.2% [72.1%, 76.3%] | 58% [48%, 62%] (15) | 1.28 [1.07, 1.51] / 1 / 4 |
+| dqfd0@140M | 100 per maze, 100 from level 1 | 73.7% [71.6%, 75.9%] | 54% [43%, 59%] (15) | 1.07 [0.88, 1.27] / 1 / 6 |
+| dqfd1@110M | 100 per maze, 100 from level 1 | 75.2% [73.2%, 77.3%] | 52% [42%, 60%] (15) | 1.11 [0.93, 1.29] / 1 / 3 |
+| dqfd1@130M | 100 per maze, 100 from level 1 | 75.2% [73.2%, 77.3%] | 48% [38%, 57%] (15) | 1.23 [1.03, 1.45] / 1 / 5 |
+| dqfd1@160M | 100 per maze, 100 from level 1 | 74.6% [72.6%, 76.7%] | 55% [45%, 59%] (13) | 1.20 [0.99, 1.41] / 1 / 4 |
+| dqfd1@220M | 100 per maze, 100 from level 1 | 73.5% [71.3%, 75.5%] | 42% [32%, 52%] (15) | 1.18 [1.00, 1.37] / 1 / 5 |
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 72% | 87% | 71% | 84% | 83% | 88% | 81% | 90% | 79% | 79% | 75% | 70% | 64% | 82% | 58% | 88% |
+| bc0_dagger3 | 57% | 73% | 62% | 75% | 79% | 74% | 71% | 80% | 70% | 77% | 64% | 68% | 45% | 70% | 52% | 78% |
+| dqfd0@80M | 72% | 80% | 66% | 85% | 86% | 89% | 69% | 86% | 72% | 82% | 61% | 69% | 65% | 67% | 58% | 80% |
+| dqfd0@140M | 70% | 85% | 78% | 84% | 83% | 81% | 79% | 84% | 70% | 87% | 61% | 61% | 56% | 70% | 54% | 76% |
+| dqfd1@110M | 71% | 84% | 72% | 84% | 85% | 89% | 76% | 88% | 61% | 83% | 71% | 66% | 67% | 79% | 52% | 76% |
+| dqfd1@130M | 73% | 82% | 65% | 86% | 84% | 86% | 83% | 92% | 77% | 83% | 61% | 73% | 61% | 68% | 48% | 82% |
+| dqfd1@160M | 67% | 79% | 74% | 85% | 81% | 77% | 87% | 92% | 71% | 84% | 60% | 66% | 55% | 79% | 57% | 80% |
+| dqfd1@220M | 79% | 82% | 65% | 81% | 84% | 78% | 89% | 85% | 70% | 87% | 62% | 67% | 61% | 68% | 42% | 76% |
+
+best_v03 = dqfd1@110M (`runs/best_v03/best.pt`): best per-maze mean (tied
+with 130M, higher minimum). Every RL checkpoint is 3-5 points under the
+heuristic on the per-maze mean (intervals do not overlap for most), level
+with it on the minimum only at dqfd0@80M, and level on levels in a row
+within the intervals. The 20/40-game picks (77-79%) were 2-4 points
+optimistic (selection of lucky evals).
+
+Deaths of best_v03 (`scripts/death_report.py`, 16 x 50 games, seeds
+5000..): 82% squeezed between normal ghosts in a corridor, 16% at the end
+of supertime, 1% from behind; 27% with < 20 food left; supertime > 0 at
+the death 0%. `docs/v03_deaths_summary.png`, `docs/v03_deaths_mazes.png`.

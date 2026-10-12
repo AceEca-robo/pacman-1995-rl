@@ -13,7 +13,7 @@
 # Started with: train.py --run-name dqfd2 --config configs/dqfd2.yaml
 #   --resume-from runs/best_v03/best.pt; later legs --resume --extend-steps.
 base: dqfd.yaml
-total_steps: 0               # set to best_v03's steps + 60M before the start
+total_steps: 170000016    # best_v03 (dqfd1@110000016) + 60M
 resume_add_cell_safety: true
 epsilon_start: 0.01
 epsilon_end: 0.01
