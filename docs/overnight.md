@@ -1802,3 +1802,13 @@ per crash).
   get ~2k each), so with another rise at 250M the ablation would not run
   tonight at all. Noted for the morning; no hand stop this time (the rule
   and the priority are the prompt's).
+- 00:29 Health: dqfd2 206.7M, 3.50k steps/s (the eval queue and keep_good
+  beside it; the supervisor logged 3.42k right after the 200M restart),
+  Q 100.2, no NaN, 37 GB. 40-game evals 202M 79.4% / 65% / 1.55, 204M
+  78.3% / 45% / 2.22. Final protocol (100 per maze, seeds 2000..): 140M
+  81.9% / 56% / 1.70; 150M 80.7% / 65% / 1.57; 156M 81.2% / 65% / 1.71;
+  160M 79.4% / 60% / 1.38; 162M 79.6% / 64% / 1.44; 170M 78.6% / 52% /
+  1.53; 176M 80.1% / 57% / 1.68; 178M 78.4% / 63% / 1.64; 180M 78.7% /
+  57% / 1.32. On 100 games dqfd2 peaks at 140-156M and sits 1-3 points
+  lower after 160M; the 40-game "rise" at 200M (190M's 82.7%) is to be
+  checked on the same protocol (queued: 190, 198, 200M; tmux `evq2`).
