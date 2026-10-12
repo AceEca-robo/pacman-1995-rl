@@ -1633,3 +1633,9 @@ disk > 10 GB before every start or extension, one --resume per crash.
   the horizon) — inside -50..200. Supervisor's first eval (its 110M point,
   checkpoint 112M, 2M after the start): 80.0% / min 55% / levels 1.35
   (best_v03 on the same seeds: see the ref row in runs/best_v03).
+- 05:37 dqfd2 health ok: 128.7M, 4.28k steps/s, Q 103.9, no NaN, 42 GB.
+  Supervisor @120M: 75.9% / 50% / 1.20. Training evals (2M apart, same
+  seeds) 112..128M: per-maze mean 74.7-81.2% (mean 78.1%), min 45-60%,
+  levels 1.0-1.65 (mean 1.37); best_v03 on these seeds 78.4% / 55% / 1.25.
+  So far level with the start, no rise on the mean; levels slightly up
+  (within the noise). keep_good kept nothing (118M had 81.2% but min 50%).
