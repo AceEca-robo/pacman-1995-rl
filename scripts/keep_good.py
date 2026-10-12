@@ -89,7 +89,9 @@ def main():
                     seen = mtime
                     if args.extra_episodes:
                         r = merged(d, tmp, r, args.extra_episodes)
-                    keep = r["mean_maze_cleared"] >= args.mean and r["min_maze_cleared"] >= args.min
+                    # shares are counts / games: 0.8 can come out as 0.7999999999999998
+                    keep = r["mean_maze_cleared"] >= args.mean - 1e-9 and \
+                        r["min_maze_cleared"] >= args.min - 1e-9
                     print(f"{time.strftime('%H:%M:%S')} {steps}: {r['mean_maze_cleared']:.3f} / "
                           f"{r['min_maze_cleared']:.2f} / levels {r['mean_levels_cleared']:.2f}{'  kept' if keep else ''}", flush=True)
                     if keep:

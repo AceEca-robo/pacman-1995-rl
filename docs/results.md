@@ -925,3 +925,23 @@ disjoint from those. dqfd2@134M is the first RL checkpoint above the
 heuristic on the per-maze mean (+2.9 points, intervals barely overlap) and
 above it on levels in a row within the intervals; the minimum is level.
 Curve: `docs/dqfd2_curve.png`.
+
+Deaths of dqfd2@134M against best_v03 (`scripts/death_report.py`, 16 x 50
+games, seeds 5000.., same games; `scripts/compare_deaths.py`,
+`docs/dqfd2_deaths_compare.png`, `docs/dqfd2_deaths_mazes.png`,
+`docs/dqfd2_deaths_summary.png`):
+
+| | best_v03 | dqfd2@134M |
+|---|---|---|
+| cleared | 76.1% | 79.5% |
+| deaths per game | 1.57 | 1.44 |
+| squeezed per game | 1.295 (82.4%) | 1.218 (84.8%) |
+| supertime ran out per game | 0.256 (16.3%) | 0.189 (13.2%) |
+| from behind per game | 0.016 (1.0%) | 0.016 (1.1%) |
+| head-on per game | 0.004 (0.2%) | 0.009 (0.6%) |
+| standing per game | 0.000 (0.0%) | 0.004 (0.3%) |
+| < 20 food left | 27.1% | 29.2% |
+| in the life's first 200 ticks | 56.9% | 53.0% |
+
+Squeezes are down only 6% per game and still 85% of the deaths; the end of
+supertime is down 26%. Fewer deaths on mazes 1-11, none fewer on 12-15.

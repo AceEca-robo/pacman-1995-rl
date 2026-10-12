@@ -1758,3 +1758,33 @@ per crash).
   re-scoring and pytest shared the machine (>= 3.5k). pytest 101 passed.
 - 22:34 abl_safe started (tmux `abl_safe`, `--resume-from
   runs/best_v03/best.pt`), first of the three.
+- 22:36 Parallel speed: abl_safe 3.66k at first, but within minutes both
+  runs sat at ~2.0k steps/s each (dqfd2 3.9k -> 2.0k; GPU 95% busy, load
+  10 of 20 cores: the two runs split one GPU, the sum stays ~4k). Each
+  < 3k -> the rule says the ablation waits for dqfd2 to stop. abl_safe
+  stopped at its 112000011 checkpoint (22:53, Ctrl-C after the 112M eval;
+  continue later with `--resume`, not a crash). dqfd2 back to 3.8-3.9k with
+  an eval queue beside it.
+- 22:41 keep_good: 186M merged 0.800 / 0.55 not kept — 512/640 came out as
+  0.7999999999999998. Comparison now with a 1e-9 tolerance; 186M copied by
+  hand to good_186000023.pt before checkpoint.pt moved on.
+- 22:45 Re-scored on 40 games (seeds 1000..1039): 150M 80.6% / 57.5% /
+  levels 1.50; 160M 79.8% / 57.5% / 1.48; 170M 78.3% / 60% / 1.88; 180M
+  79.2% / 45% / 1.60. keep_good's merge for 180M (training eval's 20 + 20
+  more): 79.2% / 42.5% / 1.575 — the mean equal, min and levels one or two
+  games off (the training eval runs the bf16 learner network, train_eval.py
+  float32).
+- 22:53 tmux `evq`: death report, then the final protocol
+  (`runs/v04_final/run.sh`, as v03_final, seeds 2000.., 100 per maze + 100
+  from level 1) for the saved dqfd2 checkpoints after 134M: ck_140, 150,
+  160, 170, 180, good_156, 162, 176, 178, 184, 186 (ck_150 = good_150).
+- 22:58 **Death report of dqfd2@134M** (good_134000003.pt, 16 x 50 games,
+  seeds 5000.., as best_v03's): cleared 79.5% (best_v03 76.1%); deaths per
+  game 1.44 (1.57); squeezed 1.22 per game (1.30, -6%; share 84.8%, was
+  82.4%); supertime ran out 0.19 (0.26, -26%; 13.2%); < 20 food left 29%
+  (27%); within the life's first 200 ticks 53% (57%). Fewer deaths on mazes
+  1-11 (9: 1.90 -> 1.48, 10: 1.50 -> 1.10, 11: 1.92 -> 1.58), none fewer
+  on 12-15 (15: 1.85 -> 2.02). **The cell-safety plane did not remove the
+  squeezes: they are still 85% of the deaths, down only 6% per game.**
+  `scripts/compare_deaths.py`; docs/dqfd2_deaths_compare.png,
+  dqfd2_deaths_mazes.png, dqfd2_deaths_summary.png.
