@@ -1825,3 +1825,9 @@ per crash).
   80.9% / 61% / 1.55; 220M and 224M queued. docs/dqfd2_curve.png redrawn
   (scripts/plot_curve.py: 40-game supervisor points as squares, final-
   protocol points as orange diamonds, best_v03's final row dotted).
+- 03:09 Health ok: dqfd2 240.0M, 4.31k steps/s, Q 99.2, no NaN, 36 GB.
+  keep_good kept 228M (80.8% / 62%), 232M (80.9% / 57%), 236M (81.6% /
+  55% / 1.88). Final protocol: 220M 79.1% / 62% / 1.49; 224M 79.4% / 59%;
+  228M 78.4% / 57%; 230M 79.2% / 55% / 1.66; 232M 78.5% / 56%. After
+  210M every checkpoint sits 78-79.5% on 100 games: below the 134-198M
+  band (79-82%). The 40-game picks run 1.5-2.5 points optimistic.
