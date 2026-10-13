@@ -1032,3 +1032,54 @@ On 100 games dqfd2 sits at 79-82% per maze from 134M to 210M and drifts to
 to 60-67% at 150-210M. The 40-game picks were 1.5-3.5 points optimistic.
 Curve: `docs/dqfd2_curve.png` (the final-protocol points as orange
 diamonds).
+
+## Final results v0.4
+
+All numbers below are copied from the tables above (no new evaluations).
+Protocol: 100 games on each of the 16 mazes (seeds 2000..3599 in blocks of
+100) and 100 games from level 1 (seeds 2000..2099), eps 0; 95% bootstrap
+intervals over games (`scripts/final_table.py`). Heuristic, best_v03 and
+best_v04 rows from "Final protocol v0.4"; BC (bc0_dagger3, behaviour cloning
+of the heuristic + 3 DAgger iterations) from "Final protocol v0.3" (same
+protocol and seeds, intervals from that night's bootstrap).
+
+| agent | per-maze mean [95% CI] | min per maze [95% CI] (maze) | levels in a row from level 1: mean [95% CI] / median / max |
+|---|---|---|---|
+| heuristic | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
+| BC (bc0_dagger3) | 68.4% [66.1%, 70.8%] | 45% [36%, 52%] (13) | 0.92 [0.72, 1.12] / 1 / 4 |
+| best_v03 (dqfd1@110M) | 75.2% [73.1%, 77.3%] | 52% [43%, 60%] (15) | 1.11 [0.93, 1.29] / 1 / 3 |
+| **best_v04 (dqfd2@198M)** | **81.8% [79.9%, 83.6%]** | **67% [57%, 72%] (15)** | **1.48 [1.27, 1.72] / 1 / 6** |
+
+Share of games in which the start maze was cleared, per maze:
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 72% | 87% | 71% | 84% | 83% | 88% | 81% | 90% | 79% | 79% | 75% | 70% | 64% | 82% | 58% | 88% |
+| BC (bc0_dagger3) | 57% | 73% | 62% | 75% | 79% | 74% | 71% | 80% | 70% | 77% | 64% | 68% | 45% | 70% | 52% | 78% |
+| best_v03 (dqfd1@110M) | 71% | 84% | 72% | 84% | 85% | 89% | 76% | 88% | 61% | 83% | 71% | 66% | 67% | 79% | 52% | 76% |
+| best_v04 (dqfd2@198M) | 80% | 92% | 80% | 92% | 90% | 90% | 81% | 92% | 72% | 84% | 75% | 76% | 77% | 75% | 67% | 85% |
+
+best_v04 is above the heuristic on the per-maze mean (+3.6 points,
+intervals just apart); on the minimum (+9 points) and on levels in a row
+(+0.20) the intervals overlap. Per maze it is above the heuristic on 11 of
+16, equal on 7 and 11, below on 9 (72% vs 79%), 14 (75% vs 82%) and 16
+(85% vs 88%). Against best_v03: +6.6
+points on the mean, +15 on the minimum, +0.37 levels in a row. BC is the
+weakest on all three metrics.
+
+Deaths (`scripts/death_report.py`, 16 x 50 games, seeds 5000..; the report
+was made for dqfd2@134M, the first dqfd2 checkpoint above the heuristic,
+not for best_v04 itself; see "dqfd2 ... same protocol" above):
+
+- Squeezed between normal ghosts in a corridor is still the main cause:
+  82.4% of best_v03's deaths, 84.8% of dqfd2@134M's.
+- What changed from best_v03 to dqfd2@134M: deaths per game 1.57 -> 1.44;
+  squeezes per game 1.295 -> 1.218 (-6%); deaths at the end of supertime
+  0.256 -> 0.189 per game (-26%); fewer deaths on mazes 1-11, none fewer on
+  12-15. The cell-safety plane did not remove the squeezes; the gain comes
+  mostly from fewer deaths overall, not from a different kind of death.
+
+Ablation of dqfd2's changes (cell-safety plane; n 5 / gamma 0.995; neither):
+see "Ablation" below.
+
+Curve of the dqfd2 run: `docs/dqfd2_curve.png`.
