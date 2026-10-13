@@ -1831,3 +1831,13 @@ per crash).
   228M 78.4% / 57%; 230M 79.2% / 55% / 1.66; 232M 78.5% / 56%. After
   210M every checkpoint sits 78-79.5% on 100 games: below the 134-198M
   band (79-82%). The 40-game picks run 1.5-2.5 points optimistic.
+- 03:58 **Rule at 250M (40 games): 220/230M -> 240/250M per-maze mean
+  0.795 -> 0.791, levels 1.637 -> 1.750 (a rise on levels) -> extended by
+  50M to 300M** (~07:20). 40-game evals 240M 79.1% / 57% / 1.70, 250M
+  79.1% / 45% / 1.80. Followed as written. Consequence: **the ablation
+  does not run tonight** (parallel runs get ~2k steps/s each, below the
+  prompt's 3k; dqfd2 holds the GPU to the morning). Ready for the day:
+  configs/abl_{safe,horizon,ctrl}.yaml, the demo files, abl_safe at its
+  112M checkpoint (`train.py --run-name abl_safe --resume`). The rule's
+  "rise" here is on levels in a row from level 1 (40 games, a few long
+  runs move the mean by 0.1), while the final protocol is flat after 210M.
