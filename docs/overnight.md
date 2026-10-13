@@ -1932,3 +1932,35 @@ per crash).
    mazes 1, 7, 13, 15, plus its longest run (most levels in a row).
 3. Section "Final results v0.4" in results.md: heuristic / best_v03 /
    best_v04 / ablation, with the GIFs and the dqfd2 curve.
+
+## Chronology (2026-10-13/14, session 7: night — ablation, GIFs, final results v0.4)
+
+Plan (night prompt): (1) the ablation strictly one run at a time, 30M own
+steps each from best_v03, each scored at its end on the final protocol
+(100 games per maze, seeds 2000..3599, + 100 from level 1): abl_safe
+(--resume from its 112M), abl_horizon (n 5 / gamma 0.995 only), abl_ctrl
+(neither); table "Ablation" in results.md; a run that crashes twice is
+skipped. (2) In parallel, under Xvfb and only while training stays >= 3k
+steps/s: GIFs of best_v04 on mazes 1, 7, 13, 15 (500 ticks) and its
+longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
+(3) "Final results v0.4" in results.md from numbers already there.
+(4) Hourly watch. dqfd2 untouched. Rules as before.
+
+- 22:51 Disk 32 GB free, tmux empty, GPU idle. abl_safe resumed (tmux
+  `abl_safe`, `train.py --config configs/abl_safe.yaml --run-name abl_safe
+  --resume`, 112000011 of 140000016); 4.3k steps/s after the refill.
+- 22:53 tmux `abl_chain` (`runs/abl_chain.sh`): waits for abl_safe, then
+  abl_horizon and abl_ctrl (`--resume-from runs/best_v03/best.pt`), one at
+  a time; disk > 10 GB checked before each launch; a run short of
+  140000016 steps gets one `--resume`, a second shortfall skips it. Each
+  finished run: checkpoint.pt -> final.pt and the final protocol in the
+  background (runs/abl_final/) while the next run trains.
+- 22:53 Longest-run screen: best_v04, seeds 0..19 from level 1, fast and
+  headless with play.py's env setup (no episode limit, 3000-tick cap):
+  best **seed 11: game over on level 6 (5 levels cleared), score 25925,
+  2787 ticks**; then seed 5 and 9 (level 4), 13 (level 5). Seeds 2 and 4
+  reached the 3000-tick cap without a game over (level 2 / level 1, 2
+  lives: stuck somewhere). `runs/v04_gif_screen.jsonl`. Training speed
+  during the screen 3.79k (>= 3k).
+- 22:54 tmux `gif` (`runs/v04_gifs.sh`, xvfb-run, real time): mazes 1, 7,
+  13, 15 at seed 0, 500 ticks each, then seed 11 from level 1 to game over.
