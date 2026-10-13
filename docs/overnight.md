@@ -1893,3 +1893,42 @@ per crash).
   at 300M the supervisor applies its rule (220..290M evals; plateau count
   0, so a "no rise" gives +30M). `autoq` (the final-protocol queue)
   stops at 07:35; ck_300 and later are not on the final protocol yet.
+
+## 2026-10-13 (day): dqfd2 stopped for good
+
+- After 07:54 the supervisor rule saw a "rise" at 300M (270/280M ->
+  290/300M per-maze mean 0.774 -> 0.795) and extended by 50M to 350M.
+  Supervisor evals (40 games) 310..340M: 77.7 / 78.9 / 75.9 / 77.3%,
+  min 35..60%. keep_good kept good_296, 300, 346M (40-game 80-83%). On the
+  final protocol dqfd2 has been sliding since 210M (290M: 75.0%), so the
+  run is stopped: best_v04 = dqfd2@198M is fixed.
+- 11:33 Stopped by hand right after the 348M checkpoint (written 11:33:20):
+  sv_dqfd2, keep_dqfd2 and autoq first, then train.py (tmux
+  kill-session -> SIGTERM path through the finally blocks), long before
+  the next 2M save. tmux empty, no train/eval processes, no stale shared
+  memory, GPU 15 MiB used.
+- **runs/dqfd2/checkpoint.pt = 348000002 steps**: loads (learner, rng,
+  config, no non-finite tensors) and plays (train_eval, 2 games per maze:
+  84.4% / min 50%). No buffer.npz (checkpoint_buffer off). Not to be
+  resumed: dqfd2 is done.
+- Not on the final protocol: ck_300..340M, good_296, 300, 346M (the
+  queue covered 140..292M). Low priority given the trend.
+- abl_safe: checkpoint.pt = 112000011 steps (stopped last night), not
+  restarted today.
+
+### Plan for the night
+
+1. Ablation from best_v03, one run at a time (the GPU is free, so each
+   should get ~4k steps/s), 30M each:
+   - abl_safe: `train.py --config configs/abl_safe.yaml --run-name abl_safe --resume`
+     (continues from 112M to 140M);
+   - abl_horizon: `--config configs/abl_horizon.yaml --run-name abl_horizon --resume-from runs/best_v03/best.pt`;
+   - abl_ctrl: same with configs/abl_ctrl.yaml.
+   Each ends with the final protocol (train_eval.py --episodes 100 --seed
+   2000 --seed-blocks + final_table.py); table in results.md: which of the
+   dqfd2 changes (safety plane, horizon n 5 / gamma 0.995) gave the gain
+   over the control.
+2. GIFs of best_v04 (runs/best_v04/best.pt, scripts/play.py --record) on
+   mazes 1, 7, 13, 15, plus its longest run (most levels in a row).
+3. Section "Final results v0.4" in results.md: heuristic / best_v03 /
+   best_v04 / ablation, with the GIFs and the dqfd2 curve.
