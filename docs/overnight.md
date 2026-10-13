@@ -1964,3 +1964,17 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   during the screen 3.79k (>= 3k).
 - 22:54 tmux `gif` (`runs/v04_gifs.sh`, xvfb-run, real time): mazes 1, 7,
   13, 15 at seed 0, 500 ticks each, then seed 11 from level 1 to game over.
+- 23:11 **GIFs done** (real time under Xvfb, training 4.19-4.28k steps/s
+  throughout): `docs/v04_level1.gif` (seed 0: game over at tick 412, score
+  1620 — the same 412 ticks / 1620 as the fast headless screen, so the
+  real-time play is the same game as the fast one), `v04_level7.gif` (500
+  ticks, still on maze 7 with 3 lives, score 1740), `v04_level13.gif` (500
+  ticks, 3 lives, 2590), `v04_level15.gif` (500 ticks, 1 life left, 2010),
+  0.5-0.7 MB each. **`docs/v04_longest.gif`: seed 11 from level 1, 2787
+  ticks to game over on level 6 — 5 levels cleared in a row, score 25925**
+  (reproduced the screen exactly), 3.6 MB. Seed 0 was kept for the maze
+  GIFs as in earlier GIFs (no seed picking), so maze 1's is a short loss.
+- 23:12 results.md: section "Final results v0.4" (heuristic / BC /
+  best_v03 / best_v04 on the three metrics and per maze, the death summary
+  of dqfd2@134M, a pointer to the ablation) from the numbers already in
+  results.md.

@@ -1083,3 +1083,10 @@ Ablation of dqfd2's changes (cell-safety plane; n 5 / gamma 0.995; neither):
 see "Ablation" below.
 
 Curve of the dqfd2 run: `docs/dqfd2_curve.png`.
+
+GIFs of best_v04 (real time, `scripts/play.py --record` under Xvfb):
+`docs/v04_level1.gif`, `v04_level7.gif`, `v04_level13.gif`,
+`v04_level15.gif` (seed 0, start maze 1 / 7 / 13 / 15, up to 500 ticks;
+maze 1 at seed 0 is a loss at tick 412), and `docs/v04_longest.gif`: the
+longest of 20 games from level 1 (seeds 0..19), seed 11, 5 levels cleared
+in a row, game over on level 6 at tick 2787, score 25925.
