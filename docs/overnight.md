@@ -1849,3 +1849,8 @@ per crash).
   nothing since 236M (256-264M 76.1-78.4%). Final protocol 250M 78.4% /
   52% / 1.68. tmux `autoq`: every new dqfd2 ck_/good_ after 250M goes to
   the final protocol as soon as it is written (until 07:35).
+- 06:10 Health ok: dqfd2 278.2M, 3.97k steps/s, Q 98.7, no NaN, 35 GB.
+  Supervisor 270M (40 games) 75.5% / 45%; keep_good kept 274M (80.8% /
+  55%). Final protocol 260M 80.6% / 61% / 1.67; 270M 78.3% / 60% / 1.50;
+  274M 78.8% / 52% / 1.76. 300M (the end of this leg) comes at ~07:40,
+  after the 07:30 cut: the table takes checkpoints up to 290M.
