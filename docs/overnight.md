@@ -1841,3 +1841,6 @@ per crash).
   112M checkpoint (`train.py --run-name abl_safe --resume`). The rule's
   "rise" here is on levels in a row from level 1 (40 games, a few long
   runs move the mean by 0.1), while the final protocol is flat after 210M.
+- 04:09 Health ok: dqfd2 252.3M, 3.68k steps/s (eval beside it), Q 97.1,
+  no NaN, 35 GB. Final protocol 236M 79.4% / 60% / 1.63; 240M 78.1% / 52%
+  / 1.43. 40-game evals 242-250M 77.5-80.0%, min 43-50%.
