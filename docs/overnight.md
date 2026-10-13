@@ -1844,3 +1844,8 @@ per crash).
 - 04:09 Health ok: dqfd2 252.3M, 3.68k steps/s (eval beside it), Q 97.1,
   no NaN, 35 GB. Final protocol 236M 79.4% / 60% / 1.63; 240M 78.1% / 52%
   / 1.43. 40-game evals 242-250M 77.5-80.0%, min 43-50%.
+- 05:09 Health ok: dqfd2 265.7M, 4.30k steps/s, Q 99.9, no NaN, 35 GB.
+  Supervisor 260M (40 games) 77.0% / min 28% / 1.80; keep_good kept
+  nothing since 236M (256-264M 76.1-78.4%). Final protocol 250M 78.4% /
+  52% / 1.68. tmux `autoq`: every new dqfd2 ck_/good_ after 250M goes to
+  the final protocol as soon as it is written (until 07:35).
