@@ -1980,3 +1980,9 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   results.md.
 - 23:55 Health ok: abl_safe 126.3M, 4.26k steps/s, Q 55.4, no NaN, 32 GB
   free. End of abl_safe (140M) expected ~00:50.
+- 00:56 abl_safe finished (140000036 steps, no crash; last training eval,
+  20 games per maze: 79% mean / 60% min / 1.70 levels). final.pt -> final
+  protocol in the background (runs/abl_final/). Disk 30 GB; abl_horizon
+  started (`--resume-from runs/best_v03/best.pt`, 110M -> 140M).
+- 01:00 Health ok: abl_horizon 110.95M, 4.0k steps/s with the abl_safe
+  eval beside it, Q 85.9 (gamma 0.995 scales Q up from ~55), no NaN.
