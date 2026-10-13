@@ -1978,3 +1978,5 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   best_v03 / best_v04 on the three metrics and per maze, the death summary
   of dqfd2@134M, a pointer to the ablation) from the numbers already in
   results.md.
+- 23:55 Health ok: abl_safe 126.3M, 4.26k steps/s, Q 55.4, no NaN, 32 GB
+  free. End of abl_safe (140M) expected ~00:50.
