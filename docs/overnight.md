@@ -1854,3 +1854,42 @@ per crash).
   55%). Final protocol 260M 80.6% / 61% / 1.67; 270M 78.3% / 60% / 1.50;
   274M 78.8% / 52% / 1.76. 300M (the end of this leg) comes at ~07:40,
   after the 07:30 cut: the table takes checkpoints up to 290M.
+- 07:16 Final protocol 280M 79.7% / 57% / 1.68; 290M 75.0% / 53% / 1.43.
+  All 31 dqfd2 checkpoints after 134M scored (ck_ every 10M + good_).
+- 07:20 **best_v04 = dqfd2@198M** (good_198000002.pt ->
+  runs/best_v04/best.pt): 81.8% [79.9, 83.6] / min 67% (maze 15) / levels
+  1.48 [1.27, 1.72]; tied on the mean with 140M (81.9%), higher minimum
+  (67% vs 56%), the v0.3 tie rule. First checkpoint at the project goal
+  (>= 81% mean, >= 60% min). Heuristic 78.2% / 58% / 1.28. Tables in
+  docs/results.md ("Final protocol v0.4"), curve docs/dqfd2_curve.png.
+
+### Unclear points
+
+- The extension rule on 40 games still extends on noise: 200M (mean
+  0.788 -> 0.802 from one lucky 190M eval) and 250M (levels 1.64 -> 1.75)
+  were "rises" while the 100-game protocol is flat or falling after 210M.
+  Levels in a row from level 1 on 40 games is the noisier of the two
+  metrics (a few long games move the mean by 0.1-0.2).
+- The ablation did not run: the plan's 3k floor for parallel runs cannot
+  be met on one GPU (~2k each), and the rule kept dqfd2 on the GPU all
+  night.
+- 140M vs 198M: same mean, 198M better on the minimum, 140M on levels in
+  a row (1.70 vs 1.48, overlapping intervals).
+
+### Ideas for later
+
+- Rule on the final metric's own noise: extend only if the last two
+  40-game evals beat the two before by more than ~1.5 points on the
+  per-maze mean (about one standard error of the difference), and drop
+  levels-in-a-row from the rule or require both.
+- Run the ablation in the day with the GPU free (3 x ~2 h): abl_safe from
+  its 112M checkpoint (`--resume`), then abl_horizon, abl_ctrl.
+- Mazes 12-15 did not gain from the safety plane (death report); maze 15
+  is still the minimum for every agent.
+
+### State for the next prompt
+
+- dqfd2 runs on (tmux `dqfd2`, sv_dqfd2, keep_dqfd2) to 300M (~07:40);
+  at 300M the supervisor applies its rule (220..290M evals; plateau count
+  0, so a "no rise" gives +30M). `autoq` (the final-protocol queue)
+  stops at 07:35; ck_300 and later are not on the final protocol yet.

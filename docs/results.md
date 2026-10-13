@@ -945,3 +945,90 @@ games, seeds 5000.., same games; `scripts/compare_deaths.py`,
 
 Squeezes are down only 6% per game and still 85% of the deaths; the end of
 supertime is down 26%. Fewer deaths on mazes 1-11, none fewer on 12-15.
+
+## Final protocol v0.4 (2026-10-13 night): dqfd2 134-290M, best_v04
+
+Same protocol as v0.3: `scripts/train_eval.py --episodes 100 --seed 2000
+--seed-blocks` (100 games on each maze, seeds 2000..3599 in blocks; 100
+games from level 1, seeds 2000..2099), 95% bootstrap intervals
+(`scripts/final_table.py`); every dqfd2 ck_* (supervisor, every 10M) and
+good_* (keep_good: >= 80% mean and >= 55% min on 40 games per maze, seeds
+1000..1039) after 134M. Files: `runs/v04_final/`.
+
+### Summary: heuristic / best_v03 / best_v04 / ablation
+
+| agent | games | per-maze mean [95% CI] | min [95% CI] (maze) | levels in a row: mean [95% CI] / median / max |
+|---|---|---|---|---|
+| heuristic | 100 per maze, 100 from level 1 | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
+| best_v03 (dqfd1@110M) | 100 per maze, 100 from level 1 | 75.2% [73.1%, 77.3%] | 52% [43%, 60%] (15) | 1.11 [0.93, 1.29] / 1 / 3 |
+| best_v04 (dqfd2@198M) | 100 per maze, 100 from level 1 | 81.8% [79.9%, 83.6%] | 67% [57%, 72%] (15) | 1.48 [1.27, 1.72] / 1 / 6 |
+| abl_safe / abl_horizon / abl_ctrl | not run (see below) | — | — | — |
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 72% | 87% | 71% | 84% | 83% | 88% | 81% | 90% | 79% | 79% | 75% | 70% | 64% | 82% | 58% | 88% |
+| best_v03 (dqfd1@110M) | 71% | 84% | 72% | 84% | 85% | 89% | 76% | 88% | 61% | 83% | 71% | 66% | 67% | 79% | 52% | 76% |
+| best_v04 (dqfd2@198M) | 80% | 92% | 80% | 92% | 90% | 90% | 81% | 92% | 72% | 84% | 75% | 76% | 77% | 75% | 67% | 85% |
+
+**best_v04 = dqfd2@198M** (`runs/best_v04/best.pt` = runs/dqfd2/good_198000002.pt):
+per-maze mean tied with dqfd2@140M (81.8% vs 81.9%, the same interval),
+the tie broken by the minimum as for v0.3 (67% vs 56%). It is the first
+checkpoint at the project's goal (>= 81% mean and >= 60% min per maze on
+100 games per maze). Against the heuristic: per-maze mean +3.6 points
+(intervals [79.9, 83.6] vs [76.1, 80.2], just apart), minimum +9 points
+(67% vs 58%, both on maze 15; intervals overlap), levels in a row from
+level 1 1.48 vs 1.28 (intervals overlap). dqfd2@140M has more levels in a
+row (1.70 [1.47, 1.93]) at a lower minimum (56%).
+
+Ablation (abl_safe / abl_horizon / abl_ctrl, 30M each from best_v03): not
+run. In parallel with dqfd2 each run got ~2.0k steps/s (one GPU, the sum
+stays ~4k), under the 3k the plan set, and dqfd2's extension rule extended
+it at 200M and at 250M, so the GPU never came free before 07:30. Configs,
+demo files and abl_safe's 112M checkpoint are ready
+(`configs/abl_*.yaml`). The nearest thing to the control: dqfd1 110 ->
+130M under the same settings (demo 10%, margin 1, n 3, gamma 0.99, no
+plane; only the replay was warm) scored 75.2% / 48% / 1.23 — no gain,
+while dqfd2 gained ~5 points within 24-30M.
+
+### All dqfd2 checkpoints after 134M
+
+| agent | games | per-maze mean [95% CI] | min [95% CI] (maze) | levels in a row: mean [95% CI] / median / max |
+|---|---|---|---|---|
+| heuristic | 100 per maze, 100 from level 1 | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
+| dqfd1@110M | 100 per maze, 100 from level 1 | 75.2% [73.1%, 77.3%] | 52% [43%, 60%] (15) | 1.11 [0.93, 1.29] / 1 / 3 |
+| dqfd2@134M | 100 per maze, 100 from level 1 | 81.1% [79.2%, 82.9%] | 55% [45%, 64%] (15) | 1.41 [1.23, 1.60] / 1 / 4 |
+| dqfd2@140M | 100 per maze, 100 from level 1 | 81.9% [80.1%, 83.8%] | 56% [46%, 64%] (15) | 1.70 [1.47, 1.93] / 2 / 6 |
+| dqfd2@150M | 100 per maze, 100 from level 1 | 80.7% [78.7%, 82.6%] | 65% [55%, 69%] (15) | 1.57 [1.30, 1.86] / 1 / 7 |
+| dqfd2@156M | 100 per maze, 100 from level 1 | 81.2% [79.3%, 83.1%] | 65% [54%, 69%] (15) | 1.71 [1.46, 1.97] / 2 / 6 |
+| dqfd2@160M | 100 per maze, 100 from level 1 | 79.4% [77.5%, 81.4%] | 60% [50%, 66%] (15) | 1.38 [1.14, 1.64] / 1 / 6 |
+| dqfd2@162M | 100 per maze, 100 from level 1 | 79.6% [77.7%, 81.5%] | 64% [53%, 66%] (13) | 1.44 [1.20, 1.68] / 1 / 6 |
+| dqfd2@170M | 100 per maze, 100 from level 1 | 78.6% [76.6%, 80.5%] | 52% [42%, 61%] (15) | 1.53 [1.27, 1.81] / 1 / 7 |
+| dqfd2@176M | 100 per maze, 100 from level 1 | 80.1% [78.2%, 82.1%] | 57% [48%, 65%] (15) | 1.68 [1.39, 1.98] / 1 / 8 |
+| dqfd2@178M | 100 per maze, 100 from level 1 | 78.4% [76.4%, 80.3%] | 63% [52%, 66%] (15) | 1.64 [1.37, 1.92] / 1 / 8 |
+| dqfd2@180M | 100 per maze, 100 from level 1 | 78.7% [76.8%, 80.6%] | 57% [47%, 64%] (15) | 1.32 [1.11, 1.53] / 1 / 6 |
+| dqfd2@184M | 100 per maze, 100 from level 1 | 78.9% [76.9%, 80.9%] | 61% [51%, 65%] (15) | 1.51 [1.31, 1.74] / 1 / 5 |
+| dqfd2@186M | 100 per maze, 100 from level 1 | 80.9% [79.0%, 82.8%] | 61% [51%, 68%] (15) | 1.80 [1.59, 2.02] / 2 / 6 |
+| dqfd2@190M | 100 per maze, 100 from level 1 | 81.2% [79.3%, 83.1%] | 65% [55%, 70%] (15) | 1.40 [1.17, 1.63] / 1 / 5 |
+| dqfd2@198M | 100 per maze, 100 from level 1 | 81.8% [80.0%, 83.6%] | 67% [58%, 72%] (15) | 1.48 [1.27, 1.69] / 1 / 6 |
+| dqfd2@200M | 100 per maze, 100 from level 1 | 79.6% [77.8%, 81.5%] | 62% [52%, 66%] (11) | 1.36 [1.11, 1.61] / 1 / 5 |
+| dqfd2@206M | 100 per maze, 100 from level 1 | 80.4% [78.6%, 82.4%] | 64% [53%, 68%] (15) | 1.52 [1.29, 1.78] / 1 / 8 |
+| dqfd2@210M | 100 per maze, 100 from level 1 | 80.9% [79.0%, 82.8%] | 61% [51%, 68%] (15) | 1.55 [1.30, 1.82] / 1 / 8 |
+| dqfd2@220M | 100 per maze, 100 from level 1 | 79.1% [77.1%, 80.9%] | 62% [51%, 65%] (13) | 1.49 [1.25, 1.73] / 1 / 6 |
+| dqfd2@224M | 100 per maze, 100 from level 1 | 79.4% [77.4%, 81.3%] | 59% [50%, 66%] (15) | 1.47 [1.25, 1.70] / 1 / 5 |
+| dqfd2@228M | 100 per maze, 100 from level 1 | 78.4% [76.4%, 80.3%] | 57% [47%, 64%] (13) | 1.51 [1.29, 1.76] / 1 / 5 |
+| dqfd2@230M | 100 per maze, 100 from level 1 | 79.2% [77.2%, 81.1%] | 55% [45%, 61%] (13) | 1.66 [1.40, 1.93] / 2 / 5 |
+| dqfd2@232M | 100 per maze, 100 from level 1 | 78.5% [76.4%, 80.4%] | 56% [45%, 61%] (15) | 1.47 [1.24, 1.71] / 1 / 5 |
+| dqfd2@236M | 100 per maze, 100 from level 1 | 79.4% [77.6%, 81.3%] | 60% [50%, 66%] (15) | 1.63 [1.40, 1.87] / 2 / 6 |
+| dqfd2@240M | 100 per maze, 100 from level 1 | 78.1% [76.1%, 79.9%] | 52% [42%, 61%] (13) | 1.43 [1.20, 1.67] / 1 / 5 |
+| dqfd2@250M | 100 per maze, 100 from level 1 | 78.4% [76.4%, 80.4%] | 52% [42%, 58%] (15) | 1.68 [1.41, 1.99] / 2 / 9 |
+| dqfd2@260M | 100 per maze, 100 from level 1 | 80.6% [78.7%, 82.5%] | 61% [51%, 67%] (15) | 1.67 [1.43, 1.92] / 2 / 5 |
+| dqfd2@270M | 100 per maze, 100 from level 1 | 78.3% [76.4%, 80.2%] | 60% [49%, 63%] (13) | 1.50 [1.29, 1.72] / 1 / 4 |
+| dqfd2@274M | 100 per maze, 100 from level 1 | 78.8% [76.9%, 80.7%] | 52% [43%, 61%] (15) | 1.76 [1.51, 2.02] / 2 / 5 |
+| dqfd2@280M | 100 per maze, 100 from level 1 | 79.7% [77.8%, 81.5%] | 57% [47%, 65%] (15) | 1.68 [1.42, 1.96] / 1.5 / 7 |
+| dqfd2@290M | 100 per maze, 100 from level 1 | 75.0% [72.9%, 77.0%] | 53% [43%, 58%] (15) | 1.43 [1.21, 1.67] / 1 / 5 |
+
+On 100 games dqfd2 sits at 79-82% per maze from 134M to 210M and drifts to
+78-80% after 210M (290M 75.0%); the minimum per maze rose from 55% (134M)
+to 60-67% at 150-210M. The 40-game picks were 1.5-3.5 points optimistic.
+Curve: `docs/dqfd2_curve.png` (the final-protocol points as orange
+diamonds).
