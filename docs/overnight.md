@@ -2164,3 +2164,8 @@ crash, conservative choice + note when unclear).
   81.3% / 60% / 1.88 (kept)**, 208M 79.7% / 55% / 2.20. Supervisor 200M
   (40 games) 78.4% / 42% / 1.62. **Final protocol 206M: 80.8% / min 57% /
   levels 1.65, level 1 cleared 84%** (best_v04 81.8% / 67% / 1.48).
+- 01:00 Health ok: dqfd3 222.3M, 3.65k steps/s, Q 99.4, no NaN, disk 29 GB.
+  40-game evals: 210M 77.0% / 55%, 212M 78.6% / 57%, 214M 79.2% / 55%,
+  216M 75.5% / 45%, 218M 77.3% / 48%, **220M 82.0% / 65% / 1.73 (kept;
+  the supervisor's 40 games agree: 82.0% / 65% / 1.70)**. Supervisor 210M
+  77.2% / 55% / 1.52. good_220 queued for the final protocol.
