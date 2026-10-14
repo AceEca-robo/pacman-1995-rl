@@ -2038,3 +2038,4 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
 - docs/v04_level{1,7,13,15}.gif, docs/v04_longest.gif (5 levels, 25925).
 - results.md: "Final results v0.4" and "Ablation" written.
 - 06:13 Watch: nothing running (tmux empty, GPU 15 MiB), disk 29 GB free.
+- 07:12 Watch: nothing running, GPU 15 MiB, disk 29 GB free. All committed and pushed.
