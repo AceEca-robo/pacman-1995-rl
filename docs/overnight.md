@@ -2009,3 +2009,31 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   (dqfd2@140M) +5.1, +0.54 levels; the control has the highest minimum
   (63%, overlapping). **Most of the gain came from the cell-safety plane;
   the two together more than either.** One seed per arm.
+- 05:20 pytest 101 passed. Nothing else trains (the prompt: only the
+  ablation); disk 30 GB free.
+
+### Unclear points
+
+- One seed per ablation arm: +3.0 (plane) vs +0.8 (horizon) is the point
+  estimate; the intervals of abl_safe and abl_ctrl overlap by ~1 point.
+- The parts are not additive: plane + horizon alone would be +3.8, both
+  together (dqfd2@140M) gave +5.1; dqfd2 also had the safety demo file
+  converted for n 5 (demo_safety n5), which none of the arms used.
+- The control has the best minimum (63% on maze 15), so the minimum gain of
+  best_v04 (67%) is not clearly due to either change.
+- Seeds 2 and 4 of the longest-run screen hit the 3000-tick cap with 2
+  lives (no episode limit in play.py's setup): the agent can get stuck in a
+  loop without the training env's hunger/step limits.
+
+### Ideas for later
+
+- Second seed for abl_ctrl and abl_safe (2 x ~2 h) to firm up the split.
+- A death report of best_v04 itself (the summary uses dqfd2@134M's).
+- Look at the stuck games (seeds 2 and 4 from level 1) in a GIF.
+
+### State for the next prompt
+
+- tmux empty, GPU free. runs/abl_{safe,horizon,ctrl}/final.pt at 140M,
+  final protocol in runs/abl_final/. dqfd2 untouched (348M, done).
+- docs/v04_level{1,7,13,15}.gif, docs/v04_longest.gif (5 levels, 25925).
+- results.md: "Final results v0.4" and "Ablation" written.
