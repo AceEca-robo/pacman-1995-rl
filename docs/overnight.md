@@ -1999,3 +1999,13 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
 - 03:08 Health ok: abl_ctrl 111.6M, 4.37k steps/s, Q 55.0, no NaN, 32 GB.
   End expected ~05:05.
 - 04:04 Health: abl_ctrl: 124960003 steps, 4,374 steps/s, Q 56.1, NaN no, disk 31 GB, tmux up  ok.
+- 05:06 abl_ctrl finished (140000032 steps, no crash). 05:09 **abl_ctrl@140M
+  (final protocol): 76.8% [74.7, 78.8] / min 63% [52, 66] (maze 15) /
+  levels 1.16 [0.97, 1.35]**. Chain done, tmux empty, GPU free.
+- 05:15 **Ablation table** in results.md ("Ablation", with best_v03,
+  dqfd2@140M = both changes after the same 30M, best_v04). Against the
+  control: cell-safety plane +3.0 points per maze (79.8%), +0.27 levels;
+  horizon n 5 / gamma 0.995 +0.8 (77.6%, noise), +0.23 levels; both
+  (dqfd2@140M) +5.1, +0.54 levels; the control has the highest minimum
+  (63%, overlapping). **Most of the gain came from the cell-safety plane;
+  the two together more than either.** One seed per arm.

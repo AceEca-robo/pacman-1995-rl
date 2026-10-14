@@ -962,7 +962,7 @@ good_* (keep_good: >= 80% mean and >= 55% min on 40 games per maze, seeds
 | heuristic | 100 per maze, 100 from level 1 | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
 | best_v03 (dqfd1@110M) | 100 per maze, 100 from level 1 | 75.2% [73.1%, 77.3%] | 52% [43%, 60%] (15) | 1.11 [0.93, 1.29] / 1 / 3 |
 | best_v04 (dqfd2@198M) | 100 per maze, 100 from level 1 | 81.8% [79.9%, 83.6%] | 67% [57%, 72%] (15) | 1.48 [1.27, 1.72] / 1 / 6 |
-| abl_safe / abl_horizon / abl_ctrl | not run (see below) | — | — | — |
+| abl_safe / abl_horizon / abl_ctrl | not run that night; run 2026-10-13/14, see "Ablation" below | — | — | — |
 
 | agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -981,7 +981,7 @@ level 1 1.48 vs 1.28 (intervals overlap). dqfd2@140M has more levels in a
 row (1.70 [1.47, 1.93]) at a lower minimum (56%).
 
 Ablation (abl_safe / abl_horizon / abl_ctrl, 30M each from best_v03): not
-run. In parallel with dqfd2 each run got ~2.0k steps/s (one GPU, the sum
+run that night (run the next night: see "Ablation" at the end). In parallel with dqfd2 each run got ~2.0k steps/s (one GPU, the sum
 stays ~4k), under the 3k the plan set, and dqfd2's extension rule extended
 it at 200M and at 250M, so the GPU never came free before 07:30. Configs,
 demo files and abl_safe's 112M checkpoint are ready
@@ -1090,3 +1090,50 @@ GIFs of best_v04 (real time, `scripts/play.py --record` under Xvfb):
 maze 1 at seed 0 is a loss at tick 412), and `docs/v04_longest.gif`: the
 longest of 20 games from level 1 (seeds 0..19), seed 11, 5 levels cleared
 in a row, game over on level 6 at tick 2787, score 25925.
+
+## Ablation (2026-10-13/14 night)
+
+Which of dqfd2's changes made the gain? Three runs from best_v03
+(dqfd1@110M), 30M steps each (110M -> 140M), one at a time on a free GPU
+(4.0-4.4k steps/s), with dqfd2's fixed settings (demo share 10%, margin
+weight 1, eps 0.01) and the same seed, differing only in:
+
+- abl_ctrl: none of dqfd2's changes (n 3, gamma 0.99, no plane);
+- abl_safe: the cell-safety input plane only (`configs/abl_safe.yaml`;
+  stopped at 112M on 2026-10-12, continued with `--resume`);
+- abl_horizon: n_step 5 + gamma 0.995 only (`configs/abl_horizon.yaml`).
+
+dqfd2@140M is the same 30M from best_v03 with both changes. Each run's
+last checkpoint (140M, `runs/abl_*/final.pt`) on the final protocol (100
+games per maze, seeds 2000..3599, + 100 from level 1, seeds 2000..2099;
+95% bootstrap intervals, `scripts/final_table.py`; files
+`runs/abl_final/`). No run crashed.
+
+| agent | games | per-maze mean [95% CI] | min [95% CI] (maze) | levels in a row: mean [95% CI] / median / max |
+|---|---|---|---|---|
+| best_v03 (dqfd1@110M) | 100 per maze, 100 from level 1 | 75.2% [73.1%, 77.3%] | 52% [42%, 60%] (15) | 1.11 [0.93, 1.30] / 1 / 3 |
+| abl_ctrl@140M | 100 per maze, 100 from level 1 | 76.8% [74.7%, 78.8%] | 63% [52%, 66%] (15) | 1.16 [0.97, 1.35] / 1 / 5 |
+| abl_safe@140M | 100 per maze, 100 from level 1 | 79.8% [77.8%, 81.7%] | 60% [50%, 68%] (15) | 1.43 [1.23, 1.64] / 1 / 5 |
+| abl_horizon@140M | 100 per maze, 100 from level 1 | 77.6% [75.6%, 79.5%] | 59% [49%, 64%] (15) | 1.39 [1.16, 1.64] / 1 / 8 |
+| dqfd2@140M (all changes, same 30M) | 100 per maze, 100 from level 1 | 81.9% [80.2%, 83.8%] | 56% [47%, 65%] (15) | 1.70 [1.45, 1.95] / 2 / 6 |
+| best_v04 (dqfd2@198M) | 100 per maze, 100 from level 1 | 81.8% [79.9%, 83.6%] | 67% [58%, 72%] (15) | 1.48 [1.27, 1.70] / 1 / 6 |
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| best_v03 (dqfd1@110M) | 71% | 84% | 72% | 84% | 85% | 89% | 76% | 88% | 61% | 83% | 71% | 66% | 67% | 79% | 52% | 76% |
+| abl_ctrl@140M | 75% | 82% | 71% | 87% | 94% | 79% | 80% | 85% | 66% | 91% | 68% | 67% | 65% | 73% | 63% | 82% |
+| abl_safe@140M | 83% | 88% | 72% | 78% | 86% | 86% | 87% | 92% | 78% | 89% | 72% | 73% | 69% | 78% | 60% | 85% |
+| abl_horizon@140M | 79% | 88% | 64% | 89% | 87% | 90% | 83% | 85% | 78% | 89% | 67% | 65% | 68% | 70% | 59% | 80% |
+| dqfd2@140M (all changes, same 30M) | 86% | 90% | 81% | 90% | 88% | 91% | 88% | 94% | 82% | 87% | 69% | 77% | 68% | 83% | 56% | 81% |
+| best_v04 (dqfd2@198M) | 80% | 92% | 80% | 92% | 90% | 90% | 81% | 92% | 72% | 84% | 75% | 76% | 77% | 75% | 67% | 85% |
+
+Against the control (abl_ctrl, 76.8%): the cell-safety plane +3.0 points on
+the per-maze mean (79.8%, intervals overlap by about 1 point) and +0.27
+levels in a row; the longer horizon +0.8 points (77.6%, inside the noise)
+and +0.23 levels; both together (dqfd2@140M) +5.1 points and +0.54 levels.
+On the minimum per maze the control is the highest of the four (63%, all
+within the intervals). The continuation alone (best_v03 -> abl_ctrl) gave
++1.6 points. One seed per arm, so the split between the two changes is
+indicative: **most of the gain on the per-maze mean came from the
+cell-safety plane; the horizon alone gave little, and the two together
+gave more than either.**
