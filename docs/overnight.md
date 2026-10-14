@@ -2157,3 +2157,10 @@ crash, conservative choice + note when unclear).
   deaths = **1.45 per game, squeezed 83.2% (1.21 per game)**, supertime
   ran out 14.7%; 6 games stuck to 10000 ticks. Worst mazes 12 (58%, 2.00
   deaths per game) and 15 (54%, 1.90).
+- 00:00 Health ok: dqfd3 210.5M, 3.61k steps/s (the final protocol of
+  good_206 beside it; the supervisor logged 3.49k once at 23:50), Q 103.3
+  (97.6 at 200M), no NaN, disk 29 GB. 40-game evals (keep_good merges):
+  200M 78.4% / 43% / 1.55, 202M 80.8% / 57%, 204M 79.8% / 53%, **206M
+  81.3% / 60% / 1.88 (kept)**, 208M 79.7% / 55% / 2.20. Supervisor 200M
+  (40 games) 78.4% / 42% / 1.62. **Final protocol 206M: 80.8% / min 57% /
+  levels 1.65, level 1 cleared 84%** (best_v04 81.8% / 67% / 1.48).
