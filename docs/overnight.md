@@ -1998,3 +1998,4 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   2.2 under abl_safe.
 - 03:08 Health ok: abl_ctrl 111.6M, 4.37k steps/s, Q 55.0, no NaN, 32 GB.
   End expected ~05:05.
+- 04:04 Health: abl_ctrl: 124960003 steps, 4,374 steps/s, Q 56.1, NaN no, disk 31 GB, tmux up  ok.
