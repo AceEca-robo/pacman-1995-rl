@@ -154,3 +154,22 @@ def test_add_batch_matches_add():
             assert np.array_equal(getattr(a, k), getattr(b, k)), k
         if hasattr(a, "tree"):
             assert np.array_equal(a.tree.tree, b.tree.tree)
+
+
+def test_pack_roundtrip_with_safe_exits():
+    from agents.dqn import n_planes
+    extras = ("cell_safety", "safe_exits")
+    env = PacmanEnv(config={"obs": {"cell_safety": True, "safe_exits": True}})
+    dec = GridDecoder("cpu", len(CHANNELS) + 2, extras)
+    try:
+        obs, _ = env.reset(seed=2)
+        grids = [obs["grid"]]
+        for a in np.random.default_rng(2).integers(5, size=300):
+            obs, *_ = env.step(a)
+            grids.append(obs["grid"])
+    finally:
+        env.close()
+    packed = np.stack([pack_grid(g, extras) for g in grids])
+    assert packed.shape[1] == n_planes(len(CHANNELS) + 2, extras) == 39
+    assert np.array_equal(dec(torch.as_tensor(packed)).numpy(), np.stack(grids))
+    assert (np.stack(grids)[:, -1] > 0.25).any()

@@ -29,6 +29,10 @@ actions: 5
 # energizer, with the death reward (reward.death); info["hunger"] = True.
 # 0 = off.
 hunger_limit: 0
+# "terminate" (as before): the hunger limit ends the episode like a death,
+# with reward.death; "truncate": truncated=True without a penalty (a time
+# limit: the value bootstraps), info["hunger"] = True either way.
+hunger_mode: terminate
 
 # Optional observation parts (off: the observation is as for dqn0..dqn4).
 obs:
@@ -39,6 +43,12 @@ obs:
   # walls block, ghosts use the gate both ways), else 0; while supertime > 0
   # every cell pacman can reach is 1. Not for checkpoints trained without it.
   cell_safety: false
+  # grid channel after cell_safety: on pacman's cell and every cell within 6
+  # BFS steps of it, the number of directions out of the cell with a path of
+  # >= 8 cell-safe cells (not back through the cell) / 4; 0 elsewhere and on
+  # unsafe cells (env/pacman_env.py safe_exits_field). Computed from the
+  # cell-safety plane (also when cell_safety itself is off).
+  safe_exits: false
 
 # false: the ghosts never leave their house (game --no-ghosts), so pacman
 # cannot die. Diagnostics only.
@@ -57,6 +67,12 @@ endgame_dot:
 # info["prefix"] = the replayed game's seed, -1 without. 0 = off; evaluation never uses it.
 prefix_prob: 0.0
 prefix_file: data/endgame_prefixes.json
+# Several prefix files instead of prefix_file: [{file: ..., weight: ...}, ..];
+# a prefix reset picks a file by weight, then a prefix uniformly in it.
+# Prefixes may carry "start_level" (the game's start level, default
+# "level"), "lives" (default 3) and pacman/ghost cells at their end
+# (tools/record_death_prefixes.py); the replay checks them.
+prefix_mix: null
 
 # Level the game starts on (game --level): an int (1 = the original game),
 # or "random:a-b" for a level drawn uniformly from a..b at every reset (a new

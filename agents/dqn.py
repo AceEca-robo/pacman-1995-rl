@@ -6,8 +6,9 @@ channel and three per count channel, 35 planes x 759 cells -> 3325 bytes
 (the float32 grid is 63756 bytes). The optional food-distance channel
 (env obs.food_distance) holds d / D_max with integer d <= D_max = 86 and is
 stored as 7 more bit planes of d (42 planes); the optional cell-safety
-channel (env obs.cell_safety, 0/1) as one more plane after it. Decoding
-happens on the GPU per batch.
+channel (env obs.cell_safety, 0/1) as one more plane after it, the
+optional safe-exits channel (env obs.safe_exits, k / 4) as three bit planes
+of k after that. Decoding happens on the GPU per batch.
 """
 
 import contextlib
@@ -31,7 +32,7 @@ BINARY_CH = [i for i in range(len(CHANNELS)) if i not in COUNT_CH]
 COUNT_BITS = 3  # k in 0..4
 N_PLANES = len(BINARY_CH) + COUNT_BITS * len(COUNT_CH)
 DIST_BITS = 7  # food distance d in 0..D_max (86)
-EXTRA_BITS = {"food_distance": DIST_BITS, "cell_safety": 1}
+EXTRA_BITS = {"food_distance": DIST_BITS, "cell_safety": 1, "safe_exits": COUNT_BITS}
 PACKED = (CELLS + 7) // 8
 
 
@@ -94,6 +95,9 @@ def pack_grids(grids, extras=None):
         if name == "food_distance":
             dist = np.rint(plane * d_max()).astype(np.uint8)
             bits += [(dist >> b) & 1 for b in range(DIST_BITS)]
+        elif name == "safe_exits":  # k / 4, k in 0..4, as the ghost counts
+            k = np.rint(plane * 4).astype(np.uint8)
+            bits += [(k >> b) & 1 for b in range(COUNT_BITS)]
         else:
             bits.append(plane > 0)
     return np.packbits(np.concatenate(bits, 1).astype(np.uint8), axis=-1)
@@ -134,6 +138,9 @@ class GridDecoder:
                     d = (bits[:, i:i + DIST_BITS] * self.dist_weights.view(1, -1, 1)).sum(
                         1, keepdim=True)
                     planes.append(d / self.d_max)
+                elif name == "safe_exits":
+                    planes.append((bits[:, i:i + COUNT_BITS] * self.weights.view(1, -1, 1)).sum(
+                        1, keepdim=True))
                 else:
                     planes.append(bits[:, i:i + 1])
                 i += EXTRA_BITS[name]

@@ -2069,3 +2069,37 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
 - Find the stuck loops (seeds 4043, 4053, 4094, 4119, 4122, 4125, 4128,
   4138, 4155, 4158, 4160, 4161 from level 1) and count stuck games in the
   final protocol.
+
+## Chronology (2026-10-14/15, session 8: night — death prefixes, safe-exits plane, dqfd3)
+
+Plan (night prompt): (1) `tools/record_death_prefixes.py`: best_v04, 400
+games on start_level random:1-16 (seeds 5000..), for every death the
+actions up to T-40 and T-20 ticks, deaths in a level's first 60 ticks
+dropped; (2) a "safe exits" grid plane (env flag, off by default); (3)
+hunger_limit 600 as a truncation without penalty in training (evaluation
+unchanged: a stuck game is a loss); (4) dqfd3 from best_v04 with the new
+plane, prefix_prob 0.5 (70% death prefixes, half T-40 / half T-20, 30% the
+heuristic endgame prefixes of all 16 mazes), otherwise as dqfd2, 60M,
+40-game supervisor every 10M with the extension rule, keep_good at >= 80% /
+min >= 60%; (5) hourly watch. By 07:30: every good_* of dqfd3 on the final
+protocol, table against best_v04 and the heuristic, death report of the
+best dqfd3, docs/dqfd3_curve.png; best_v05 if better on the per-maze mean
+and on levels from level 1. Rules as before (disk > 10 GB, one --resume per
+crash, conservative choice + note when unclear).
+
+- 22:43 Disk 29 GB free, tmux empty, GPU idle. 55dba13 pushed.
+- 22:50 Env (step 2/3 groundwork): `obs.safe_exits` plane
+  (`safe_exits_field`): on pacman's cell and the cells within 6 BFS steps
+  of it (pacman's moves: walls and the gate block), the number of
+  directions out of the cell whose neighbour is cell-safe and starts a path
+  of cell-safe cells reaching >= 7 steps further without going back through
+  the cell (BFS in the safe cells, so the path is a shortest, simple one) —
+  a path of >= 8 steps from the cell — / 4; 0 outside the radius and on
+  unsafe cells. Stored as 3 bit planes (k = 0..4, like the ghost counts).
+  Env step 0.20 -> 0.35 ms with the plane (one env; training is
+  GPU-bound at ~4k steps/s over 16 env cores). `hunger_mode: truncate`
+  (truncated, no penalty; default `terminate` as before). Prefix replay
+  checks "lives" / "start_level" / pacman and ghost cells when the prefix
+  has them; `prefix_mix` (several prefix files by weight). Tests: dead end
+  -> 1, squeeze -> 0, open field -> 4 (>= 2 next to a ghost), radius 6,
+  real-board values, pack/decode roundtrip, hunger truncation.

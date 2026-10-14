@@ -427,6 +427,85 @@ def test_cell_safety_ghosts_use_the_gate():
     assert f[5, 1:8].all() and not f[5, 8:13].any()       # (8, 5): 7 steps each, a tie is 0
 
 
+def _exits(rows, pac, ghosts, super_on=False):
+    """Raw counts (0..4) of the safe-exits plane."""
+    from env.pacman_env import _passable_neighbours, safe_exits_field
+    cells = "".join(rows)
+    safe = _safety(rows, pac, ghosts, super_on).ravel()
+    f = safe_exits_field(_passable_neighbours(cells), safe, pac[1] * WIDTH + pac[0])
+    return np.rint(f * 4).astype(int).reshape(HEIGHT, WIDTH)
+
+
+def test_safe_exits_dead_end_is_one():
+    rows = safety_rows()
+    k = _exits(rows, pac=(8, 10), ghosts=[])              # bottom of the dead end x=8
+    assert k[10, 8] == 1                                  # one way out, 12 safe steps long
+    assert k[5, 8] == 0                                   # the junction: L 7, R 4, D 5 cells, all < 8
+    assert k[6, 8] == 1                                   # up and left: 8 steps; down: 4
+    assert k[9, 8] == 1
+
+
+def test_safe_exits_squeeze_is_zero():
+    rows = ["#" * WIDTH] * HEIGHT
+    rows[5] = "#" + " " * 20 + "#" * (WIDTH - 21)        # corridor x=1..20
+    k = _exits(rows, pac=(10, 5), ghosts=[(7, 5), (13, 5)])
+    assert k[5, 10] == 0                                  # two safe cells each way: squeezed
+    k = _exits(rows, pac=(10, 5), ghosts=[(7, 5)])
+    assert k[5, 10] == 1                                  # one ghost: away from it is safe
+    k = _exits(rows, pac=(10, 5), ghosts=[(7, 5), (13, 5)], super_on=True)
+    assert k[5, 10] == 2                                  # supertime: everything safe
+
+
+def test_safe_exits_open_field_and_radius():
+    rows = ["#" * WIDTH] * HEIGHT
+    for y in range(2, 20):
+        rows[y] = "#" + " " * 30 + "#" * (WIDTH - 31)    # open 30 x 18 area
+    k = _exits(rows, pac=(15, 10), ghosts=[])
+    assert k[10, 15] == 4                                 # open field: every direction
+    assert (k[10, 9:22] >= 2).all()                       # within radius 6
+    assert k[10, 8] == 0 and k[10, 22] == 0 and k[3, 15] == 0  # 7 steps away: outside
+    k = _exits(rows, pac=(15, 10), ghosts=[(15, 13)])
+    assert k[10, 15] >= 2                                 # a ghost below still leaves >= 2
+    assert k[13, 15] == 0                                 # unsafe cells are 0
+
+
+def test_safe_exits_channel_real_board():
+    e = PacmanEnv(config={"obs": {"cell_safety": True, "safe_exits": True}})
+    try:
+        assert e.grid_extras == ("cell_safety", "safe_exits")
+        obs, _ = e.reset(seed=3)
+        rng = np.random.default_rng(3)
+        for _ in range(300):
+            obs, _, term, trunc, _ = e.step(int(rng.integers(5)))
+            if term or trunc:
+                obs, _ = e.reset()
+            g = obs["grid"]
+            assert g.shape[0] == len(CHANNELS) + 2 and e.observation_space.contains(obs)
+            assert set(np.unique(g[-1])) <= {0.0, 0.25, 0.5, 0.75, 1.0}
+            assert not (g[-1] * (1 - g[-2])).any()        # only on safe cells
+            p = e._state["pacman"]
+            yy, xx = np.nonzero(g[-1])
+            assert (abs(yy - p["y"]) + abs(xx - p["x"]) <= 6).all()  # BFS radius 6
+    finally:
+        e.close()
+
+
+def test_hunger_truncate_mode():
+    e = PacmanEnv(config={"hunger_limit": 15, "hunger_mode": "truncate", "ghosts": False})
+    try:
+        e.reset(seed=0)
+        for t in range(1, 16):
+            _, r, term, trunc, info = e.step(0)  # up from the start cell: a wall
+            if t < 15:
+                assert not trunc and not info["hunger"]
+        assert trunc and not term and info["hunger"]
+        assert r == pytest.approx(-0.02)                  # no death penalty
+        _, info = e.reset()
+        assert (info["score"], info["lives"]) == (0, 3)
+    finally:
+        e.close()
+
+
 def test_cell_safety_channel_real_board():
     from env.pacman_env import _passable_neighbours
     e = PacmanEnv(config={"obs": {"cell_safety": True}})

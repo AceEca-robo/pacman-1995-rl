@@ -106,7 +106,9 @@ def d_max():
 
 FOOD_DISTANCE_CH = len(CHANNELS)  # index of the optional food-distance plane
 HUNGER_SCALE = 200                # steps_since_food is reported / this, clipped to 1
-GRID_EXTRAS = ("food_distance", "cell_safety")  # optional grid planes, in this order
+GRID_EXTRAS = ("food_distance", "cell_safety", "safe_exits")  # optional grid planes, in this order
+SAFE_EXITS_RADIUS = 6   # obs.safe_exits: cells within this many steps of pacman
+SAFE_EXITS_LENGTH = 8   # ... count the directions with a safe path at least this long
 
 
 def grid_extras(env_cfg):
@@ -176,6 +178,57 @@ def cell_safety_field(pac_nbrs, ghost_nbrs, pacman, normal_ghosts, super_on):
     for c in range(n):
         if dp[c] >= 0 and (dg[c] < 0 or dp[c] < dg[c]):
             out[c] = 1.0
+    return out
+
+
+def safe_exits_field(pac_nbrs, safe, pacman, radius=SAFE_EXITS_RADIUS,
+                     length=SAFE_EXITS_LENGTH):
+    """Safe exits plane, float32 (H*W,): for pacman's cell and every cell
+    within radius steps of it (BFS, walls and the gate block), the number of
+    directions out of the cell with a safe path at least `length` steps long,
+    / 4; 0 elsewhere and on cells that are not safe themselves. safe: the
+    cell-safety plane (cell_safety_field). A direction counts when its
+    neighbour n is safe and some safe cell is length - 1 steps from n by a
+    path of safe cells that does not go back through the cell (a shortest
+    path, so a simple one; a loop of safe cells around a block counts once
+    it is long enough). A dead end with a safe corridor out -> 1/4, a
+    squeeze -> 0."""
+    n = len(pac_nbrs)
+    out = np.zeros(n, np.float32)
+    region = [pacman]
+    seen = {pacman}
+    frontier = [pacman]
+    for _ in range(radius):
+        nxt = []
+        for c in frontier:
+            for nb in pac_nbrs[c]:
+                if nb not in seen:
+                    seen.add(nb)
+                    nxt.append(nb)
+        region += nxt
+        frontier = nxt
+    need = length - 1
+    for c in region:
+        if not safe[c]:
+            continue
+        k = 0
+        for first in pac_nbrs[c]:
+            if not safe[first]:
+                continue
+            visited = {c, first}
+            front, d = [first], 0
+            while front and d < need:
+                d += 1
+                nxt = []
+                for x in front:
+                    for nb in pac_nbrs[x]:
+                        if nb not in visited and safe[nb]:
+                            visited.add(nb)
+                            nxt.append(nb)
+                front = nxt
+            if front and d >= need:
+                k += 1
+        out[c] = k / 4
     return out
 
 
@@ -277,21 +330,30 @@ class PacmanEnv(gym.Env):
         self._neighbours = {}  # maze layout -> passable neighbour lists
         self._d_max = d_max() if self._shaping else None
         self._hunger_limit = self.cfg.get("hunger_limit") or 0
+        self._hunger_mode = self.cfg.get("hunger_mode") or "terminate"
+        if self._hunger_mode not in ("terminate", "truncate"):
+            raise ValueError("hunger_mode must be 'terminate' or 'truncate'")
         endgame = self.cfg.get("endgame_dot") or {}
         self._endgame_k = endgame.get("k", 0.0) if endgame.get("enabled") else 0.0
         self._levels = parse_start_level(self.cfg.get("start_level", 1))
         self._prefix_prob = self.cfg.get("prefix_prob") or 0.0
-        self._prefixes = []
+        self._prefix_sets, self._prefix_weights = [], []  # one list of prefixes per file
         if self._prefix_prob:
-            path = os.path.join(ROOT, self.cfg["prefix_file"])
-            with open(path) as f:
-                data = json.load(f)
-            if data["n_actions"] != n_actions:
-                raise ValueError(f"{path} was recorded with {data['n_actions']} actions")
-            self._prefixes = data["prefixes"]
+            mix = self.cfg.get("prefix_mix") or [{"file": self.cfg["prefix_file"], "weight": 1.0}]
+            for entry in mix:
+                path = os.path.join(ROOT, entry["file"])
+                with open(path) as f:
+                    data = json.load(f)
+                if data["n_actions"] != n_actions:
+                    raise ValueError(f"{path} was recorded with {data['n_actions']} actions")
+                self._prefix_sets.append(data["prefixes"])
+                self._prefix_weights.append(float(entry["weight"]))
+            w = np.array(self._prefix_weights)
+            self._prefix_weights = w / w.sum()
         obs_cfg = self.cfg.get("obs") or {}
         self._food_distance = bool(obs_cfg.get("food_distance"))
         self._cell_safety = bool(obs_cfg.get("cell_safety"))
+        self._safe_exits = bool(obs_cfg.get("safe_exits"))
         self.grid_extras = grid_extras(self.cfg)
         self._steps_since_food = bool(obs_cfg.get("steps_since_food"))
         if self._food_distance:
@@ -382,22 +444,12 @@ class PacmanEnv(gym.Env):
         level = lo if lo == hi else int(self.np_random.integers(lo, hi + 1))
         prefix = None
         if self._prefix_prob and self.np_random.random() < self._prefix_prob:
-            prefix = self._prefixes[int(self.np_random.integers(len(self._prefixes)))]
+            k = 0 if len(self._prefix_sets) == 1 else \
+                int(self.np_random.choice(len(self._prefix_sets), p=self._prefix_weights))
+            ps = self._prefix_sets[k]
+            prefix = ps[int(self.np_random.integers(len(ps)))]
         if prefix is not None:
-            # replay a recorded opening of its game (same seed, same actions:
-            # the game is deterministic), then hand over the position
-            # a prefix is an opening of its level (level 1 if the file has none)
-            plevel = int(prefix.get("level", 1))
-            if not (self._fresh and self._seed == prefix["seed"] and self._level == plevel):
-                self._restart_game(prefix["seed"], plevel)
-            self._state = self._recv()
-            for a in prefix["actions"]:
-                self._res["conn"].sendall(ACTIONS[a])
-                self._state = self._recv()
-            left = sum(r.count(".") + r.count("o") for r in self._state["grid"])
-            if left != prefix["food_left"] or self._state["lives"] != 3 \
-                    or self._state["level"] != plevel:
-                raise RuntimeError(f"prefix replay of seed {prefix['seed']} diverged")
+            self.replay_prefix(prefix)
             return self._after_reset(int(prefix["seed"]))
         if seed is not None:
             if not (self._fresh and self._seed == seed and self._level == level):
@@ -414,6 +466,32 @@ class PacmanEnv(gym.Env):
             self._res["conn"].sendall(ACTIONS[4])
         self._state = self._recv()
         return self._after_reset(-1)
+
+    def replay_prefix(self, prefix):
+        """Replay a recorded opening of a game (same seed, same actions: the
+        game is deterministic) and leave the env in its last state. The game
+        starts on the prefix's "start_level" (default its "level", 1 if the
+        file has none); the prefix ends on "level" with "lives" (default 3)
+        and "food_left" food, and, where recorded, pacman on "pacman" [x, y]
+        and the ghosts on "ghosts" [[x, y], ..]; a mismatch raises."""
+        plevel = int(prefix.get("level", 1))
+        slevel = int(prefix.get("start_level", plevel))
+        if not (self._fresh and self._seed == prefix["seed"] and self._level == slevel):
+            self._restart_game(prefix["seed"], slevel)
+        self._state = self._recv()
+        for a in prefix["actions"]:
+            self._res["conn"].sendall(ACTIONS[a])
+            self._state = self._recv()
+        st = self._state
+        left = sum(r.count(".") + r.count("o") for r in st["grid"])
+        ok = left == prefix["food_left"] and st["lives"] == prefix.get("lives", 3) \
+            and st["level"] == plevel
+        if ok and "pacman" in prefix:
+            ok = [st["pacman"]["x"], st["pacman"]["y"]] == list(prefix["pacman"])
+        if ok and "ghosts" in prefix:
+            ok = [[g["x"], g["y"]] for g in st["ghosts"]] == [list(g) for g in prefix["ghosts"]]
+        if not ok:
+            raise RuntimeError(f"prefix replay of seed {prefix['seed']} diverged")
 
     def set_start_level(self, spec):
         """New start_level (int or "random:a-b") from the next reset on."""
@@ -450,19 +528,25 @@ class PacmanEnv(gym.Env):
             endgame = coef["eaten_dot"] * events["eaten_dot"] * self._endgame_k / max(left, 1)
             reward += endgame
         terminated = bool(st["done"])
-        hunger = False
+        hunger = hunger_trunc = False
         ate = events["eaten_dot"] or events["eaten_energizer"]
         self._hungry = 0 if ate else self._hungry + 1
         if self._hunger_limit:
             if self._hungry >= self._hunger_limit and not terminated:
-                # ends the episode like a death; the game itself goes on and
-                # is restarted by the next reset()
-                hunger = terminated = True
-                reward += coef["death"]
+                # "terminate": ends the episode like a death; "truncate": a
+                # time limit (truncated, no penalty: the value bootstraps).
+                # The game itself goes on and is restarted by the next reset()
+                hunger = True
+                if self._hunger_mode == "truncate":
+                    hunger_trunc = True
+                else:
+                    terminated = True
+                    reward += coef["death"]
         shaping = self._shape(st, terminated) if self._shaping else 0.0
         reward += shaping
         limit = self.cfg["max_episode_steps"]
-        truncated = not terminated and limit is not None and self._steps >= limit
+        truncated = not terminated and (hunger_trunc or (limit is not None
+                                                         and self._steps >= limit))
         info = self._info(st)
         info["events"] = events
         info["shaping"] = shaping
@@ -549,8 +633,14 @@ class PacmanEnv(gym.Env):
             grid[CH["bonus"], st["bonus"]["y"], st["bonus"]["x"]] = 1
         if self._food_distance:
             grid[FOOD_DISTANCE_CH] = self._food_field(st)
-        if self._cell_safety:
-            grid[-1] = self._safety_field(st)
+        if self._cell_safety or self._safe_exits:
+            safe = self._safety_field(st)
+            i = len(CHANNELS) + self._food_distance
+            if self._cell_safety:
+                grid[i] = safe
+                i += 1
+            if self._safe_exits:
+                grid[i] = self._safe_exits_field(st, safe)
         vec = [min(st["lives"], MAX_LIVES) / 3, st["supertime_left"] / SUPERTIME,
                min(st["level"], LEVELS) / LEVELS]
         if self._steps_since_food:
@@ -583,6 +673,15 @@ class PacmanEnv(gym.Env):
         field = cell_safety_field(nb[0], nb[1], p["y"] * WIDTH + p["x"], ghosts,
                                   st["supertime_left"] > 0)
         return field.reshape(HEIGHT, WIDTH)
+
+    def _safe_exits_field(self, st, safe):
+        """Safe exits plane (safe_exits_field) of a state, from its cell-safety plane."""
+        cells = "".join(st["grid"])
+        layout = cells.replace(".", " ").replace("o", " ")
+        nb = self._neighbours[("safety", layout)]
+        p = st["pacman"]
+        return safe_exits_field(nb[0], safe.reshape(-1), p["y"] * WIDTH + p["x"]).reshape(
+            HEIGHT, WIDTH)
 
     @staticmethod
     def _info(st):
