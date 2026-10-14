@@ -2037,4 +2037,4 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   final protocol in runs/abl_final/. dqfd2 untouched (348M, done).
 - docs/v04_level{1,7,13,15}.gif, docs/v04_longest.gif (5 levels, 25925).
 - results.md: "Final results v0.4" and "Ablation" written.
-- 06:13 Watch: nothing running (tmux empty, GPU 15 MiB), disk 30 GB free.
+- 06:13 Watch: nothing running (tmux empty, GPU 15 MiB), disk 29 GB free.
