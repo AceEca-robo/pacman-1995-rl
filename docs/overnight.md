@@ -2017,8 +2017,8 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
 - One seed per ablation arm: +3.0 (plane) vs +0.8 (horizon) is the point
   estimate; the intervals of abl_safe and abl_ctrl overlap by ~1 point.
 - The parts are not additive: plane + horizon alone would be +3.8, both
-  together (dqfd2@140M) gave +5.1; dqfd2 also had the safety demo file
-  converted for n 5 (demo_safety n5), which none of the arms used.
+  together (dqfd2@140M) gave +5.1. (dqfd2's demo file demo_safety_n5.npz
+  is just the two arms' conversions combined, not an extra change.)
 - The control has the best minimum (63% on maze 15), so the minimum gain of
   best_v04 (67%) is not clearly due to either change.
 - Seeds 2 and 4 of the longest-run screen hit the 3000-tick cap with 2
