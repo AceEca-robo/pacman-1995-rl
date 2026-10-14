@@ -1991,3 +1991,10 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
   best_v03 (75.2%), 2 points under best_v04. abl_horizon 112.2M, 4.3k.
 - 01:56 Health ok: abl_horizon 124.4M, 4.32k steps/s, Q 99.1, no NaN,
   32 GB. End (140M) expected ~02:58.
+- 03:01 abl_horizon finished (140000026 steps, no crash). Disk 30 GB;
+  abl_ctrl started (`--resume-from runs/best_v03/best.pt`).
+- 03:07 **abl_horizon@140M (final protocol): 77.6% [75.6, 79.6] / min 59%
+  [49, 64] (maze 15) / levels 1.39 [1.16, 1.62]** — +2.4 over best_v03,
+  2.2 under abl_safe.
+- 03:08 Health ok: abl_ctrl 111.6M, 4.37k steps/s, Q 55.0, no NaN, 32 GB.
+  End expected ~05:05.
