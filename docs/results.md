@@ -1137,3 +1137,69 @@ within the intervals). The continuation alone (best_v03 -> abl_ctrl) gave
 indicative: **most of the gain on the per-maze mean came from the
 cell-safety plane; the horizon alone gave little, and the two together
 gave more than either.**
+
+## Deaths by level, best_v04 (2026-10-14)
+
+### What depends on the level number in the game
+
+Read from game/ (gamedata.cc, ghost.cc, pac.cc, pac.h, pacman.cc, board.h,
+supefood.cc, timing.cc). Level N plays maze N (`Gamedata::setboardlevel`);
+past level 16 the maze is random. Nothing else reads the level number:
+
+| parameter | level 1 | level 3 | level 5 | level 8 | source |
+|---|---|---|---|---|---|
+| maze layout | maze 1 | maze 3 | maze 5 | maze 8 | gamedata.cc `setboardlevel` |
+| supertime | 50 pacman moves | 50 | 50 | 50 | pac.h `SUPERTIME`, pacman.cc |
+| ghost time in the house at the start | none (leave at once, state random, direction up) | none | none | none | ghost.cc `start` |
+| ghost time in the house after being eaten | 25 ghost moves | 25 | 25 | 25 | pac.h `DEADTIME` |
+| ghost speed | 1 cell per tick | 1 | 1 | 1 | pac.cc main loop |
+| pacman speed | 1 cell per tick, 2 while super | same | same | same | pac.cc (extra `pac.go` while super) |
+| ghost randomness (turn chance 1/randmv) | randmv 4..11 per ghost, drawn once per process | same | same | same | ghost.cc constructor |
+| ghost score | 100 / 200 / 400 / 800 | same | same | same | pac.h `GHOSTSCORE`, ghost.cc `die` |
+| dots to clear | 168 (energizers not counted) | 168 | 168 | 168 | board.h `foods`, pacman.cc |
+| energizers | 4 | 4 | 4 | 4 | board.h (every maze: 168 dots + 4) |
+| level bonus | 5000, -5 per tick, added at the clear | same | same | same | gamedata.cc `start2`, `bondwn` |
+| bonus item | 1/4096 per tick, 1000 points or (rarer) a life, 50 ticks | same | same | same | pac.cc, pac.h `BONUSTIME` |
+| lives | 3 at the game's start, carried over, not refilled | carried | carried | carried | gamedata.cc `start`, `start2` |
+| real-time tick (not with --fast) | 0.25 s, 0.125 s while super | same | same | same | timing.cc |
+
+So in this game a level differs from another only by its maze and by the
+lives carried into it. The agent also sees level / 16 in its vec input.
+
+### 200 games from level 1 (seeds 4000..4199)
+
+`scripts/deaths_by_level.py` (death kinds from `death_report.py`'s
+classify; the eval env without shaping, hunger limit or prefixes; each game
+to game over or 30000 ticks). 571 deaths: squeezed 80.9%, supertime ran out
+15.9%, from behind 2.1%, head-on 0.9%. Levels cleared 1.49 per game, max 8.
+**12 games (6%) hit the 30000-tick cap stuck on a level** (5 on level 1, 6
+on level 2, 1 on level 3; > 28000 ticks there without dying or clearing);
+their ticks and deaths on that level are left out of the rate. Rate CI:
+normal approximation to Poisson. `runs/v04_deaths/`,
+`docs/v04_deaths_by_level.png`.
+
+| level | games reaching it | cleared | mean lives on arrival | deaths | deaths per 1000 ticks [95% CI] | P(clear \| arrived with 3 lives) | squeezed / supertime ran out | median tick of the level at death | median food left | stuck |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 200 (100%) | 149 | 3.00 | 303 | 2.96 [2.63, 3.29] | 74% (200) | 85% / 12% | 348 | 38 | 5 |
+| 2 | 149 (74%) | 78 | 1.90 | 141 | 1.91 [1.60, 2.23] | 87% (30) | 71% / 26% | 342 | 47 | 6 |
+| 3 | 78 (39%) | 33 | 1.65 | 78 | 2.59 [2.01, 3.16] | 71% (7) | 85% / 10% | 188 | 93 | 1 |
+| 4 | 33 (16%) | 20 | 1.48 | 23 | 1.67 [0.99, 2.36] | — (2) | 83% / 13% | 328 | 42 | 0 |
+| 5 | 20 (10%) | 8 | 1.30 | 16 | 2.25 [1.15, 3.36] | — (1) | 62% / 31% | 237 | 77 | 0 |
+| 6 | 8 (4%) | 4 | 1.25 | 4 | 1.30 [0.03, 2.57] | — | 4 / 0 | 151 | 110 | 0 |
+| 7 | 4 (2%) | 4 | 1.50 | 1 | 0.45 | — | 1 / 0 | 24 | 163 | 0 |
+| 8 | 4 (2%) | 2 | 1.25 | 2 | 1.50 | — | 2 / 0 | 95 | 132 | 0 |
+| 9 | 2 (1%) | 0 | 1.50 | 3 | 4.64 | — | 2 / 1 | 188 | 93 | 0 |
+
+The death rate does not grow with the level: 3.0 per 1000 ticks on level
+1, 1.7-2.6 on levels 2-5 (intervals overlap; level 1 is the highest). The
+squeeze share stays 71-85%; supertime running out is 10-31% with no trend
+(highest on mazes 2 and 5, which are maze effects). Where a level can be
+compared with a fresh start on the same maze (arrived with 3 lives), the
+clear share is close to the final protocol's per-maze share (level 1 74%
+vs maze 1 80%; level 2 87% vs 92%, n 30; level 3 71% vs 80%, n 7). What
+does fall with the level is the lives in hand: 3.0 on level 1, 1.9 on
+level 2, 1.3-1.5 from level 4 on, never refilled except by the rare bonus
+life, so each level's clear share is lower than a fresh start's although
+the per-tick risk is not. Level 3 (maze 3) loses many lives in its first
+100 ticks (27 of 78 deaths). The stuck games (6%) are a second, separate
+loss.

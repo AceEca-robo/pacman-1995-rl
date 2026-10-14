@@ -2039,3 +2039,33 @@ longest run of 20 seeds from level 1 (to game over, 3000-tick limit).
 - results.md: "Final results v0.4" and "Ablation" written.
 - 06:13 Watch: nothing running (tmux empty, GPU 15 MiB), disk 29 GB free.
 - 07:12 Watch: nothing running, GPU 15 MiB, disk 29 GB free. All committed and pushed.
+
+## 2026-10-14 (day): level dependence of the game, deaths by level
+
+- Read game/ for anything that depends on the level number: only the maze
+  (level N = maze N, random past 16) and the lives carried over. Supertime
+  (50 pacman moves), DEADTIME 25, ghost and pacman speed, ghost scores,
+  168 dots + 4 energizers, the level bonus and the bonus items are the same
+  on every level; there is no house timer. Table in results.md ("Deaths by
+  level, best_v04").
+- `scripts/deaths_by_level.py`: best_v04, 200 games from level 1, seeds
+  4000..4199, to game over or 30000 ticks (2.5 min). 571 deaths, squeezed
+  81%, supertime ran out 16%. Deaths per 1000 ticks by level: 2.96 / 1.91 /
+  2.59 / 1.67 / 2.25 (levels 1-5): no rise with the level. Lives on
+  arrival fall 3.0 -> 1.9 -> 1.65 -> 1.3: that, not the per-tick risk,
+  is why fewer games clear later levels. docs/v04_deaths_by_level.png.
+- 12 of 200 games (6%) stuck to the 30000-tick cap on levels 1-3 (no death,
+  no clear for > 28000 ticks): an unmeasured loss in the final protocol's
+  level-1 games (they count as the levels reached) and a likely part of the
+  per-maze misses (cut at 10000 ticks).
+
+### Ideas for later
+
+- No supertime feature needed per level: supertime is the same 50 on every
+  level and supertime_left / 50 is already in vec. The supertime deaths
+  (16%) are about ghosts' positions when it ends; a "ticks until a hunted
+  ghost turns normal near me" plane would be the next thing to try, not a
+  level-dependent duration.
+- Find the stuck loops (seeds 4043, 4053, 4094, 4119, 4122, 4125, 4128,
+  4138, 4155, 4158, 4160, 4161 from level 1) and count stuck games in the
+  final protocol.
