@@ -2128,3 +2128,32 @@ crash, conservative choice + note when unclear).
   cell-safety plane; test: equal to the env's packed planes).
 - 22:52 tmux `dr04`: death report of best_v04 itself (16 x 50 games,
   seeds 5000.., as dqfd2@134M's; there was none) for the morning comparison.
+- 22:56 **dqfd3 started** (step 4; tmux `dqfd3`, `train.py --run-name dqfd3
+  --config configs/dqfd3.yaml --resume-from runs/best_v04/best.pt`,
+  198000002 -> 258000016). `resume_add_plane: safe_exits` (train.py: the
+  old resume_add_cell_safety generalized to any one new last plane; the
+  first convolution of online, target and the Adam moments gets a zero
+  input channel). Env config changes against best_v04: hunger_limit 600 /
+  hunger_mode truncate, obs (+ safe_exits), prefix_prob 0.2 -> 0.5,
+  prefix_mix 0.7 death prefixes / 0.3 endgame prefixes of all 16 mazes.
+  Disk 28 GB free before the launch.
+- 22:57 tmux `sv_dqfd3` (`supervisor.py dqfd3 --every 10000000 --train-eval
+  --episodes 40 --extend --min-speed 3500 --log-dir runs/sv_dqfd3`: 40
+  games per maze and from level 1, seeds 1000..1039, the extension rule
+  +50M / +30M / stop at the third plateau confirmation); tmux `keep_dqfd3`
+  (`keep_good.py dqfd3 --mean 0.80 --min 0.60 --extra-episodes 20`: the
+  2M training eval's seeds 1000..1019 + 1020..1039); tmux `q05`
+  (`runs/v05_final/queue.sh`: each new good_*.pt -> the final protocol,
+  100 games per maze, seeds 2000..3599, + 100 from level 1, one at a time,
+  nice 10).
+- 23:02 **Check after 5 minutes: 4.0-4.08k steps/s (>= 3.5k)**, Q 95.8-96.9
+  (best_v04's level), loss 0.73-0.77, demo 10.2%. In the first batch:
+  cell_safety 187 cells/frame, **safe_exits 19.1 cells/frame on agent
+  samples (97% of frames nonzero), 18.5 on demo samples (100%)**. Episodes
+  that started from a prefix: **905 of 1756 ended (51.5%; 0.5 set)**;
+  hunger truncations 6 (0.3%).
+- 22:55 Death report of best_v04 (16 x 50, seeds 5000..; runs/v04_deaths/
+  deaths.json, docs/v04_deaths_{mazes,summary}.png): cleared 78.4%, 1163
+  deaths = **1.45 per game, squeezed 83.2% (1.21 per game)**, supertime
+  ran out 14.7%; 6 games stuck to 10000 ticks. Worst mazes 12 (58%, 2.00
+  deaths per game) and 15 (54%, 1.90).
