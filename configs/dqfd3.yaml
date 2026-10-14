@@ -1,0 +1,35 @@
+# dqfd3: best_v04 (dqfd2@198M, runs/best_v04/best.pt) continued on its own
+# deaths (2026-10-14 night plan). best_v04 still loses mostly by being
+# squeezed (81% of its deaths, scripts/deaths_by_level.py), so:
+# - the safe-exits plane in the observation (env obs.safe_exits: on pacman's
+#   cell and the cells within 6 steps, the directions with a cell-safe path
+#   of >= 8 steps, / 4); the first convolution gets the new input channel
+#   with zero weights (resume_add_plane), so training starts from best_v04's
+#   exact policy;
+# - half the resets replay a prefix: 70% best_v04's own death prefixes
+#   (tools/record_death_prefixes.py, 400 games from random:1-16, seeds
+#   5000..5399, 40 and 20 ticks before each death, half each), 30% the
+#   heuristic endgame prefixes of all 16 mazes;
+# - hunger_limit 600 as a truncation without penalty, so stuck games end
+#   without a fake death (evaluation is unchanged: a stuck game is a loss).
+# Everything else as dqfd2: n_step 5, gamma 0.995, demo 10%, margin weight 1,
+# eps 0.01, lr and optimizer state from the checkpoint. The demo transitions:
+# demo_safety_n5.npz with the safe-exits plane added (tools/convert_demo.py).
+# Started with: train.py --run-name dqfd3 --config configs/dqfd3.yaml
+#   --resume-from runs/best_v04/best.pt; later legs --resume --extend-steps.
+base: dqfd2.yaml
+total_steps: 258000016    # best_v04 (198000002) + 60M
+resume_add_cell_safety: false
+resume_add_plane: safe_exits
+dqfd:
+  demo_file: runs/dqfd_demo/demo_safety_exits_n5.npz
+env_config:
+  obs:
+    cell_safety: true
+    safe_exits: true
+  prefix_prob: 0.5
+  prefix_mix:
+    - {file: data/death_prefixes_v04.json, weight: 0.7}
+    - {file: data/endgame_prefixes_all.json, weight: 0.3}
+  hunger_limit: 600
+  hunger_mode: truncate

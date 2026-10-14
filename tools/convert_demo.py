@@ -3,11 +3,17 @@
 
     python tools/convert_demo.py runs/dqfd_demo/demo.npz out.npz \
         --add-cell-safety --n-step 5 --gamma 0.995
+    python tools/convert_demo.py runs/dqfd_demo/demo_safety_n5.npz \
+        runs/dqfd_demo/demo_safety_exits_n5.npz --add-safe-exits
 
 --add-cell-safety appends the cell-safety bit plane (env obs.cell_safety)
 to every frame, computed from the frame itself: walls, gate, pacman and
 the normal ghosts' cells from the packed planes, supertime from vec[1]
 (the same as the env's plane, see tests/test_convert_demo.py).
+--add-safe-exits appends the safe-exits plane (env obs.safe_exits, 3 bit
+planes of k = 0..4) computed from the frame's walls, gate, pacman and its
+cell-safety plane, which must be the frame's last stored plane (a file made
+with --add-cell-safety, or in the same call).
 --n-step / --gamma recompute the 1-step discounts and the n-step returns,
 discounts and offsets of every transition from the stored 1-step rewards
 (the frames of an episode are consecutive in their stream; an episode's
@@ -26,7 +32,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.dqn import BINARY_CH, CELLS, COUNT_BITS, COUNT_CH, N_PLANES  # noqa: E402
 from env.pacman_env import (CH, HEIGHT, WIDTH, _ghost_neighbours,  # noqa: E402
-                            _passable_neighbours, cell_safety_field)
+                            _passable_neighbours, cell_safety_field, safe_exits_field)
 
 _nbrs = {}
 
@@ -56,6 +62,31 @@ def safety_from_packed(packed, vecs):
         out[i] = cell_safety_field(*_nbrs[key], int(p[0]), np.flatnonzero(normal[i]).tolist(),
                                    bool(vecs[i, 1] > 0))
     return out
+
+
+def exits_from_packed(packed):
+    """uint8 (B, planes, PACKED) frames whose last plane is the cell-safety
+    bit plane -> uint8 (B, CELLS) safe-exits counts k (0..4)."""
+    bits = np.unpackbits(packed[:, :N_PLANES], axis=-1)[:, :, :CELLS]
+    safe = np.unpackbits(packed[:, -1], axis=-1)[:, :CELLS]
+    walls, gate, pac = (_plane(bits, CH[n]) for n in ("walls", "gate", "pacman"))
+    out = np.zeros((len(packed), CELLS), np.uint8)
+    for i in range(len(packed)):
+        layout = np.where(walls[i] > 0, "#", np.where(gate[i] > 0, "-", " "))
+        key = "".join(layout)
+        if key not in _nbrs:
+            _nbrs[key] = (_passable_neighbours(key), _ghost_neighbours(key))
+        p = np.flatnonzero(pac[i])
+        if not len(p):
+            continue
+        f = safe_exits_field(_nbrs[key][0], safe[i], int(p[0]))
+        out[i] = np.rint(f * 4).astype(np.uint8)
+    return out
+
+
+def _work_exits(packed):
+    k = exits_from_packed(packed)
+    return np.stack([np.packbits((k >> b) & 1, axis=-1) for b in range(COUNT_BITS)], 1)
 
 
 def _work(args):
@@ -109,6 +140,7 @@ def main():
     p.add_argument("src")
     p.add_argument("dst")
     p.add_argument("--add-cell-safety", action="store_true")
+    p.add_argument("--add-safe-exits", action="store_true")
     p.add_argument("--n-step", type=int, default=None)
     p.add_argument("--gamma", type=float, default=None)
     p.add_argument("--workers", type=int, default=4)
@@ -132,6 +164,16 @@ def main():
             for i, pl in enumerate(pool.imap(_work, jobs)):
                 planes.append(pl)
                 print(f"safety: {min((i + 1) * chunk, len(obs))}/{len(obs)}", flush=True)
+        z["obs"] = np.concatenate([obs, np.concatenate(planes)], 1)
+    if args.add_safe_exits:
+        obs = z["obs"]
+        chunk = 20000
+        jobs = [obs[i:i + chunk] for i in range(0, len(obs), chunk)]
+        with multiprocessing.get_context("fork").Pool(args.workers) as pool:
+            planes = []
+            for i, pl in enumerate(pool.imap(_work_exits, jobs)):
+                planes.append(pl)
+                print(f"safe exits: {min((i + 1) * chunk, len(obs))}/{len(obs)}", flush=True)
         z["obs"] = np.concatenate([obs, np.concatenate(planes)], 1)
     tmp = args.dst + ".tmp"
     with open(tmp, "wb") as f:

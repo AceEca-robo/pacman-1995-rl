@@ -504,7 +504,7 @@ class DQNLearner:
         margin weight for this update (default the config's). Returns device
         tensors (loss, mean max Q, |n-step TD| per sample, demo margin loss)."""
         self._apply_conv_request()
-        if "cell_safety" in self.decode.extras:
+        if {"cell_safety", "safe_exits"} & set(self.decode.extras):
             self._safety_check(b)
         frames = ("obs", "obs1", "obsn") if self.lam_1 else ("obs", "obsn")
         loss, mean_q, td, je = self._floss(
@@ -518,17 +518,23 @@ class DQNLearner:
 
     def _safety_check(self, b):
         """Prints, at the first update and every 100k after, the share of
-        cells set in the batch's cell-safety plane (the last stored plane),
-        agent and demo samples apart: shows the plane reaches the learner."""
+        cells set in the batch's cell-safety plane and the safe-exits plane
+        (where the config has them), agent and demo samples apart: shows the
+        planes reach the learner."""
         self._n_frame_updates = getattr(self, "_n_frame_updates", -1) + 1
         if self._n_frame_updates % 100_000:
             return
-        ones = np.unpackbits(b["obs"][:, -1], axis=-1)[:, :CELLS].sum(1)
         demo = np.asarray(b["demo"]) > 0
-        parts = [f"{name} {ones[m].mean():.1f} cells/frame ({(ones[m] > 0).mean():.0%} nonzero)"
-                 for name, m in (("agent", ~demo), ("demo", demo)) if m.any()]
-        print(f"cell_safety in the batch (update {self._n_frame_updates}): " + ", ".join(parts),
-              flush=True)
+        i = N_PLANES
+        for name in self.decode.extras:
+            if name in ("cell_safety", "safe_exits"):
+                bits = np.unpackbits(b["obs"][:, i:i + EXTRA_BITS[name]], axis=-1)[..., :CELLS]
+                ones = (bits.max(1) > 0).sum(1)  # cells with a nonzero value
+                parts = [f"{tag} {ones[m].mean():.1f} cells/frame ({(ones[m] > 0).mean():.0%} "
+                         f"nonzero)" for tag, m in (("agent", ~demo), ("demo", demo)) if m.any()]
+                print(f"{name} in the batch (update {self._n_frame_updates}): "
+                      + ", ".join(parts), flush=True)
+            i += EXTRA_BITS[name]
 
     def _apply_conv_request(self):
         flag = getattr(self, "_conv_request", None)

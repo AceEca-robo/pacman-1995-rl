@@ -2103,3 +2103,28 @@ crash, conservative choice + note when unclear).
   has them; `prefix_mix` (several prefix files by weight). Tests: dead end
   -> 1, squeeze -> 0, open field -> 4 (>= 2 next to a ghost), radius 6,
   real-board values, pack/decode roundtrip, hunger truncation.
+- 22:54 **Death prefixes recorded** (step 1, `tools/record_death_prefixes.py
+  --checkpoint runs/best_v04/best.pt --games 400 --seed 5000`, 3 min):
+  400 games of best_v04 from start_level random:1-16 (the env draws the
+  level from the seed; 14-33 games per start level), to game over or 10000
+  ticks (6 games cut). **1185 deaths, 1023 kept** (162 = 14% died within
+  their level's first 60 ticks and were dropped), **2046 prefixes** (T-40
+  and T-20 for each), `data/death_prefixes_v04.json` (5.5 MB). Deaths by
+  maze (31 of them on levels > 16, maze found by its walls): 1: 54, 2: 62,
+  3: 42, 4: 47, 5: 80, 6: 58, 7: 54, 8: 49, 9: 86, 10: 57, 11: 93, 12: 83,
+  13: 48, 14: 61, 15: 75, 16: 74 — every maze >= 42, the most on 11, 9,
+  12, 5, 15, 16. Kinds (classify with radius 6 in this file, the reports
+  use 5 — the default is 5 now; only the label, not the prefixes):
+  squeezed 824 (80.5%), supertime ran out 176 (17%), from behind 16, other
+  7. Lives at the prefix's end 1: 324, 2: 352, 3: 346, 4: 1. Prefix length
+  mean 796 actions, max 4162; a replay costs ~20 ms. 60 random prefixes
+  replayed with the same pacman and ghost cells, lives, level and food (the
+  env checks them on every replay). Test: tests/test_death_prefixes.py
+  (heuristic games: replay -> the recorded positions; a wrong position
+  raises).
+- 22:53 Demo transitions with the plane: `tools/convert_demo.py
+  demo_safety_n5.npz demo_safety_exits_n5.npz --add-safe-exits` (1,102,048
+  frames, the plane from each frame's walls, gate, pacman and its stored
+  cell-safety plane; test: equal to the env's packed planes).
+- 22:52 tmux `dr04`: death report of best_v04 itself (16 x 50 games,
+  seeds 5000.., as dqfd2@134M's; there was none) for the morning comparison.

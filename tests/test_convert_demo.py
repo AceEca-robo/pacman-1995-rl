@@ -8,7 +8,7 @@ from agents.dqn import pack_grid
 from env.pacman_env import ROOT, PacmanEnv
 
 sys.path.insert(0, os.path.join(ROOT, "tools"))
-from convert_demo import recompute_nstep, safety_from_packed  # noqa: E402
+from convert_demo import _work_exits, recompute_nstep, safety_from_packed  # noqa: E402
 
 
 @pytest.mark.skipif(not os.path.exists(os.path.join(ROOT, "game", "pacman")),
@@ -30,6 +30,28 @@ def test_safety_from_packed_matches_the_env():
         env.close()
     got = safety_from_packed(np.stack(frames), np.stack(vecs))
     assert np.array_equal(got, np.stack(planes).astype(np.uint8))
+
+
+@pytest.mark.skipif(not os.path.exists(os.path.join(ROOT, "game", "pacman")),
+                    reason="needs built game/pacman")
+def test_safe_exits_from_packed_matches_the_env():
+    extras = ("cell_safety", "safe_exits")
+    env = PacmanEnv(config={"obs": {"cell_safety": True, "safe_exits": True}, "start_level": 9})
+    try:
+        full, cut = [], []
+        rng = np.random.default_rng(9)
+        obs, _ = env.reset(seed=9)
+        for _ in range(500):
+            full.append(pack_grid(obs["grid"], extras))
+            cut.append(pack_grid(obs["grid"][:-1], extras[:1]))  # stored without the plane
+            obs, _, term, trunc, _ = env.step(int(rng.integers(5)))
+            if term or trunc:
+                obs, _ = env.reset()
+    finally:
+        env.close()
+    cut = np.stack(cut)
+    got = np.concatenate([cut, _work_exits(cut)], 1)
+    assert np.array_equal(got, np.stack(full))
 
 
 def test_recompute_nstep_two_streams():

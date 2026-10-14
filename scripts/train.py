@@ -679,18 +679,21 @@ def main():
         if args.resume_from:
             ck = torch.load(args.resume_from, map_location=device, weights_only=False)
             seed = ck["seed"]
-            if cfg.get("resume_add_cell_safety"):
-                # one more input plane (obs.cell_safety); the rest of the env
-                # config (rewards, prefixes) may change, the inputs may not
+            add_plane = cfg.get("resume_add_plane") or \
+                ("cell_safety" if cfg.get("resume_add_cell_safety") else None)
+            if add_plane:
+                # one more input plane (obs.<add_plane>, the last grid plane);
+                # the rest of the env config (rewards, prefixes) may change,
+                # the inputs may not
                 old_full, new_full = (load_env_config(c) for c in
                                       (ck["config"]["env_config"], cfg["env_config"]))
                 c_old, v_old = obs_dims(old_full)
                 if cfg["network"] != ck["config"]["network"] \
                         or old_full["actions"] != new_full["actions"] \
-                        or grid_extras(new_full) != grid_extras(old_full) + ("cell_safety",) \
+                        or grid_extras(new_full) != grid_extras(old_full) + (add_plane,) \
                         or obs_dims(new_full) != (c_old + 1, v_old):
                     sys.exit(f"{args.resume_from}: network, actions or observation of "
-                             f"{args.config} is not the checkpoint's plus cell_safety")
+                             f"{args.config} is not the checkpoint's plus {add_plane}")
                 diff = sorted(k for k in set(old_full) | set(new_full)
                               if old_full.get(k) != new_full.get(k))
                 print(f"env config changes against {args.resume_from}: {diff}")

@@ -57,7 +57,7 @@ def env_config(obs_cfg, start_level):
 
 
 def record(policy, envs, seeds, offsets=(40, 20), min_level_tick=60, max_steps=10000,
-           radius=6):
+           radius=5):
     """policy(list of obs) -> actions. Plays one game per seed on envs (in
     parallel), returns (prefixes, games)."""
     from death_report import classify
