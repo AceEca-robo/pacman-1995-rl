@@ -2169,3 +2169,12 @@ crash, conservative choice + note when unclear).
   216M 75.5% / 45%, 218M 77.3% / 48%, **220M 82.0% / 65% / 1.73 (kept;
   the supervisor's 40 games agree: 82.0% / 65% / 1.70)**. Supervisor 210M
   77.2% / 55% / 1.52. good_220 queued for the final protocol.
+- 02:00 Health ok: dqfd3 234.0M, 3.88k steps/s (the supervisor logged
+  3.47-3.49k twice while final-protocol evals ran beside it), Q 96.4, no
+  NaN, disk 29 GB. 40-game evals: 222M 79.7%, **224M 80.9% / 62% (kept)**,
+  226M 79.7%, **228M 81.7% / 62% (kept)**, 230M 78.7% / 50%, **232M 81.6% /
+  65% / 1.42 (kept)**. Supervisor 230M 78.9% / 50% / 1.55. **Final protocol
+  (100 per maze): 206M 80.8% / 57% / 1.65; 220M 79.6% / 63% / 1.54; 224M
+  78.8% / 51% / 1.54; 228M 78.6% / 57% / 1.67** — none above best_v04
+  (81.8% / 67% / 1.48) on the mean; the 40-game sets run 1-3 points
+  optimistic, as with dqfd2.
