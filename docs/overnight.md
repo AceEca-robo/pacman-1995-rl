@@ -2345,3 +2345,25 @@ crash, conservative choice + note when unclear).
   cells per agent frame (96% nonzero). Q 104-106 (dqfd3 at its start
   96-100); **margin loss 2.0-2.2 (dqfd3 0.27)**: the escape actions are
   partly the rollouts' random ones, which the net does not choose. To watch.
+- 11:17 Margin loss 2.0 = the escape demos' random actions (request): the
+  replay gets a field `rand` (1: the demo action was drawn by eps; old demo
+  files load as 0); the batch's `margin` mask = demo and not rand, and
+  update_frames applies the margin loss (and its logged mean) only there;
+  random actions stay ordinary TD transitions. The rollouts record which
+  actions were random; escape_demos.py writes them. Regenerated
+  data/escape_demos.npz with the same seeds (30 min while dqfd4 trained:
+  3.2k steps/s meanwhile, logged as slow): the same 694 deaths / 1524
+  episodes / 304,800 transitions / states per horizon, 88,092 random
+  actions (28.9%). The frames differ from the first file: among survivors
+  with equal food the tie went to the first rollout to finish, which
+  depends on worker timing (unclear point: tie-break by rollout index
+  next time). The first file kept as runs/escape_demos_v1.npz.
+- 11:20 Supervisor eval @ 200M (2M into dqfd4, its 10M grid starts at
+  200M): 79.8% / 52% / levels 1.57.
+- 11:49 Stopped right after the 206M checkpoint (supervisor first, then
+  Ctrl-C; checkpoint.pt 206000001 loads), 11:50 `--resume` (tmux dqfd4) with
+  the new file (304,800 escape transitions loaded), supervisor restarted.
+  The run's step count, optimizer and config are kept; the replay refills.
+- 11:56 **Margin loss after the resume: 0.50-0.56** (was 2.0-2.2; dqfd3
+  with BC demos only 0.27); batch BC 4.7% / escape 10.2% / agent 85.2%;
+  4.08k steps/s; Q 107-109 (rising slowly from 104; watch).

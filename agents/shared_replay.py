@@ -81,6 +81,7 @@ FIELDS = {  # name: (per-slot shape suffix, dtype); obs / vec shapes are added
     "discn": ((), np.float32),  # gamma^k, 0 if terminated within the k steps
     "offn": ((), np.uint8),     # k: slots to the n-step bootstrap frame
     "valid": ((), np.uint8),    # 1: a final transition
+    "rand": ((), np.uint8),     # 1: a demo action that was random (escape demos): no margin loss
 }
 
 
@@ -129,6 +130,7 @@ class SharedReplay:
             # demo streams are never overwritten; agent rings: the first lap is free
             self.cleared[:] = self.sizes
             self.valid[:] = 0
+            self.rand[:] = 0
 
     @classmethod
     def create(cls, agent_sizes, demo_sizes=(), planes=35, vec_dim=3, demo_groups=None):
@@ -186,7 +188,10 @@ class SharedReplay:
             if not np.array_equal(z["sizes"], self.sizes[a:b]):
                 raise ValueError(f"{path}: demo streams {z['sizes']} != {self.sizes[a:b]}")
             for k in self.DEMO_ARRAYS:
-                getattr(self, k)[lo:hi] = z[k]
+                if k == "rand" and k not in z:  # older demo files: no random actions
+                    getattr(self, k)[lo:hi] = 0
+                else:
+                    getattr(self, k)[lo:hi] = z[k]
             self.written[a:b] = z["written"]
             self.final[a:b] = z["final"]
 
@@ -444,7 +449,9 @@ class Sampler:
                 "obs1": r.obs[nxt1], "vec1": r.vec[nxt1], "rew1": r.rew1[idx],
                 "disc1": r.disc1[idx], "obsn": r.obs[nxtn], "vecn": r.vec[nxtn],
                 "ret": r.ret[idx], "discn": r.discn[idx],
-                "demo": idx < r.demo_frames}
+                "demo": idx < r.demo_frames,
+                # the margin loss: demo samples whose action was not random
+                "margin": (idx < r.demo_frames) & (r.rand[idx] == 0)}
 
     def update_priorities(self, idx, td_abs):
         """Skips slots zeroed since they were sampled (overwritten by now)."""

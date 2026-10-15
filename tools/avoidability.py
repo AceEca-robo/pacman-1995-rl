@@ -127,7 +127,7 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
     "best"}}, per rollout the tick of its death (1 = the first step) or None
     if it survived the window; "best": the surviving rollout that ate the
     most food (first one on a tie) as {"agent", "rollout", "food",
-    "actions"}, or None."""
+    "actions", "random" (per action: drawn by eps)}, or None."""
     ctx = mp.get_context("spawn")
     pipes, procs = [], []
     for _ in range(workers):
@@ -151,7 +151,8 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
         if key in res and not res[key]["eligible"]:
             return launch(w)
         rng = np.random.default_rng([deaths[di]["id"], k, agent, j + 1])
-        state[w] = {"job": job, "rng": rng, "t": 0, "phase": "start", "acts": [], "food": 0}
+        state[w] = {"job": job, "rng": rng, "t": 0, "phase": "start", "acts": [], "food": 0,
+                    "rand": []}
         pipes[w].send(("start", prefix_at(deaths[di], k)))
         return True
 
@@ -166,7 +167,7 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
             r[NAMES[agent]].append(tick)
             if tick is None and (r["best"] is None or s["food"] > r["best"]["food"]):
                 r["best"] = {"agent": NAMES[agent], "rollout": j, "food": s["food"],
-                             "actions": s["acts"]}
+                             "actions": s["acts"], "random": s["rand"]}
         done_jobs += 1
 
     try:
@@ -210,11 +211,14 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
                 s["obs"] = m
                 e = 0.0 if j < 0 else eps[agent]
                 if e and s["rng"].random() < e:
+                    s["rand"].append(True)
                     pipes[w].send(("step", int(s["rng"].integers(5))))
-                elif agent == HEUR:
-                    pipes[w].send(("step", None))
                 else:
-                    need_q.append(w)
+                    s["rand"].append(False)
+                    if agent == HEUR:
+                        pipes[w].send(("step", None))
+                    else:
+                        need_q.append(w)
             if need_q:
                 q = scorer.q_values(np.stack([state[w]["obs"]["grid"] for w in need_q]),
                                     np.stack([state[w]["obs"]["vec"] for w in need_q]))

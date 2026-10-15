@@ -33,6 +33,7 @@
  },
  "episodes": 1524,
  "transitions": 304800,
+ "random_actions": 88092,
  "frames": 306326,
  "escape_by_maze": {
   "1": 37,
@@ -86,5 +87,5 @@
   "head-on": 2,
   "no normal ghost": 1
  },
- "seconds": 852
+ "seconds": 1779
 }

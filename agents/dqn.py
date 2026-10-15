@@ -501,8 +501,10 @@ class DQNLearner:
 
     def update_frames(self, b, weights, lam_m=None):
         """b: a batch dict of agents/shared_replay.py Sampler; lam_m: the
-        margin weight for this update (default the config's). Returns device
-        tensors (loss, mean max Q, |n-step TD| per sample, demo margin loss)."""
+        margin weight for this update (default the config's). The margin
+        loss applies to b["margin"] (demo samples without a random action;
+        default b["demo"]). Returns device tensors (loss, mean max Q, |n-step
+        TD| per sample, margin loss over those samples)."""
         self._apply_conv_request()
         if {"cell_safety", "safe_exits"} & set(self.decode.extras):
             self._safety_check(b)
@@ -511,7 +513,8 @@ class DQNLearner:
             self._t(np.concatenate([b[k] for k in frames])),
             self._t(np.concatenate([b["vec" + k[3:]] for k in frames])),
             self._t(b["act"], torch.long), self._t(b["rew1"]), self._t(b["disc1"]),
-            self._t(b["ret"]), self._t(b["discn"]), self._t(b["demo"], torch.float32),
+            self._t(b["ret"]), self._t(b["discn"]),
+            self._t(b.get("margin", b["demo"]), torch.float32),  # margin loss on these
             self._t(weights), self._t(self.lam_m if lam_m is None else lam_m, torch.float32))
         self._step(loss)
         return loss.detach(), mean_q, td, je

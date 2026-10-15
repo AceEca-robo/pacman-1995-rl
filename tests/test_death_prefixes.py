@@ -154,7 +154,8 @@ def test_escape_demo_episodes(recorded, tmp_path):
                 obs, _, _, _, info = e.step(a)
                 acts.append(a)
                 food += info["events"]["eaten_dot"] + info["events"]["eaten_energizer"]
-            best.append((di, 40, {"actions": acts, "food": food}))
+            best.append((di, 40, {"actions": acts, "food": food,
+                                  "random": [t % 3 == 0 for t in range(20)]}))
     finally:
         e.close()
     arrays, meta = build_demos(env_cfg, 5, 0.995, deaths, best, 20)
@@ -162,6 +163,9 @@ def test_escape_demo_episodes(recorded, tmp_path):
     v = arrays["valid"].astype(bool)
     assert (arrays["offn"][v] >= 1).all() and (arrays["offn"][v] <= 5).all()
     assert np.allclose(arrays["disc1"][v], 0.995)  # no terminal: truncated episodes
+    # the random flags sit on the episodes' transitions, in order
+    want = [t % 3 == 0 for t in range(20)]
+    assert arrays["rand"][v].tolist() == want + want and not arrays["rand"][~v].any()
     np.savez(tmp_path / "esc.npz", **arrays)
     r = SharedReplay.create([64], [300, int(arrays["sizes"][0])], arrays["obs"].shape[1],
                             arrays["vec"].shape[1], demo_groups=[1, 1])

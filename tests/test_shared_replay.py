@@ -323,6 +323,32 @@ def test_margin_loss_only_on_demo():
     assert float(loss.detach()) == pytest.approx(float(want) / 2, rel=1e-5)
 
 
+def test_margin_loss_skips_random_demo_actions(replay):
+    """Escape demos: a demo action marked random (the replay's "rand") gets
+    no margin loss; update_frames uses the batch's "margin" mask."""
+    from agents.dqn import DQNLearner
+    r = replay([64], demo_sizes=[100])
+    drive(StreamWriter(r, [0], 3, 0.9), 1, 80, np.random.default_rng(3))
+    r.rand[:r.demo_frames:2] = 1
+    s = Sampler(r, 0.0, 1e-6, guard=16, n=3)
+    s.register()
+    b, idx, _ = s.sample(np.random.default_rng(0), 32, 0.4, demo_frac=1.0)
+    assert b["demo"].all() and np.array_equal(b["margin"], r.rand[idx] == 0)
+    torch.manual_seed(0)
+    learner = DQNLearner(dqfd_cfg(lambda_1step=0.0, lambda_nstep=0.0), "cpu")
+    rng = np.random.default_rng(1)
+    fb = frame_batch(rng, 16, None, np.ones(16, bool))
+    fb["margin"] = np.arange(16) % 2 == 0
+    w = np.ones(16, np.float32)
+    with torch.no_grad():
+        q = learner.online(learner.decode(learner._t(fb["obs"])), learner._t(fb["vec"]))
+    je_all = large_margin(q, learner._t(fb["act"], torch.long), 0.8)
+    loss, _, _, je = learner.update_frames(fb, w)
+    m = learner._t(fb["margin"], torch.float32)
+    assert float(je) == pytest.approx(float((je_all * m).sum() / m.sum()), rel=1e-4)
+    assert float(loss) == pytest.approx(float((je_all * m).mean()), rel=1e-4)
+
+
 def test_margin_loss_learns_demo_actions():
     """Updates on a demo batch make the demo actions the greedy ones."""
     from agents.dqn import DQNLearner

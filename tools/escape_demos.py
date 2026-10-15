@@ -21,7 +21,10 @@ demo episode.
    hunger limit or prefixes) and written as one episode (truncated after
    the window, so its last transitions bootstrap) with the config's n_step
    and gamma, in the format of SharedReplay.save_demo (one stream), plus
-   per-episode metadata arrays ep_*. The replay checks that the episode
+   per-episode metadata arrays ep_*; the replay field "rand" marks the
+   transitions whose action was drawn by eps (no margin loss on them,
+   agents/dqn.py update_frames; they still count as TD transitions). The
+   replay checks that the episode
    loses no life and eats the same food as the rollout.
 """
 
@@ -94,6 +97,7 @@ def build_demos(env_cfg, n_step, gamma, deaths, best, window):
     env = PacmanEnv(config=env_cfg)
     extras = env.grid_extras
     meta = []
+    rand = np.zeros(size, np.uint8)
     try:
         stream = StreamWriter(replay, [0], n_step, gamma)
 
@@ -108,8 +112,12 @@ def build_demos(env_cfg, n_step, gamma, deaths, best, window):
 
         obs = start(0)
         stream.begin(*packed(obs))
+        base = 0  # the episode's first frame: its transitions are base .. base + len - 1
         for i, (di, k, b) in enumerate(best):
             acts, food, deaths_seen = b["actions"], 0, 0
+            flags = b.get("random") or [False] * len(acts)
+            assert len(flags) == len(acts)
+            rand[base:base + len(acts)] = flags
             for t, a in enumerate(acts):
                 obs, rew, term, trunc, info = env.step(a)
                 ev = info["events"]
@@ -129,9 +137,12 @@ def build_demos(env_cfg, n_step, gamma, deaths, best, window):
                                 [False], [True], g, v)
             if deaths_seen or food != b["food"] or len(acts) != window:
                 raise RuntimeError(f"escape replay of death {di} at T-{k} diverged")
+            assert replay.valid[base:base + len(acts)].all() and not replay.valid[base + len(acts)]
+            base += len(acts) + 1
             d = deaths[di]
             meta.append({"death": d["id"], "horizon": k, "food": food, "maze": d["maze"],
                          "seed": d["seed"], "kind": d["kind"]})
+        replay.rand[:size] = rand
         arrays = {k: getattr(replay, k)[:replay.demo_frames].copy()
                   for k in SharedReplay.DEMO_ARRAYS}
         arrays.update(sizes=replay.sizes[:1].copy(), written=replay.written[:1].copy(),
@@ -211,6 +222,7 @@ def main():
         "states_not_eligible": sum(not r["eligible"] for r in res.values()),
         "states_with_escape": dict(sorted(Counter(k for _, k, _ in best).items())),
         "episodes": len(best), "transitions": int(arrays["valid"].sum()),
+        "random_actions": int((arrays["rand"] & arrays["valid"]).sum()),
         "frames": int(arrays["sizes"].sum()),
         "escape_by_maze": dict(sorted(Counter(deaths[di]["maze"] for di in with_exit).items())),
         "deaths_by_maze": dict(sorted(Counter(d["maze"] for d in deaths).items())),
