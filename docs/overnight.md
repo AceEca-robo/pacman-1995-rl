@@ -2377,3 +2377,4 @@ crash, conservative choice + note when unclear).
 - 13:00 Health: dqfd4: 219940019 steps, 4,088 steps/s, Q 107.6, NaN no, disk 27 GB, tmux up  ok;
   margin 0.48. 40-game evals 212-218M: 78.0-80.5%, min 45-60%, none kept.
 - 14:00 watch: dqfd4 231.43M steps, 3,812 steps/s, Q 106.1, NaN no, disk 27 GB, ok. Supervisor eval @ 220M: per-maze mean 76.7%, min 40%, levels 1.27 (down from 80.0% / 57% at 210M). keep_good 40-game evals 224–230M: 75.2–78.7%, none kept. Margin 0.55. A downward drift since the resume with the rand-masked escape file; not a supervisor plateau yet, keep running to the 258M decision.
+- 15:00 watch: dqfd4 243.06M steps, 3,689 steps/s, Q 103.3, NaN no, disk 27 GB, ok. Supervisor evals 230M 76.4% / 50% / 1.43, 240M 76.7% / 45% / 1.45: flat at ~76.5% since the 220M drop, below the 200–210M level (~80%). keep_good 40-game evals 236–242M: 75.3–79.5%, none kept. Margin 0.53. The supervisor's decision comes at 258M.
