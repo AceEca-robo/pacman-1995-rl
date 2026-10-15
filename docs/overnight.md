@@ -2178,3 +2178,7 @@ crash, conservative choice + note when unclear).
   78.8% / 51% / 1.54; 228M 78.6% / 57% / 1.67** — none above best_v04
   (81.8% / 67% / 1.48) on the mean; the 40-game sets run 1-3 points
   optimistic, as with dqfd2.
+- 03:00 Health ok: dqfd3 246.0M, 4.08k steps/s, Q 97.7, no NaN, disk 28 GB.
+  40-game evals 234-244M: 75.5-81.4%, min 40-60%, none kept since 232M.
+  Supervisor 240M 81.2% / 52% / 1.55. Final protocol 232M 79.8% / 54% /
+  1.69 (level 1 cleared 85%). End of the 60M leg (258M) expected ~03:50.
