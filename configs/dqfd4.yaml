@@ -1,0 +1,41 @@
+# dqfd4: best_v04 (dqfd2@198M, runs/best_v04/best.pt) continued on escapes
+# from its own deaths (2026-10-15 plan; not started). The avoidability
+# rollouts (tools/avoidability.py, docs/results.md) showed that best_v04's
+# deaths are still avoidable 80-160 ticks before them and mostly lost at
+# 20-40 ticks, where dqfd3's death prefixes started. So:
+# - half the resets replay a prefix: 80% best_v04's death prefixes cut back
+#   to a uniform 80..150 ticks before the death (within the death's life;
+#   data/death_windows_v04.json, tools/escape_demos.py), 20% the heuristic
+#   endgame prefixes of all 16 mazes;
+# - a second demo group: escape demos (data/escape_demos.npz,
+#   tools/escape_demos.py): from 80, 100 and 120 ticks before each death,
+#   the best of 40 best_v04 eps-0.3 continuations that loses no life in
+#   200 ticks, as 200-step demo episodes (truncated);
+# - 15% demo samples per batch, 2/3 escape demos and 1/3 the BC demos
+#   (demo_safety_exits_n5.npz), margin loss weight 1 on both.
+# Everything else as dqfd3: the safe-exits plane (the first conv widened
+# with zeros), hunger 600 as truncation, n_step 5, gamma 0.995, eps 0.01.
+# Start with: train.py --run-name dqfd4 --config configs/dqfd4.yaml
+#   --resume-from runs/best_v04/best.pt; later legs --resume --extend-steps.
+base: dqfd3.yaml
+total_steps: 258000016    # best_v04 (198000002) + 60M
+dqfd:
+  demo_file: runs/dqfd_demo/demo_safety_exits_n5.npz
+  escape_file: data/escape_demos.npz
+  demo_shares: [0.3333333333, 0.6666666667]   # BC demos, escape demos
+  lambda_margin: 1.0
+  anneal:                    # fixed: 15% demo samples per batch, margin weight 1
+    from_step: 0
+    steps: 1
+    demo_frac: [0.15, 0.15]
+    lambda_margin: [1.0, 1.0]
+env_config:
+  obs:
+    cell_safety: true
+    safe_exits: true
+  prefix_prob: 0.5
+  prefix_mix:
+    - {file: data/death_windows_v04.json, weight: 0.8, before_death: [80, 150]}
+    - {file: data/endgame_prefixes_all.json, weight: 0.2}
+  hunger_limit: 600
+  hunger_mode: truncate

@@ -75,7 +75,9 @@ def _worker(conn, obs_cfg):
             elif cmd == "step":  # arg: an action, or None for the heuristic's
                 a = heur.act(obs) if arg is None else arg
                 obs, _, term, _, info = env.step(int(a))
-                reply(obs, death=bool(info["events"]["death"]), done=bool(term))
+                ev = info["events"]
+                reply(obs, death=bool(ev["death"]), done=bool(term), action=int(a),
+                      food=int(ev["eaten_dot"] + ev["eaten_energizer"]))
             elif cmd == "close":
                 break
     except (KeyboardInterrupt, EOFError):
@@ -107,21 +109,25 @@ def prefix_at(d, k):
             "lives": d["lives"], "actions": d["actions"][:n]}
 
 
-def jobs_for(deaths, horizons, rollouts):
+def jobs_for(deaths, horizons, rollouts, agents=(AGENT, HEUR), greedy=True):
     for di, d in enumerate(deaths):
         for k in horizons:
             if k > d["level_tick"] - 1:
                 continue
-            yield (di, k, AGENT, -1)  # greedy check
-            for agent in (AGENT, HEUR):
+            if greedy:
+                yield (di, k, AGENT, -1)  # greedy check
+            for agent in agents:
                 for j in range(rollouts):
                     yield (di, k, agent, j)
 
 
-def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_every=60):
-    """-> {(di, k): {"eligible", "greedy_death_tick", "agent": [..], "heuristic": [..]}},
-    per rollout the tick of its death (1 = the first step) or None if it
-    survived the window."""
+def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_every=60,
+        agents=(AGENT, HEUR), greedy=True):
+    """-> {(di, k): {"eligible", "greedy_death_tick", "agent": [..], "heuristic": [..],
+    "best"}}, per rollout the tick of its death (1 = the first step) or None
+    if it survived the window; "best": the surviving rollout that ate the
+    most food (first one on a tie) as {"agent", "rollout", "food",
+    "actions"}, or None."""
     ctx = mp.get_context("spawn")
     pipes, procs = [], []
     for _ in range(workers):
@@ -130,7 +136,7 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
         pr.start()
         pipes.append(a)
         procs.append(pr)
-    jobs = jobs_for(deaths, horizons, rollouts)
+    jobs = jobs_for(deaths, horizons, rollouts, agents, greedy)
     res = {}
     state = {}  # worker -> rollout state
     t0 = last = time.time()
@@ -145,18 +151,22 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
         if key in res and not res[key]["eligible"]:
             return launch(w)
         rng = np.random.default_rng([deaths[di]["id"], k, agent, j + 1])
-        state[w] = {"job": job, "rng": rng, "t": 0, "phase": "start"}
+        state[w] = {"job": job, "rng": rng, "t": 0, "phase": "start", "acts": [], "food": 0}
         pipes[w].send(("start", prefix_at(deaths[di], k)))
         return True
 
     def finish(w, tick):
         nonlocal done_jobs
-        di, k, agent, j = state.pop(w)["job"]
+        s = state.pop(w)
+        di, k, agent, j = s["job"]
         r = res[(di, k)]
         if j < 0:
             r["greedy_death_tick"] = tick
         else:
             r[NAMES[agent]].append(tick)
+            if tick is None and (r["best"] is None or s["food"] > r["best"]["food"]):
+                r["best"] = {"agent": NAMES[agent], "rollout": j, "food": s["food"],
+                             "actions": s["acts"]}
         done_jobs += 1
 
     try:
@@ -179,7 +189,7 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
                     ok = m["level"] == d["level"] and m["lives"] == d["lives"]
                     if key not in res:
                         res[key] = {"eligible": ok, "greedy_death_tick": None,
-                                    "agent": [], "heuristic": []}
+                                    "agent": [], "heuristic": [], "best": None}
                     if not ok:
                         state.pop(w)
                         launch(w)
@@ -187,6 +197,8 @@ def run(scorer, obs_cfg, deaths, horizons, rollouts, window, eps, workers, log_e
                     s["phase"] = "run"
                 else:
                     s["t"] += 1
+                    s["acts"].append(m["action"])
+                    s["food"] += m["food"]
                     if m["death"] or m["done"]:
                         finish(w, s["t"] if m["death"] else None)
                         launch(w)
@@ -317,7 +329,8 @@ def main():
         json.dump({"args": vars(args), "seconds": round(time.time() - t0), "summary": rows,
                    "full_deaths": len(full),
                    "deaths": [{k: v for k, v in d.items() if k != "actions"} for d in deaths],
-                   "results": [{"death": di, "horizon": k, **r} for (di, k), r in res.items()]},
+                   "results": [{"death": di, "horizon": k, **{x: v for x, v in r.items() if x != "best"}}
+                               for (di, k), r in res.items()]},
                   f)
     print("| horizon | subset | deaths | agent >=1 | agent >=25% | heur >=1 | heur >=25% "
           "| either >=1 | either >=25% | greedy dies on time |")

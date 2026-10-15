@@ -2294,3 +2294,40 @@ crash, conservative choice + note when unclear).
   lost), not T-20/T-40 (dqfd3), where most states were already lost.
 - The avoidability tool on dqfd3 or any later net: the curve should shift
   right if a net learns to avoid squeezes earlier.
+
+## 2026-10-15 day: escape demos and dqfd4
+
+- 10:44 `tools/escape_demos.py` (escape demos, plan step 1): all 1023
+  recorded deaths of best_v04 (data/death_prefixes_v04.json). (1) Every
+  death's life length ("life_tick", one replay each): 874 deaths had lived
+  >= 80 ticks -> data/death_windows_v04.json (for the T-80..T-150 prefix
+  window). (2) From T-80, T-100 and T-120 (inside the life), 40 best_v04
+  continuations with eps 0.3 (tools/avoidability.py run). (3) The best
+  survivor per state (200 ticks without a lost life; all survivors last the
+  window, so the tie-break decides: most food) replayed in dqfd4's env
+  (obs with safe_exits, training rewards, no hunger limit) and written as a
+  200-step truncated demo episode with n 5 / gamma 0.995, the
+  SharedReplay.save_demo format (one stream) + ep_* metadata.
+- 10:58 **Escape demos: 694 of 1023 deaths gave an escape** (of 872 with a
+  life >= 80 ticks: 80%); states with an escape: T-80 502 of 872, T-100
+  510 of 810, T-120 512 of 762; **1524 episodes, 304,800 transitions**
+  (data/escape_demos.npz, 19 MB; data/escape_demos_summary.json). By kind:
+  520 of 824 squeezes, 159 of 176 "supertime ran out". By maze 22-62 deaths
+  with an escape (worst 3: 22 of 42, 13: 28 of 48). Check: n-step returns
+  equal the recomputed sums on 20k transitions; the replay check (no lost
+  life, same food) passed for every episode. 14 minutes.
+- Decision (not in the prompt): the escape episodes keep the eps-0.3
+  rollout's random actions as demo actions (they are part of the escape;
+  the margin loss pushes towards them too). Noted under unclear points.
+- configs/dqfd4.yaml (plan step 2): `dqfd.escape_file` (a second demo
+  group: its own demo streams, SharedReplay demo_groups, load_demo(group)),
+  `dqfd.demo_shares [1/3, 2/3]` (Sampler: the demo samples split between
+  the groups, PER within each, importance weights per segment), demo_frac
+  0.15, margin weight 1 on all demo samples (the margin itself 4, as
+  before). prefix_mix entry `before_death: [80, 150]` (env: a death prefix
+  cut back to a uniform 80..150 ticks before the death, at most its
+  life_tick; only level and lives checked) 0.8 + endgame prefixes 0.2.
+  The learner prints the batch's BC / escape / agent shares (updates 1,
+  1000, every 100k). Tests: demo groups sampling, window cut and resets,
+  escape episodes -> demo group (115 passed). No smoke run of train.py
+  with escape_file was done (training was not to be started then).

@@ -95,6 +95,14 @@ class SharedReplay:
         self.bases = np.concatenate([[0], np.cumsum(self.sizes)[:-1]]).astype(np.int64)
         self.n_demo = spec["n_demo"]  # the first n_demo streams are demo streams
         self.demo_frames = int(self.sizes[:self.n_demo].sum())
+        # demo groups (e.g. BC demos, escape demos): consecutive runs of demo
+        # streams; group_bounds[i]..group_bounds[i + 1] are group i's frames
+        groups = spec.get("demo_groups") or ([self.n_demo] if self.n_demo else [])
+        if sum(groups) != self.n_demo:
+            raise ValueError(f"demo groups {groups} != {self.n_demo} demo streams")
+        ends = np.cumsum(groups).astype(np.int64)
+        self.group_streams = np.concatenate([[0], ends]).astype(np.int64)
+        self.group_bounds = np.array([0] + [int(self.sizes[:e].sum()) for e in ends], np.int64)
         self.frames = int(self.sizes.sum())
         shapes = {"obs": ((self.frames, self.planes, PACKED), np.uint8),
                   "vec": ((self.frames, self.vec_dim), np.float32),
@@ -123,9 +131,13 @@ class SharedReplay:
             self.valid[:] = 0
 
     @classmethod
-    def create(cls, agent_sizes, demo_sizes=(), planes=35, vec_dim=3):
+    def create(cls, agent_sizes, demo_sizes=(), planes=35, vec_dim=3, demo_groups=None):
+        """demo_groups: the number of demo streams of each demo group, in
+        order (default one group)."""
         spec = {"sizes": [int(s) for s in list(demo_sizes) + list(agent_sizes)],
                 "n_demo": len(demo_sizes), "planes": planes, "vec_dim": vec_dim}
+        if demo_groups:
+            spec["demo_groups"] = [int(g) for g in demo_groups]
         return cls(spec, create=True)
 
     @classmethod
@@ -166,17 +178,22 @@ class SharedReplay:
             np.savez_compressed(f, **d)  # the bit planes are mostly zeros
         os.replace(tmp, path)
 
-    def load_demo(self, path):
+    def load_demo(self, path, group=0):
+        """A demo file (save_demo) into the streams of demo group `group`."""
+        a, b = self.group_streams[group], self.group_streams[group + 1]
+        lo, hi = self.group_bounds[group], self.group_bounds[group + 1]
         with np.load(path) as z:
-            if not np.array_equal(z["sizes"], self.sizes[:self.n_demo]):
-                raise ValueError(f"{path}: demo streams {z['sizes']} != {self.sizes[:self.n_demo]}")
+            if not np.array_equal(z["sizes"], self.sizes[a:b]):
+                raise ValueError(f"{path}: demo streams {z['sizes']} != {self.sizes[a:b]}")
             for k in self.DEMO_ARRAYS:
-                getattr(self, k)[:self.demo_frames] = z[k]
-            self.written[:self.n_demo] = z["written"]
-            self.final[:self.n_demo] = z["final"]
+                getattr(self, k)[lo:hi] = z[k]
+            self.written[a:b] = z["written"]
+            self.final[a:b] = z["final"]
 
-    def demo_transitions(self):
-        return int(self.valid[:self.demo_frames].sum())
+    def demo_transitions(self, group=None):
+        lo, hi = (0, self.demo_frames) if group is None else \
+            (self.group_bounds[group], self.group_bounds[group + 1])
+        return int(self.valid[lo:hi].sum())
 
 
 class StreamWriter:
@@ -291,13 +308,31 @@ class StreamWriter:
         self.r.final[s] = first_pending
 
 
+def _split(k, shares):
+    """k samples split by shares (largest remainders), a list of ints."""
+    raw = np.asarray(shares, np.float64) * k
+    out = np.floor(raw).astype(int)
+    for i in np.argsort(-(raw - out))[:k - out.sum()]:
+        out[i] += 1
+    return out.tolist()
+
+
 class Sampler:
     """Learner side: PER over the final transitions of all streams
     (proportional, as agents/dqn.py PrioritizedReplayBuffer; alpha 0 =
     uniform). Demo transitions get eps_demo on top of |TD| + eps."""
 
-    def __init__(self, replay, alpha, eps, eps_demo=0.0, guard=1024, n=3):
+    def __init__(self, replay, alpha, eps, eps_demo=0.0, guard=1024, n=3, demo_shares=None):
+        """demo_shares: per demo group, its share of the demo samples (sum 1;
+        default: PER over the whole demo part)."""
         self.r = replay
+        if demo_shares is not None:
+            demo_shares = np.asarray(demo_shares, np.float64)
+            if len(demo_shares) != len(replay.group_bounds) - 1 or \
+                    abs(demo_shares.sum() - 1) > 1e-6:
+                raise ValueError(f"demo_shares {demo_shares} for "
+                                 f"{len(replay.group_bounds) - 1} demo groups")
+        self.demo_shares = demo_shares
         self.alpha, self.eps, self.eps_demo = alpha, eps, eps_demo
         if (guard + n + 1 > self.r.sizes[self.r.n_demo:]).any():
             raise ValueError("agent streams must be longer than guard + n_step")
@@ -341,39 +376,60 @@ class Sampler:
     def sample(self, rng, batch, beta, demo_frac=None):
         """-> (batch dict of numpy arrays, slots, importance weights).
         demo_frac: a fixed share of the batch from the demo slots (PER within
-        the demo part and within the agent part; the importance weights use
-        the resulting probabilities); None: PER over everything."""
+        the demo part and within the agent part; with demo_shares, the demo
+        samples split between the demo groups by them, PER within each; the
+        importance weights use the resulting probabilities); None: PER over
+        everything."""
         total = self.tree.total
         demo_mass = self.tree.prefix_sum(self.r.demo_frames) if demo_frac is not None else 0.0
         if demo_frac is None or demo_mass <= 0 or demo_mass >= total:
             prefix = (np.arange(batch) + rng.random(batch)) * (total / batch)  # stratified
-            share = None
-        else:  # demo slots are the first leaves: prefixes below demo_mass hit them
-            k = min(batch, max(0, int(round(demo_frac * batch))))
-            share = k / batch
+            seg = None
+        else:
+            # segments of leaves: the demo groups (or the whole demo part),
+            # then the agent part; k_i samples stratified within segment i
+            k_demo = min(batch, max(0, int(round(demo_frac * batch))))
+            if self.demo_shares is None:
+                bounds, shares = [0, self.r.demo_frames], np.ones(1)
+            else:
+                bounds, shares = list(self.r.group_bounds), self.demo_shares
+            masses = [self.tree.prefix_sum(int(b)) if b else 0.0 for b in bounds]
+            # a demo group without transitions yet: its share goes to the others
+            shares = np.where(np.diff(masses) > 0, shares, 0.0)
+            ks = _split(k_demo, shares / shares.sum())
+            bounds.append(self.r.frames)
+            masses.append(total)
+            ks.append(batch - k_demo)
+            seg = (np.array(bounds), np.array(masses), np.array(ks))
             prefix = np.concatenate([
-                (np.arange(k) + rng.random(k)) * (demo_mass / max(k, 1)),
-                demo_mass + (np.arange(batch - k) + rng.random(batch - k))
-                * ((total - demo_mass) / max(batch - k, 1))])
+                lo + (np.arange(k) + rng.random(k)) * ((hi - lo) / max(k, 1))
+                for lo, hi, k in zip(masses, masses[1:], ks)])
         idx = np.minimum(self.tree.find(prefix), self.r.frames - 1)
         p = self.tree.get(idx)
         bad = p <= 0  # float rounding at a boundary: take another sample's slot
+        if seg is not None:
+            # the segment each prefix was drawn for (a boundary slip into a
+            # neighbour segment counts as bad as well)
+            want = np.repeat(np.arange(len(seg[2])), seg[2])
+            part = np.searchsorted(seg[0], idx, side="right") - 1
+            bad |= part != want
         if bad.any():
             good = np.flatnonzero(~bad)
-            if share is not None:  # from the same part
-                demo = idx < self.r.demo_frames
-                for part in (True, False):
-                    b_, g_ = np.flatnonzero(bad & (demo == part)), good[demo[good] == part]
+            if seg is not None:  # from the same segment
+                for q in np.unique(want[bad]):
+                    b_, g_ = np.flatnonzero(bad & (want == q)), good[want[good] == q]
                     if len(b_) and len(g_):
                         idx[b_] = idx[g_[rng.integers(len(g_), size=len(b_))]]
             else:
                 idx[bad] = idx[good[rng.integers(len(good), size=int(bad.sum()))]]
             p = self.tree.get(idx)
-        if share is None:
+        if seg is None:
             prob = p / total
         else:
-            demo = idx < self.r.demo_frames
-            prob = np.where(demo, share * p / demo_mass, (1 - share) * p / (total - demo_mass))
+            bounds, masses, ks = seg
+            part = np.searchsorted(bounds, idx, side="right") - 1
+            seg_mass = np.diff(masses)[part]
+            prob = (ks[part] / batch) * p / np.maximum(seg_mass, 1e-12)
         w = (self.n_valid * prob) ** -beta
         return self.gather(idx), idx, (w / w.max()).astype(np.float32)
 

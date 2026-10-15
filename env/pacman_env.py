@@ -250,6 +250,19 @@ def food_distance_field(cells, nbrs):
     return dist
 
 
+def cut_prefix(prefix, before_death):
+    """A death prefix (tools/record_death_prefixes.py, ending "before_death"
+    ticks before the death) cut back to `before_death` ticks before it; only
+    the level and the lives are checked on replay (the positions and the
+    food were recorded at the prefix's own end)."""
+    drop = before_death - int(prefix["before_death"])
+    if drop < 0:
+        raise ValueError("a prefix can only be cut back")
+    return {"seed": prefix["seed"], "start_level": prefix.get("start_level", prefix["level"]),
+            "level": prefix["level"], "lives": prefix.get("lives", 3),
+            "actions": prefix["actions"][:len(prefix["actions"]) - drop]}
+
+
 def parse_start_level(spec):
     """start_level config value -> (lo, hi): an int n gives (n, n),
     "random:a-b" a level drawn uniformly from a..b at each reset."""
@@ -338,6 +351,7 @@ class PacmanEnv(gym.Env):
         self._levels = parse_start_level(self.cfg.get("start_level", 1))
         self._prefix_prob = self.cfg.get("prefix_prob") or 0.0
         self._prefix_sets, self._prefix_weights = [], []  # one list of prefixes per file
+        self._prefix_windows = []  # per file: None, or (lo, hi) ticks before the death
         if self._prefix_prob:
             mix = self.cfg.get("prefix_mix") or [{"file": self.cfg["prefix_file"], "weight": 1.0}]
             for entry in mix:
@@ -346,7 +360,19 @@ class PacmanEnv(gym.Env):
                     data = json.load(f)
                 if data["n_actions"] != n_actions:
                     raise ValueError(f"{path} was recorded with {data['n_actions']} actions")
-                self._prefix_sets.append(data["prefixes"])
+                window = entry.get("before_death")
+                prefixes = data["prefixes"]
+                if window is not None:
+                    # death prefixes cut at a random distance before the
+                    # death, within the death's life ("life_tick")
+                    lo, hi = int(window[0]), int(window[1])
+                    prefixes = [p for p in prefixes if p["life_tick"] >= lo
+                                and p["before_death"] <= lo]
+                    if not prefixes:
+                        raise ValueError(f"{path}: no prefix with a life of {lo} ticks")
+                    window = (lo, hi)
+                self._prefix_sets.append(prefixes)
+                self._prefix_windows.append(window)
                 self._prefix_weights.append(float(entry["weight"]))
             w = np.array(self._prefix_weights)
             self._prefix_weights = w / w.sum()
@@ -448,6 +474,10 @@ class PacmanEnv(gym.Env):
                 int(self.np_random.choice(len(self._prefix_sets), p=self._prefix_weights))
             ps = self._prefix_sets[k]
             prefix = ps[int(self.np_random.integers(len(ps)))]
+            if self._prefix_windows[k] is not None:
+                lo, hi = self._prefix_windows[k]
+                cut = int(self.np_random.integers(lo, min(hi, prefix["life_tick"]) + 1))
+                prefix = cut_prefix(prefix, cut)
         if prefix is not None:
             self.replay_prefix(prefix)
             return self._after_reset(int(prefix["seed"]))

@@ -26,8 +26,8 @@ def frame_id(f):
 def replay():
     made = []
 
-    def make(agent_sizes, demo_sizes=()):
-        r = SharedReplay.create(agent_sizes, demo_sizes, PLANES, 3)
+    def make(agent_sizes, demo_sizes=(), demo_groups=None):
+        r = SharedReplay.create(agent_sizes, demo_sizes, PLANES, 3, demo_groups)
         made.append(r)
         return r
     yield make
@@ -217,6 +217,47 @@ def test_demo_save_load(replay, tmp_path):
     assert np.array_equal(r.final[:2], r2.final[:2])
     with pytest.raises(ValueError):
         replay([64], demo_sizes=[100, 100]).load_demo(str(tmp_path / "demo.npz"))
+
+
+def test_demo_groups_sampling(replay, tmp_path):
+    """Two demo groups (BC demos, escape demos): each is loaded into its own
+    streams, the demo samples split by demo_shares, and the importance
+    weights follow the per-segment probabilities."""
+    src = replay([64], demo_sizes=[300])
+    drive(StreamWriter(src, [0], 3, 0.9), 1, 250, np.random.default_rng(7), start=5 * 10**5)
+    src.save_demo(str(tmp_path / "escape.npz"))
+    r = replay([200, 200], demo_sizes=[300, 300, 300], demo_groups=[2, 1])
+    drive(StreamWriter(r, [0, 1], 3, 0.9), 2, 250, np.random.default_rng(3))
+    r.load_demo(str(tmp_path / "escape.npz"), group=1)
+    lo, hi = r.group_bounds[1], r.group_bounds[2]
+    assert np.array_equal(r.obs[lo:hi], src.obs[:src.demo_frames])
+    assert r.demo_transitions(1) == src.demo_transitions()
+    assert r.demo_transitions() == r.demo_transitions(0) + r.demo_transitions(1)
+    with pytest.raises(ValueError):
+        Sampler(r, 0.6, 1e-6, demo_shares=[0.5, 0.4], guard=16, n=3)
+    s = Sampler(r, 0.6, 1e-6, eps_demo=1.0, guard=16, n=3, demo_shares=[1 / 3, 2 / 3])
+    drive(StreamWriter(r, [3, 4], 3, 0.9, timeout=5), 2, 150, np.random.default_rng(1),
+          after=s.register, start=10**6)
+    s.register()
+    rng = np.random.default_rng(2)
+    s.update_priorities(np.flatnonzero(s.tree.get(np.arange(r.frames)) > 0),
+                        rng.random(s.n_valid) * 3)
+    m = [s.tree.prefix_sum(int(b)) if b else 0.0 for b in r.group_bounds] + [s.tree.total]
+    b, idx, w = s.sample(rng, 60, 1.0, demo_frac=0.15)  # 9 demo samples: 3 BC, 6 escape
+    part = np.searchsorted(list(r.group_bounds) + [r.frames], idx, side="right") - 1
+    assert np.bincount(part, minlength=3).tolist() == [3, 6, 51]
+    assert np.array_equal(b["demo"], part < 2)
+    ks = np.array([3, 6, 51])
+    prob = ks[part] / 60 * s.tree.get(idx) / np.diff(m)[part]
+    want = 1.0 / (s.n_valid * prob)
+    assert np.allclose(w, want / want.max(), rtol=1e-5)
+    seen = np.zeros(3, int)
+    for _ in range(200):
+        _, idx, w = s.sample(rng, 64, 0.4, demo_frac=0.15)
+        seen += np.bincount(np.searchsorted(list(r.group_bounds) + [r.frames], idx,
+                                            side="right") - 1, minlength=3)
+        assert np.isfinite(w).all()
+    assert seen.tolist() == [3 * 200, 7 * 200, 54 * 200]  # 10 demo: 3.33 / 6.67 -> 3 / 7
 
 
 def test_large_margin():

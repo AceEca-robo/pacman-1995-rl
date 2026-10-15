@@ -261,7 +261,9 @@ def learner_main(cfg, device, dims, replay_spec, ctrl_name, weights_name, n_para
         dq = cfg.get("dqfd") or {}
         sampler = Sampler(replay, per["alpha"] if per["enabled"] else 0.0, per["eps"],
                           dq.get("eps_demo", 0.0) if dq.get("enabled") else 0.0,
-                          guard=cfg.get("replay_guard") or 1024, n=cfg["n_step"])
+                          guard=cfg.get("replay_guard") or 1024, n=cfg["n_step"],
+                          demo_shares=dq.get("demo_shares") if dq.get("enabled")
+                          and dq.get("escape_file") else None)
         rng = np.random.default_rng(seed)
         cuda = str(device).startswith("cuda")
         sync_every = cfg.get("weight_sync_every") or 50
@@ -287,6 +289,7 @@ def learner_main(cfg, device, dims, replay_spec, ctrl_name, weights_name, n_para
 
         acc, acc_n = None, 0  # loss, Q, margin loss summed on the device
         demo_acc = 0.0  # demo share of the batches, summed on the CPU
+        group_n, group_updates = np.zeros(3, np.int64), 0  # samples per demo group (+ agent)
 
         def stats_out():
             nonlocal acc, acc_n, demo_acc
@@ -335,6 +338,16 @@ def learner_main(cfg, device, dims, replay_spec, ctrl_name, weights_name, n_para
                 st = torch.stack([loss, mq, je]).detach()
                 acc, acc_n = (st if acc is None else acc + st), acc_n + 1
                 demo_acc += float(np.mean(batch["demo"]))
+                if sampler.demo_shares is not None:
+                    group_n += np.bincount(np.searchsorted(replay.group_bounds, idx, side="right")
+                                           - 1, minlength=len(replay.group_bounds))[:3]
+                    group_updates += 1
+                    if group_updates in (1, 1000) or group_updates % 100_000 == 0:
+                        # shares of the batch from each demo group (and the rest)
+                        tot = max(group_n.sum(), 1)
+                        print(f"demo groups in the batch (update {group_updates}, cumulative): "
+                              f"BC {group_n[0] / tot:.1%}, escape {group_n[1] / tot:.1%}, "
+                              f"agent {group_n[2] / tot:.1%}", flush=True)
                 ctrl[DONE] += 1
                 ctrl[BUSY_S] += time.perf_counter() - t_busy
                 if int(ctrl[DONE]) % sync_every == 0:

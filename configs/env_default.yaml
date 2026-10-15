@@ -71,7 +71,11 @@ prefix_file: data/endgame_prefixes.json
 # a prefix reset picks a file by weight, then a prefix uniformly in it.
 # Prefixes may carry "start_level" (the game's start level, default
 # "level"), "lives" (default 3) and pacman/ghost cells at their end
-# (tools/record_death_prefixes.py); the replay checks them.
+# (tools/record_death_prefixes.py); the replay checks them. An entry with
+# before_death: [lo, hi] cuts each death prefix back to a uniform lo..hi
+# ticks before its death, at most its "life_tick" (ticks the death's life
+# had lasted; tools/escape_demos.py writes such a file); only the level and
+# the lives are checked then.
 prefix_mix: null
 
 # Level the game starts on (game --level): an int (1 = the original game),

@@ -761,12 +761,18 @@ def main():
     learner = buffer = replay = None
     if proc:
         # frames in shared memory: one ring per env, plus the demo streams
-        demo_sizes = []
+        demo_sizes, demo_groups = [], None
         if dq.get("enabled"):
             per_stream = int(np.ceil(dq["demo_transitions"] / n * 1.1)) + 64
             demo_sizes = [per_stream] * n
+            if dq.get("escape_file"):
+                # a second demo group (tools/escape_demos.py), its own streams
+                with np.load(os.path.join(ROOT, dq["escape_file"])) as z:
+                    esc_sizes = [int(x) for x in z["sizes"]]
+                demo_groups = [n, len(esc_sizes)]
+                demo_sizes += esc_sizes
         replay = SharedReplay.create([cfg["buffer_size"] // n] * n, demo_sizes,
-                                     n_planes(n_channels, extras), vec_dim)
+                                     n_planes(n_channels, extras), vec_dim, demo_groups)
     else:
         learner = DQNLearner(cfg, device, n_actions, n_channels, vec_dim)
         if "online" in init:
@@ -890,7 +896,13 @@ def main():
                     else os.path.join(run_dir, "demo.npz")
                 if os.path.exists(demo_path):
                     replay.load_demo(demo_path)
-                    print(f"demo: {replay.demo_transitions()} transitions from {demo_path}")
+                    print(f"demo: {replay.demo_transitions(0)} transitions from {demo_path}")
+                    if dq.get("escape_file"):
+                        replay.load_demo(os.path.join(ROOT, dq["escape_file"]), group=1)
+                        print(f"demo: {replay.demo_transitions(1)} escape transitions from "
+                              f"{dq['escape_file']}, demo shares {dq.get('demo_shares')}")
+                elif dq.get("escape_file"):
+                    raise SystemExit(f"{demo_path} missing: generate it without escape_file first")
                 else:
                     generate_demo(make_collector, cfg, replay, n_actions, seed, device)
                     replay.save_demo(demo_path)
