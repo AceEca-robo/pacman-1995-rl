@@ -2197,3 +2197,13 @@ crash, conservative choice + note when unclear).
 - 05:00 Health: dqfd3: 269820016 steps, 4,092 steps/s, Q 97.5, NaN no, disk 28 GB, tmux up  ok.
   40-game evals 258-268M: 75.2-79.4%, min 45-55%, none kept (drifting
   slightly down after the extension). Supervisor 260M 78.9% / 55% / 1.52.
+- 06:00 Health: dqfd3: 281860006 steps, 4,098 steps/s, Q 99.8, NaN no, disk 28 GB, tmux up  ok.
+  40-game evals 270-280M: 76.4-80.2%, min 38-55%, none kept; supervisor
+  270M 76.6% / 50% / 1.82, 280M 80.3% / 52% / 1.68. All five good_* (206,
+  220, 224, 228, 232M) already have the final protocol; none beats
+  best_v04's per-maze mean (81.8%).
+- 06:05 Decision: the death analysis is started now (tmux deaths05, 16 x 50
+  games, seeds 5000.., same as best_v04's report) on dqfd3@206M, the best
+  final-protocol per-maze mean (80.8%), so it finishes well before 07:30.
+  If a new good_* appears before the stop and beats it on the final
+  protocol, it is re-run if there is time.
