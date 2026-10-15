@@ -1306,3 +1306,25 @@ unsafe and safe_exits 0 says no exit anywhere, both outside the training
 distribution. Still: without cell_safety both nets break completely (21-27
 food per game), so the policy is built on it; safe_exits is used, but much
 less (-5 points mean, -12 on the worst maze, levels unchanged).
+
+## dqfd4: escape demos (2026-10-15)
+
+--resume-from best_v04; 15% of the batch demo (2/3 escape demos from
+best_v04's deaths at T-80/100/120, 1/3 BC), margin 1 (not on the escape
+demos' random actions after 206M), prefix_prob 0.5 (80% death windows
+T-80..T-150, 20% endgame). Stopped at 306M. Final protocol: 206M 80.4% /
+59% / levels 1.55, 246M 78.8% / 57% / 1.61 (best_v04 81.8% / 67% / 1.48).
+
+Deaths, 50 games per maze (seeds 5000.., `scripts/death_report.py`,
+radius 5; docs/dqfd4_deaths_{compare,mazes,summary}.png):
+
+| | best_v04 | dqfd4@206M | dqfd4@246M |
+|---|---|---|---|
+| cleared | 78.4% | 79.8% | 77.1% |
+| deaths per game | 1.45 | 1.44 | 1.44 |
+| squeezed per game | 1.210 (83.2%) | 1.214 (84.4%) | 1.183 (82.3%) |
+| supertime ran out per game | 0.214 (14.7%) | 0.191 (13.3%) | 0.219 (15.2%) |
+| < 20 food left | 26.8% | 31.7% | 30.6% |
+| in the life's first 200 ticks | 53.0% | 50.4% | 53.0% |
+
+The escape demos did not reduce the squeezes. best_v04 stays the best.

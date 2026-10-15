@@ -2385,3 +2385,18 @@ crash, conservative choice + note when unclear).
 - 18:00 watch: dqfd4 277.62M steps, 4,075 steps/s, Q 103.2, NaN no, disk 26 GB, ok. Supervisor eval @ 270M: 76.1% / 48% / 1.55. keep_good 270–276M: 74.5–78.3%, none kept. Margin 0.56. Since 220M the 10M evals sit at 76–79%, below the 200–210M start (~80%).
 - 19:00 watch: dqfd4 289.43M steps, 4,074 steps/s, Q 100.1, NaN no, disk 26 GB, ok. Supervisor eval @ 280M: 78.8% / 42% / 1.73. keep_good 282–288M: 77.8–81.1% (284M min 57%, not kept). Margin 0.53.
 - 20:00 watch: dqfd4 301.36M steps, 3,764 steps/s, Q 102.7, NaN no, disk 26 GB, ok. Supervisor eval @ 290M: 77.8% / 50% / 1.77. keep_good 294–300M: 75.3–77.8% (300M levels 2.08), none kept. Margin 0.57. The 308M decision in ~30 min.
+- 20:15 user: «стоп» (safe stop) plus a death report. Stopped sv_dqfd4, keep_dqfd4 and q06 (idle, nothing in progress), waited for the next 2M checkpoint (written 20:24:25) and killed the dqfd4 session (SIGHUP, exits through the finally blocks; checkpoint saves are atomic). runs/dqfd4/checkpoint.pt loads: steps 306000002 (target 308000016, so `--resume` would finish the last 2M). tmux is empty, no train.py processes. Left behind: runs/dqfd4/good.tmp (keep_good's copy of the 302M checkpoint it was evaluating, not kept; harmless).
+- dqfd4 summary: no checkpoint beats best_v04. Final protocol: 206M 80.4% / 59% / 1.55, 246M 78.8% / 57% / 1.61 (best_v04 81.8% / 67% / 1.48). The 10M supervisor evals fell from ~80% (200–210M) to 76–79% (220–300M) after the resume with the rand-masked escape file.
+- Deaths, 50 games per maze, seeds 5000 (`scripts/death_report.py`, radius 5; runs/v06_deaths, docs/dqfd4_deaths_{compare,mazes,summary}.png). Best dqfd4 by the final per-maze mean is 206M; 246M (the best trained with the rand-masked file) is added for reference:
+
+  | | best_v04 | dqfd4@206M | dqfd4@246M |
+  |---|---|---|---|
+  | cleared | 78.4% | 79.8% | 77.1% |
+  | deaths per game | 1.45 | 1.44 | 1.44 |
+  | squeezed per game | 1.210 (83.2%) | 1.214 (84.4%) | 1.183 (82.3%) |
+  | supertime ran out per game | 0.214 (14.7%) | 0.191 (13.3%) | 0.219 (15.2%) |
+  | < 20 food left | 26.8% | 31.7% | 30.6% |
+  | in the life's first 200 ticks | 53.0% | 50.4% | 53.0% |
+
+- Conclusion: the escape demos did not meet their goal. Squeezes per game stay at 1.18–1.21 (best_v04 1.21) and their share at 82–84% (83%); the −2% at 246M is inside the noise of 800 games, and it came with fewer cleared games. Imitating ε-perturbed escapes from T-80..120 states, at 10% of the batch, plus 80% of the prefix episodes on death windows, did not change how the agent dies. Unclear: whether the escapes are learnable from the observation at all (the avoidability study showed that a single random survivor exists, not that a consistent escape policy does); the demos are the luckiest of 40 noisy rollouts, so they may teach noise, not a rule.
+- Ideas for later: score the escape demos by how many of the 40 rollouts survive (keep the states with a consistent escape, >= 25%), or plan escapes by search (the game is deterministic) instead of ε luck.
