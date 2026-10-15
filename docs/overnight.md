@@ -2449,3 +2449,15 @@ with lookahead. No training tonight.
   best_v04 one skips without the checkpoint, ~90 s), a negative control
   (a sim that ignores "left" is caught), state() == json.loads(state_json()),
   clone independence.
+- 02:35 C port for the planner (the policy in the rollouts needs an
+  observation per rollout step): sim/_csim.c + sim/csim.py (ctypes, built
+  by gcc -O2 on import; `CSim` with PacmanSim's API, `SimBatch` = n sims in
+  one numpy array, stepped and observed in C; a sim is a 1,136-byte struct,
+  so a clone is a row copy). Also the observation in C (21 planes +
+  cell_safety, env/pacman_env.py `_obs`). Verified the same way: random and
+  sticky 150,000 steps each, best_v04 50 x 3000 twice (seeds 0.. and
+  2000..; the second run also compares the observation the agent got from
+  PacmanEnv with the C one at every step): 0 divergences; C obs == env
+  `_obs` on 30,020 sticky-policy states with and without cell_safety.
+  Speed, one core: 0.86M steps/s through ctypes one call per step, 12.7M
+  steps/s batched (1024 sims), 3M clones/s, 51-115k observations/s.

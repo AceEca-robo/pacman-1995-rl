@@ -11,7 +11,9 @@ sticky: keeps an action, a new random one with probability 0.1 per step
 (reaches energizers, eats ghosts); agent: a DQN checkpoint (greedy) plays
 through PacmanEnv and the sim follows its actions. Each game is --ticks
 steps (state lines) in one game process, through game overs. The game's
-raw JSON line and sim's state_json() must be byte-equal; the first
+raw JSON line and sim's state_json() must be byte-equal (with --sim c and
+--policy agent also the observation the agent got from PacmanEnv and the
+C sim's obs()); the first
 difference of a game is reported and the game stops there.
 """
 
@@ -144,12 +146,18 @@ def run_agent(args):
         sim.reset(s, level)
         res = {"seed": s, "level": level, "steps": 0, "diverged": False, "at": None,
                "diff": None, "game_line": None}
+        cell_safety = bool((agent.env_overrides.get("obs") or {}).get("cell_safety"))
         for t in range(args.ticks + 1):
             line = sim.state_json()
             if raw[-1] != line:
                 res.update(diverged=True, at=t, diff=diff_lines(raw[-1], line),
                            game_line=raw[-1].decode())
                 break
+            if args.sim == "c":     # the observation the agent saw, rebuilt in C
+                o = sim.obs(cell_safety)
+                if not (np.array_equal(o["grid"], obs["grid"]) and np.array_equal(o["vec"], obs["vec"])):
+                    res.update(diverged=True, at=t, diff=["observation differs"])
+                    break
             res["steps"] = t
             if t == args.ticks:
                 break
