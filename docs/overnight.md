@@ -2367,3 +2367,10 @@ crash, conservative choice + note when unclear).
 - 11:56 **Margin loss after the resume: 0.50-0.56** (was 2.0-2.2; dqfd3
   with BC demos only 0.27); batch BC 4.7% / escape 10.2% / agent 85.2%;
   4.08k steps/s; Q 107-109 (rising slowly from 104; watch).
+- 12:18 **First 10M eval (supervisor, 40 games) @ 210M: per-maze mean
+  80.0%, min 57%, levels from level 1 2.25** (best_v04 on the same games
+  80.6% / 62% / 1.60; dqfd3 @ 210M 77.2%). Kept by keep_good: 206M (81.1%
+  / 62%); its final protocol: 80.4% / 59% / levels 1.55 (best_v04 81.8 /
+  67 / 1.48) — trained 8M of its 8M with the first escape file (margin on
+  random actions too). Health 12:18: 211.4M, 3.73k steps/s, Q 104.9, NaN
+  no, disk 27 GB, margin 0.48.
