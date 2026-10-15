@@ -2419,3 +2419,7 @@ with lookahead. No training tonight.
   d = none `otherdir` is true and `newdir` draws one random() and leaves a
   non-direction, i.e. the ghost stands still (reported "S") until it sees
   pacman. The spec and the sim follow the compiled behaviour.
+- 02:15 Step 2, sim/glibc_random.py: glibc TYPE_3 random()/srandom() in
+  Python (ring of 31 values, r[31..33] = r[0..2], 310 dropped). Test: 10,000
+  values against ctypes libc.random() for 7 seeds incl. 0, 2^31-1 and
+  4e9 (tests/test_sim_random.py), all equal.
