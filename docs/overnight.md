@@ -2423,3 +2423,29 @@ with lookahead. No training tonight.
   Python (ring of 31 values, r[31..33] = r[0..2], 310 dropped). Test: 10,000
   values against ctypes libc.random() for 7 seeds incl. 0, 2^31-1 and
   4e9 (tests/test_sim_random.py), all equal.
+- 02:40 Step 3, sim/pacman_sim.py: `PacmanSim` with reset(seed, level)
+  (env seed, the game gets seed % (2^31-1) + 1 like PacmanEnv; or
+  raw_seed=), step(action) / advance(action) (env index U/D/L/R/N; one
+  step = one state line, two per tick while super), clone(), state() (the
+  bridge's JSON as a dict) and state_json() (the exact line as bytes). Plain
+  Python, written as the C++ main loop with a phase flag (after the first or
+  the super send) so that it clones. Speed (random actions, one core):
+  ~180k steps/s for advance(), ~500k clones/s, state_json() ~180k/s. The
+  50k target is met without C.
+- 02:55 Step 4, scripts/verify_sim.py + sim/verify.py: the game is run
+  directly over a socket (same --seed/--level as PacmanEnv) and every raw
+  line compared byte for byte with state_json(). **Results, all on the
+  first try: 0 divergences** —
+  random policy 50 games x 3000 = 150,000 steps; "sticky" random (keeps an
+  action, changes with p 0.1) 150,000; best_v04 (greedy, through
+  PacmanEnv, the sim follows its actions) 50 x 3000 = 150,000; best_v04 8
+  games x 20,000 from levels 13-16 = 160,000 (reaches levels > 16 with
+  the random maze). Branch coverage over the best_v04 runs: 260 levels
+  cleared (44 beyond 16), 232 game overs, 1,345 ghosts eaten, 68 bonuses
+  (7 points eaten, no life bonus eaten), 44k super extra moves. The
+  d = none branch (UB) never ran: a hunter's last-seen cell is always a
+  corner or junction (pacman left it sideways), so newdir always finds an
+  open side there. tests/test_sim.py: the three 50-game criteria (the
+  best_v04 one skips without the checkpoint, ~90 s), a negative control
+  (a sim that ignores "left" is caught), state() == json.loads(state_json()),
+  clone independence.
