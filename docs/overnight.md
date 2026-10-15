@@ -2408,7 +2408,7 @@ for state (same JSON lines from the same seed and actions), for planning
 with lookahead. No training tonight.
 
 - 01:45 Start. Housekeeping: removed runs/dqfd4/good.tmp (118 MB).
-- 02:05 Step 1, docs/sim_spec.md: the rules as implemented, the tick order
+- 01:52 Step 1, docs/sim_spec.md: the rules as implemented, the tick order
   and every random() call. Findings: all 16 mazes have 168 food + 4
   superfood, closed borders (no tunnels) and no dead-end cells; superfood
   gives no score and does not count towards clearing; the bonus survives
@@ -2419,11 +2419,11 @@ with lookahead. No training tonight.
   d = none `otherdir` is true and `newdir` draws one random() and leaves a
   non-direction, i.e. the ghost stands still (reported "S") until it sees
   pacman. The spec and the sim follow the compiled behaviour.
-- 02:15 Step 2, sim/glibc_random.py: glibc TYPE_3 random()/srandom() in
+- 01:56 Step 2, sim/glibc_random.py: glibc TYPE_3 random()/srandom() in
   Python (ring of 31 values, r[31..33] = r[0..2], 310 dropped). Test: 10,000
   values against ctypes libc.random() for 7 seeds incl. 0, 2^31-1 and
   4e9 (tests/test_sim_random.py), all equal.
-- 02:40 Step 3, sim/pacman_sim.py: `PacmanSim` with reset(seed, level)
+- 02:00 Step 3, sim/pacman_sim.py: `PacmanSim` with reset(seed, level)
   (env seed, the game gets seed % (2^31-1) + 1 like PacmanEnv; or
   raw_seed=), step(action) / advance(action) (env index U/D/L/R/N; one
   step = one state line, two per tick while super), clone(), state() (the
@@ -2432,7 +2432,7 @@ with lookahead. No training tonight.
   the super send) so that it clones. Speed (random actions, one core):
   ~180k steps/s for advance(), ~500k clones/s, state_json() ~180k/s. The
   50k target is met without C.
-- 02:55 Step 4, scripts/verify_sim.py + sim/verify.py: the game is run
+- 02:05 Step 4, scripts/verify_sim.py + sim/verify.py: the game is run
   directly over a socket (same --seed/--level as PacmanEnv) and every raw
   line compared byte for byte with state_json(). **Results, all on the
   first try: 0 divergences** —
