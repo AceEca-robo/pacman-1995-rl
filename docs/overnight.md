@@ -2384,3 +2384,4 @@ crash, conservative choice + note when unclear).
 - 17:00 watch: dqfd4 266.0M steps, 4,076 steps/s, Q 101.3, NaN no, disk 26 GB, ok. Supervisor eval @ 260M: 77.0% / 50% / 1.65. keep_good 258–264M: 77.0–79.4%, none kept. Margin 0.51.
 - 18:00 watch: dqfd4 277.62M steps, 4,075 steps/s, Q 103.2, NaN no, disk 26 GB, ok. Supervisor eval @ 270M: 76.1% / 48% / 1.55. keep_good 270–276M: 74.5–78.3%, none kept. Margin 0.56. Since 220M the 10M evals sit at 76–79%, below the 200–210M start (~80%).
 - 19:00 watch: dqfd4 289.43M steps, 4,074 steps/s, Q 100.1, NaN no, disk 26 GB, ok. Supervisor eval @ 280M: 78.8% / 42% / 1.73. keep_good 282–288M: 77.8–81.1% (284M min 57%, not kept). Margin 0.53.
+- 20:00 watch: dqfd4 301.36M steps, 3,764 steps/s, Q 102.7, NaN no, disk 26 GB, ok. Supervisor eval @ 290M: 77.8% / 50% / 1.77. keep_good 294–300M: 75.3–77.8% (300M levels 2.08), none kept. Margin 0.57. The 308M decision in ~30 min.
