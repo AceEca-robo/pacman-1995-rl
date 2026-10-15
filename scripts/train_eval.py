@@ -23,14 +23,14 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 from agents.bc import load_bc  # noqa: E402
 from agents.dqn import GridDecoder, QNetwork  # noqa: E402
-from env.pacman_env import PacmanEnv, grid_extras, load_env_config, obs_dims  # noqa: E402
+from env.pacman_env import CHANNELS, PacmanEnv, grid_extras, load_env_config, obs_dims  # noqa: E402
 from train import evaluate, load_config  # noqa: E402
 
 
 class Scorer:
     """q_values(packed, vecs) of a BC (logits) or DQN (Q values) checkpoint."""
 
-    def __init__(self, path, device):
+    def __init__(self, path, device, zero_planes=()):
         ck = torch.load(path, map_location=device, weights_only=False)
         self.device = device
         if "net" in ck:  # BC
@@ -42,10 +42,18 @@ class Scorer:
             self.net.load_state_dict(ck["learner"]["online"])
         env_cfg = ck.get("env_config") or {}
         self.decode = GridDecoder(device, obs_dims(env_cfg)[0], grid_extras(env_cfg))
+        extras = grid_extras(env_cfg)
+        missing = [n for n in zero_planes if n not in extras]
+        if missing:
+            raise ValueError(f"{path} has no plane {missing} (its extras: {extras})")
+        # ablation: these decoded planes are set to 0 before the network
+        self.zero = [len(CHANNELS) + extras.index(n) for n in zero_planes]
 
     @torch.no_grad()
     def q_values(self, packed, vecs):
         g = self.decode(torch.as_tensor(packed, device=self.device))
+        if self.zero:
+            g[:, self.zero] = 0
         return self.net(g, torch.as_tensor(vecs, device=self.device)).cpu().numpy()
 
 
@@ -60,6 +68,9 @@ def main():
     p.add_argument("--seed", type=int, default=None, help="eval_seed (default the config's)")
     p.add_argument("--seed-blocks", action="store_true",
                    help="maze lv on seeds seed + (lv - 1) * episodes .. (evaluate.py --seed-blocks)")
+    p.add_argument("--zero-plane", nargs="+", default=[], metavar="NAME",
+                   help="ablation: feed these optional planes (cell_safety, safe_exits, "
+                        "food_distance) as zeros")
     p.add_argument("--games-out", default=None, help="write every game's result here (JSON)")
     args = p.parse_args()
     cfg = load_config(args.config)
@@ -77,7 +88,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     envs = [PacmanEnv(config=eval_env_cfg) for _ in range(cfg.get("eval_envs") or 20)]
     try:
-        res = evaluate(Scorer(args.checkpoint, device), envs, cfg)
+        res = evaluate(Scorer(args.checkpoint, device, args.zero_plane), envs, cfg)
     finally:
         for e in envs:
             e.close()

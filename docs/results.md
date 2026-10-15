@@ -1253,3 +1253,56 @@ No dqfd3 checkpoint beats best_v04's per-maze mean (81.8%); all of them
 are better from level 1 (1.54-1.69 vs 1.48, inside the intervals). The
 squeezes per game barely move (1.21 -> 1.19) and their share rises (83 ->
 85%). Learning curve: docs/dqfd3_curve.png. best_v04 stays the best.
+
+## Avoidability of best_v04's deaths (2026-10-15)
+
+`tools/avoidability.py`: 300 random deaths from data/death_prefixes_v04.json;
+from the state k ticks before each, 40 continuations by best_v04 (eps 0.3)
+and 40 by the heuristic (eps 0.2), differing only in the action RNG; a
+continuation survives if it loses no life in 200 ticks. A horizon counts
+only if its state is in the death's level and life (deaths shortly after a
+respawn drop out at the long horizons). T-400 is a control: the greedy game
+lives >= 400 more ticks, so its rollouts measure how often the noise alone
+kills. The greedy replay died exactly k ticks later in 100% of the states.
+docs/v04_avoidability.png; 98k rollouts, 11 minutes.
+
+| horizon | deaths | best_v04: >= 1 survives | >= 25% survive | mean survival | heuristic: >= 1 | >= 25% | mean | either: >= 1 | >= 25% |
+|---|---|---|---|---|---|---|---|---|---|
+| T-20 | 300 | 29% | 1% | 2.1% | 25% | 1% | 2.0% | 37% | 2% |
+| T-40 | 286 | 42% | 2% | 4.0% | 36% | 3% | 4.2% | 48% | 4% |
+| T-80 | 255 | 57% | 3% | 5.5% | 56% | 9% | 8.2% | 67% | 11% |
+| T-120 | 222 | 68% | 9% | 8.9% | 64% | 19% | 10.6% | 76% | 23% |
+| T-160 | 188 | 74% | 12% | 11.1% | 72% | 20% | 14.2% | 82% | 26% |
+| T-400 (control) | 66 | 73% | 15% | 9.4% | 62% | 20% | 11.4% | 79% | 26% |
+
+On the 188 deaths eligible at every horizon up to T-160 the shares are 1-5
+points lower at T-20..T-120 (same shape).
+
+The noise is lethal by itself (control: only 79% of ordinary states have a
+surviving rollout, 26% have >= 25%), so ">= 25%" separates little; ">= 1
+survives" is the useful measure, and it is a lower bound on avoidability
+(random perturbations are a weak search). By it, a state 160 ticks before a
+death is as survivable as an ordinary one; from T-120 to T-20 the share
+falls from 76% to 37%. 63% of the deaths have no survivor at T-20, 52% at
+T-40, 33% at T-80, 24% at T-120, 18% at T-160 (control 21%).
+
+## Plane ablation (2026-10-15)
+
+`scripts/train_eval.py --zero-plane`: the decoded plane is fed as zeros;
+40 games per maze + 40 from level 1, seeds 1000.. (runs/ablate/summary.jsonl).
+
+| agent | per-maze mean | min | levels from level 1 |
+|---|---|---|---|
+| best_v04 | 80.6% | 62% | 1.60 |
+| best_v04, cell_safety = 0 | 0.0% | 0% | 0.00 |
+| dqfd3@206M | 81.2% | 60% | 1.85 |
+| dqfd3@206M, safe_exits = 0 | 76.2% | 48% | 1.85 |
+| dqfd3@206M, cell_safety = 0 | 0.0% | 0% | 0.00 |
+| dqfd3@206M, both = 0 | 0.0% | 0% | 0.00 |
+
+best_v04 has no safe-exits plane, so that ablation is on dqfd3@206M. A
+zero plane is not "no information": cell_safety 0 says every cell is
+unsafe and safe_exits 0 says no exit anywhere, both outside the training
+distribution. Still: without cell_safety both nets break completely (21-27
+food per game), so the policy is built on it; safe_exits is used, but much
+less (-5 points mean, -12 on the worst maze, levels unchanged).

@@ -473,7 +473,8 @@ class PacmanEnv(gym.Env):
         starts on the prefix's "start_level" (default its "level", 1 if the
         file has none); the prefix ends on "level" with "lives" (default 3)
         and "food_left" food, and, where recorded, pacman on "pacman" [x, y]
-        and the ghosts on "ghosts" [[x, y], ..]; a mismatch raises."""
+        and the ghosts on "ghosts" [[x, y], ..]; a mismatch raises. Without
+        "food_left" the food is not checked."""
         plevel = int(prefix.get("level", 1))
         slevel = int(prefix.get("start_level", plevel))
         if not (self._fresh and self._seed == prefix["seed"] and self._level == slevel):
@@ -484,7 +485,7 @@ class PacmanEnv(gym.Env):
             self._state = self._recv()
         st = self._state
         left = sum(r.count(".") + r.count("o") for r in st["grid"])
-        ok = left == prefix["food_left"] and st["lives"] == prefix.get("lives", 3) \
+        ok = left == prefix.get("food_left", left) and st["lives"] == prefix.get("lives", 3) \
             and st["level"] == plevel
         if ok and "pacman" in prefix:
             ok = [st["pacman"]["x"], st["pacman"]["y"]] == list(prefix["pacman"])

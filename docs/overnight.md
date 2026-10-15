@@ -2258,3 +2258,39 @@ crash, conservative choice + note when unclear).
 - best_v04 stays the best checkpoint. dqfd3 stopped at 290.6M (resumable,
   total_steps 308000016). runs/v05_final/*.json, runs/v05_deaths/.
 - No training runs; all tmux sessions closed. Disk 26 GB free.
+
+## 2026-10-15 day: death avoidability and plane ablation (no training)
+
+- 09:09 Plane ablation started (`scripts/train_eval.py --zero-plane`, new
+  flag; 40 games per maze, seeds 1000..). Conservative reading of the task:
+  best_v04 has no safe-exits plane, so the safe-exits ablation is run on
+  dqfd3@206M (which has it), together with its baseline and cell_safety.
+- 09:25 `tools/avoidability.py`: deaths from data/death_prefixes_v04.json,
+  states k ticks before them (the T-20 actions cut; PacmanEnv.replay_prefix
+  now skips the food check when a prefix has no "food_left"). A horizon
+  counts only in the death's level and life. Smoke test showed that random
+  actions kill fast (a ghost is often 1-2 cells behind pacman), so a
+  control horizon T-400 was added (not in the request): it tells what the
+  noise alone does. The greedy replay dies exactly at the recorded tick in
+  every state (check built in).
+- 09:45 Results in docs/results.md "Avoidability" and "Plane ablation",
+  docs/v04_avoidability.png. At least one of 80 rollouts survives 200 ticks
+  in 37% of the deaths at T-20, 48% T-40, 67% T-80, 76% T-120, 82% T-160;
+  control (T-400) 79%. Zeroing cell_safety breaks both nets (0%); zeroing
+  safe_exits costs dqfd3@206M 5 points (81.2 -> 76.2%).
+
+### Unclear points
+
+- Zero is an out-of-distribution value for both planes; a fairer ablation
+  would feed a neutral value (e.g. cell_safety = passable, safe_exits from a
+  board without ghosts) — not done.
+- Random perturbation is a weak search: "no survivor" is not a proof of an
+  unavoidable death. A search over the first 1-3 actions followed by greedy
+  play would give a tighter bound.
+
+### Ideas for later
+
+- Death prefixes at T-80..T-160 (the window where avoidable turns into
+  lost), not T-20/T-40 (dqfd3), where most states were already lost.
+- The avoidability tool on dqfd3 or any later net: the curve should shift
+  right if a net learns to avoid squeezes earlier.

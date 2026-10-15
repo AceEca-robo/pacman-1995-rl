@@ -65,3 +65,27 @@ def test_prefix_mix_weights(recorded, tmp_path):
         assert [len(s) for s in e._prefix_sets] == [1, 1]
     finally:
         e.close()
+
+
+def test_avoidability_prefix_replays_to_the_death(recorded):
+    """tools/avoidability.py cuts the T-20 actions k ticks before the death
+    (no food check); the recording agent replayed from there dies exactly k
+    ticks later."""
+    from agents.heuristic_agent import HeuristicAgent
+    from tools.avoidability import prefix_at, select
+    prefixes, _ = recorded
+    d = select(prefixes, 1, None, 0)[0]
+    agent = HeuristicAgent()
+    e = PacmanEnv(config=env_config({}, 1))
+    try:
+        for k in (20, 40):
+            e.replay_prefix(prefix_at(d, k))
+            assert (e._state["level"], e._state["lives"]) == (d["level"], d["lives"])
+            obs, _ = e._after_reset(d["seed"])
+            for t in range(1, k + 1):
+                obs, _, _, _, info = e.step(agent.act(obs))
+                if info["events"]["death"]:
+                    break
+            assert t == k and info["events"]["death"]
+    finally:
+        e.close()
