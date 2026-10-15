@@ -2207,3 +2207,54 @@ crash, conservative choice + note when unclear).
   final-protocol per-maze mean (80.8%), so it finishes well before 07:30.
   If a new good_* appears before the stop and beats it on the final
   protocol, it is re-run if there is time.
+- 06:45 Stopped by hand as decided at 04:05: the supervisor first (so it
+  would not --resume), then dqfd3 at 290,630,002 steps (Ctrl-C after the
+  290M eval checkpoint; checkpoint.pt from 06:42, resumable). keep_good and
+  the final-protocol queue stopped afterwards (the 290M eval, 79.7% / 53%,
+  was not kept; nothing was pending). Disk 26 GB free.
+- 06:50 Death analysis dqfd3@206M (16 x 50 games, seeds 5000..; 312 s):
+  cleared 79.6% (best_v04 78.4%), 1.40 deaths per game (1.45), squeezed
+  1.19 per game (1.21) = 84.9% of the deaths (83.2%), supertime ran out
+  0.18 (0.21). Worst mazes: 15 and 11 (58%), 13 (68%).
+- 06:55 Results (docs/results.md "dqfd3"): final protocol 206M 80.8% / 57%
+  / 1.65, 220M 79.6 / 63 / 1.54, 224M 78.8 / 51 / 1.54, 228M 78.6 / 57 /
+  1.67, 232M 79.8 / 54 / 1.69 vs best_v04 81.8 / 67 / 1.48 and the
+  heuristic 78.2 / 58 / 1.28. None beats best_v04 on the per-maze mean, so
+  there is **no runs/best_v05** (the rule needs both the mean and levels).
+  Curve: docs/dqfd3_curve.png.
+
+### Summary of the night
+
+- Death prefixes: 400 games, 1185 deaths, 1023 kept (>= 42 per maze),
+  2046 prefixes; enough for the mix (each was replayed thousands of times).
+- The goal (fewer squeezes) was not met: squeezes per game 1.21 -> 1.19
+  and their share 83 -> 85%, within noise. dqfd3 trades a little per-maze
+  clear share (mazes 11, 12, 13, 15 got worse: 57-66% vs 67-77%) for more
+  levels in a row (1.54-1.69 vs 1.48, CIs overlap).
+- Not improving: 40-game evals stayed at 75-82% from 200M to 290M with no
+  trend; the extension at 258M came from the "levels" half of the rule.
+
+### Unclear points
+
+- The 70% death-prefix share oversamples the hard mazes (11, 12, 15: 75-93
+  deaths each) but the final protocol got worse exactly there; perhaps the
+  agent learns to survive the replayed moment, not to avoid reaching it.
+- The safe-exits plane is nonzero in 97% of frames, but whether the net
+  uses it is not measured (the first-conv weights for the plane were not
+  inspected).
+
+### Ideas for later
+
+- Track the norm of the first-conv weights on the safe-exits plane; ablate the
+  plane at eval (zero it) to see if the policy depends on it.
+- Death prefixes 80-150 ticks before the death (the squeeze is usually
+  decided earlier than 40 ticks), and re-record them from the current
+  agent every 20M instead of fixing best_v04's.
+- A per-maze sampling of the evaluation mazes in the prefix mix, so the
+  easy mazes do not lose their share of training.
+
+### State at the end
+
+- best_v04 stays the best checkpoint. dqfd3 stopped at 290.6M (resumable,
+  total_steps 308000016). runs/v05_final/*.json, runs/v05_deaths/.
+- No training runs; all tmux sessions closed. Disk 26 GB free.

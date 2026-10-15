@@ -1203,3 +1203,53 @@ life, so each level's clear share is lower than a fresh start's although
 the per-tick risk is not. Level 3 (maze 3) loses many lives in its first
 100 ticks (27 of 78 deaths). The stuck games (6%) are a second, separate
 loss.
+
+## dqfd3 (2026-10-14/15 night): best_v04 continued on its own deaths
+
+best_v04 + the safe-exits plane, half the resets from prefixes (70% best_v04's
+own death prefixes 40/20 ticks before each death, 30% endgame prefixes),
+hunger 600 as truncation. 198M -> 290.6M (stopped by hand at 06:45, see
+docs/overnight.md). Final protocol (100 games per maze, seeds 2000..3599;
+100 games from level 1) on every kept checkpoint (40-game eval >= 80%, min
+>= 60%):
+
+| agent | games | per-maze mean [95% CI] | min [95% CI] (maze) | levels in a row: mean [95% CI] / median / max |
+|---|---|---|---|---|
+| heuristic | 100 per maze, 100 from level 1 | 78.2% [76.1%, 80.2%] | 58% [48%, 65%] (15) | 1.28 [1.07, 1.49] / 1 / 5 |
+| dqfd2@198M | 100 per maze, 100 from level 1 | 81.8% [79.7%, 83.6%] | 67% [58%, 72%] (15) | 1.48 [1.26, 1.70] / 1 / 6 |
+| dqfd3@206M | 100 per maze, 100 from level 1 | 80.8% [78.9%, 82.5%] | 57% [47%, 62%] (13) | 1.65 [1.42, 1.90] / 1 / 7 |
+| dqfd3@220M | 100 per maze, 100 from level 1 | 79.6% [77.6%, 81.5%] | 63% [52%, 66%] (15) | 1.54 [1.31, 1.80] / 1 / 5 |
+| dqfd3@224M | 100 per maze, 100 from level 1 | 78.8% [76.9%, 80.8%] | 51% [41%, 60%] (15) | 1.54 [1.31, 1.79] / 1 / 6 |
+| dqfd3@228M | 100 per maze, 100 from level 1 | 78.6% [76.6%, 80.6%] | 57% [46%, 64%] (15) | 1.67 [1.43, 1.91] / 2 / 6 |
+| dqfd3@232M | 100 per maze, 100 from level 1 | 79.8% [77.9%, 81.7%] | 54% [44%, 62%] (15) | 1.69 [1.45, 1.94] / 2 / 7 |
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| heuristic | 72% | 87% | 71% | 84% | 83% | 88% | 81% | 90% | 79% | 79% | 75% | 70% | 64% | 82% | 58% | 88% |
+| dqfd2@198M | 80% | 92% | 80% | 92% | 90% | 90% | 81% | 92% | 72% | 84% | 75% | 76% | 77% | 75% | 67% | 85% |
+| dqfd3@206M | 84% | 88% | 83% | 94% | 90% | 93% | 88% | 88% | 79% | 93% | 66% | 61% | 57% | 81% | 62% | 85% |
+| dqfd3@220M | 77% | 87% | 78% | 95% | 84% | 95% | 82% | 86% | 83% | 90% | 68% | 77% | 64% | 67% | 63% | 78% |
+| dqfd3@224M | 81% | 85% | 78% | 91% | 88% | 85% | 85% | 93% | 74% | 91% | 71% | 70% | 66% | 69% | 51% | 83% |
+| dqfd3@228M | 80% | 87% | 78% | 92% | 83% | 82% | 83% | 93% | 75% | 90% | 72% | 75% | 61% | 74% | 57% | 76% |
+| dqfd3@232M | 85% | 91% | 76% | 92% | 90% | 86% | 84% | 96% | 73% | 85% | 62% | 74% | 66% | 79% | 54% | 83% |
+
+Deaths, 50 games per maze (seeds 5000..; `scripts/death_report.py`,
+radius 5), best_v04 against the best dqfd3 by the final per-maze mean
+(docs/dqfd3_deaths_compare.png, docs/dqfd3_deaths_{mazes,summary}.png):
+
+| | best_v04 | dqfd3@206M |
+|---|---|---|
+| cleared | 78.4% | 79.6% |
+| deaths per game | 1.45 | 1.40 |
+| squeezed per game | 1.210 (83.2%) | 1.189 (84.9%) |
+| supertime ran out per game | 0.214 (14.7%) | 0.181 (12.9%) |
+| from behind per game | 0.024 (1.6%) | 0.018 (1.2%) |
+| head-on per game | 0.004 (0.3%) | 0.005 (0.4%) |
+| standing per game | 0.003 (0.2%) | 0.006 (0.4%) |
+| < 20 food left | 26.8% | 29.2% |
+| in the life's first 200 ticks | 53.0% | 54.0% |
+
+No dqfd3 checkpoint beats best_v04's per-maze mean (81.8%); all of them
+are better from level 1 (1.54-1.69 vs 1.48, inside the intervals). The
+squeezes per game barely move (1.21 -> 1.19) and their share rises (83 ->
+85%). Learning curve: docs/dqfd3_curve.png. best_v04 stays the best.
