@@ -35,6 +35,13 @@ level 2, whose maze differs from level 1 in 23 cells.
 - `env/pacman_env.py`: `Pacman1995-v0`, a gymnasium env that starts the game
   (headless by default, or in a window with `display=":0"`) and serves the
   socket.
+- `sim/`: a clonable port of the game for planning (`docs/sim_spec.md`):
+  `PacmanSim` (Python) and `CSim`/`SimBatch` (C via ctypes, with the env
+  observation), incl. an exact copy of glibc `random()`. Given the same seed
+  and actions they produce the game's JSON state lines byte for byte
+  (`scripts/verify_sim.py`: random, sticky-random and best_v04 games,
+  0 differences on 760k steps). Python ~180k steps/s, C ~0.9M steps/s per
+  call and ~12M steps/s batched, on one core.
 
 ## Install and run
 
@@ -228,6 +235,7 @@ From "Ideas for later" in `docs/overnight.md`:
 ```
 game/      pacman 1.0 sources + RL bridge (C++, X11)
 env/       PacmanEnv (gymnasium), Pacman1995-v0
+sim/       clonable port of the game (Python reference + C), verified byte-equal
 agents/    random, BFS heuristic, DQN (double, dueling, n-step, PER), PPO
 scripts/   train, train_ppo, evaluate, final_eval, supervisor, play, plots, diagnostics
 tools/     socket demo client, endgame prefix recorder
