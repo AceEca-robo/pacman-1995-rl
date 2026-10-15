@@ -2331,3 +2331,17 @@ crash, conservative choice + note when unclear).
   1000, every 100k). Tests: demo groups sampling, window cut and resets,
   escape episodes -> demo group (115 passed). No smoke run of train.py
   with escape_file was done (training was not to be started then).
+- 11:03 **dqfd4 started** (tmux `dqfd4`, `train.py --run-name dqfd4
+  --config configs/dqfd4.yaml --resume-from runs/best_v04/best.pt`,
+  198000002 -> 258000016; disk 26 GB free). Loaded 999,948 BC demo and
+  304,800 escape transitions. tmux `sv_dqfd4` (supervisor, as dqfd3: 40
+  games every 10M, --extend, --min-speed 3500, log runs/sv_dqfd4; its first
+  start failed on the missing log dir, restarted at 11:04 after mkdir),
+  `keep_dqfd4` (--mean 0.80 --min 0.60 --extra-episodes 20), `q06`
+  (runs/v06_final/queue.sh: each good_* -> the final protocol).
+- 11:09 **Check after 5 minutes: 4.06-4.08k steps/s (>= 3.5k)**; prefix
+  episodes 939 of 1803 ended (52.1%; 0.5 set); **batch: BC demos 4.7%,
+  escape demos 10.2%, agent 85.2%** (target 5 / 10 / 85); safe_exits 17.4
+  cells per agent frame (96% nonzero). Q 104-106 (dqfd3 at its start
+  96-100); **margin loss 2.0-2.2 (dqfd3 0.27)**: the escape actions are
+  partly the rollouts' random ones, which the net does not choose. To watch.
