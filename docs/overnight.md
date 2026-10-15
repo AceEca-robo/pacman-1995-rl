@@ -2400,3 +2400,22 @@ crash, conservative choice + note when unclear).
 
 - Conclusion: the escape demos did not meet their goal. Squeezes per game stay at 1.18–1.21 (best_v04 1.21) and their share at 82–84% (83%); the −2% at 246M is inside the noise of 800 games, and it came with fewer cleared games. Imitating ε-perturbed escapes from T-80..120 states, at 10% of the batch, plus 80% of the prefix episodes on death windows, did not change how the agent dies. Unclear: whether the escapes are learnable from the observation at all (the avoidability study showed that a single random survivor exists, not that a consistent escape policy does); the demos are the luckiest of 40 noisy rollouts, so they may teach noise, not a rule.
 - Ideas for later: score the escape demos by how many of the 40 rollouts survive (keep the states with a consistent escape, >= 25%), or plan escapes by search (the game is deterministic) instead of ε luck.
+
+## 2026-10-16 night: sim/ — a clonable port of the game (no training)
+
+Goal: `sim/`, a Python/C port of the game that repeats the original state
+for state (same JSON lines from the same seed and actions), for planning
+with lookahead. No training tonight.
+
+- 01:45 Start. Housekeeping: removed runs/dqfd4/good.tmp (118 MB).
+- 02:05 Step 1, docs/sim_spec.md: the rules as implemented, the tick order
+  and every random() call. Findings: all 16 mazes have 168 food + 4
+  superfood, closed borders (no tunnels) and no dead-end cells; superfood
+  gives no score and does not count towards clearing; the bonus survives
+  a level change. Undefined behaviour in ghost.cc: `otherdir`/`newdir` have
+  no case for d = none/still, and `newdir` returns none whenever a hunter
+  reaches the last-seen cell in a straight corridor. From the object code
+  (g++ -O2 turns the switch into `d <= 3 ? table : registers`): with
+  d = none `otherdir` is true and `newdir` draws one random() and leaves a
+  non-direction, i.e. the ghost stands still (reported "S") until it sees
+  pacman. The spec and the sim follow the compiled behaviour.
