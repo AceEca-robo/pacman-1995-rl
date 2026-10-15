@@ -2461,3 +2461,37 @@ with lookahead. No training tonight.
   `_obs` on 30,020 sticky-policy states with and without cell_safety.
   Speed, one core: 0.86M steps/s through ctypes one call per step, 12.7M
   steps/s batched (1024 sims), 3M clones/s, 51-115k observations/s.
+- 02:20 Step 5, scripts/plan_eval.py + configs/plan.yaml: "best_v04 +
+  rollout". At every step, for each of the 4 directions K = 4 rollouts of
+  H = 40 steps in a C-sim clone (the direction, then best_v04 greedy with
+  eps = 0.1 uniform noise, own noise seed per (game, step, direction,
+  rollout)); directions with a death share > death_threshold (0.25) are
+  dropped, the kept one with the highest Q is played; all dropped -> the
+  fewest deaths, then Q. N moves pacman exactly like its current
+  direction, so it counts as that direction with max(Q[d], Q[N]) and is
+  played as N when Q[N] is larger (so with no danger the planner plays
+  exactly best_v04). Candidates are rolled out lazily in Q order (the best
+  first, the other three only if it is dropped) — the same choice as
+  rolling out all four. Many games in lock-step per process (48), the
+  rollout policy batched on the GPU. Games are played in the sim itself
+  (it is the game); `--replay-check N` replays N finished games in the real
+  game. Protocol as evaluate.py --levels --stop-at-clear: 20 full games from
+  level 1 + 20 games per level 2..16 that end at the clear, seeds 0..19,
+  max 30,000 steps.
+- 02:20 Baseline, best_v04 greedy on the same games in the sim (465,697
+  steps, 39 s with 4 processes): per-maze mean 79.7%, min 45% (maze 9),
+  from level 1 1.70 levels (median 1, max 5, 2 of 20 games truncated at
+  30,000), 1.47 deaths per game. Replay of 10 games in the real game: 0
+  differences. (Reference: best_v04 78.4% / 1.48 in the earlier reports.)
+- Pilot, levels 7 and 13 x 8 games, 1 process: planner 145 steps/s
+  (25k rollout sim steps/s, GPU-bound), deaths per game 0.31 vs 0.88
+  greedy; the planner overrides best_v04 on 7% of steps, needs the second
+  round on 28% and drops all four directions on 22%. Why so often: the sim
+  clones the game's random() state too, so a rollout is not a sample but
+  the exact future for its actions; with eps = 0 one rollout is an exact
+  forecast of "best_v04 from here". In the probed states best_v04 lives
+  close to the ghosts (often exactly one direction survives, the others die
+  within 1-3 steps), and eps = 0.1 noise kills 75-94% of rollouts even on
+  the surviving path — the noisy death share is a pessimistic danger score
+  and the fallback (fewest deaths) does much of the work.
+- 02:22 Full planner run started (tmux `plan`, 6 processes, GPU at 100%).
