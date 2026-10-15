@@ -2193,3 +2193,4 @@ crash, conservative choice + note when unclear).
   checkpoint) at ~06:45, so every good_* gets the final protocol and the
   death report of the best one finishes by 07:30. The run stays resumable
   (`--resume`).
+- 04:04 Health: dqfd3: 258360010 steps, 3,873 steps/s, Q 95.3, NaN no, disk 28 GB, tmux up  ok
