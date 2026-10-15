@@ -2182,3 +2182,14 @@ crash, conservative choice + note when unclear).
   40-game evals 234-244M: 75.5-81.4%, min 40-60%, none kept since 232M.
   Supervisor 240M 81.2% / 52% / 1.55. Final protocol 232M 79.8% / 54% /
   1.69 (level 1 cleared 85%). End of the 60M leg (258M) expected ~03:50.
+- 04:03 **dqfd3 reached 258000016; the supervisor's rule: "rise" (evals at
+  220/230 -> 240/250M, 40 games: per-maze mean 0.805 -> 0.802, levels from
+  level 1 1.625 -> 1.688; a rise on either counts) -> extended by 50M to
+  308000016**, resumed by the supervisor at 04:03 (disk 27 GB free, > 10).
+  40-game evals 246-258M: 76.9-80.2%, min 43-57%, none kept.
+- 04:05 Decision (not in the prompt): 50M at ~3.9k steps/s end ~07:40,
+  after the 07:30 deadline. Conservative: the extension runs as the rule
+  says, but training is stopped by hand (Ctrl-C right after a 2M eval
+  checkpoint) at ~06:45, so every good_* gets the final protocol and the
+  death report of the best one finishes by 07:30. The run stays resumable
+  (`--resume`).
