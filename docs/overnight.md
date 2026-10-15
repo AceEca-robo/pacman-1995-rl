@@ -2374,3 +2374,5 @@ crash, conservative choice + note when unclear).
   67 / 1.48) — trained 8M of its 8M with the first escape file (margin on
   random actions too). Health 12:18: 211.4M, 3.73k steps/s, Q 104.9, NaN
   no, disk 27 GB, margin 0.48.
+- 13:00 Health: dqfd4: 219940019 steps, 4,088 steps/s, Q 107.6, NaN no, disk 27 GB, tmux up  ok;
+  margin 0.48. 40-game evals 212-218M: 78.0-80.5%, min 45-60%, none kept.
