@@ -19,6 +19,7 @@ SRC = os.path.join(HERE, "_csim.c")
 LIB = os.path.join(HERE, "_csim.so")
 NCH = 21
 CELLS = WIDTH * HEIGHT
+INFO = ("lives", "level", "cell", "score", "eats", "dir")  # sim_info_many columns
 
 
 def _load():
@@ -92,8 +93,9 @@ class CSim:
         return self.lives == 0
 
     def info(self):
-        """(lives, level, pacman cell y * 33 + x)."""
-        out = np.zeros(3, np.int32)
+        """int32 (6,), columns INFO: lives, level, pacman cell y * 33 + x,
+        score, food left, pacman's direction (0..3 U/D/L/R, 4/5 none/still)."""
+        out = np.zeros(len(INFO), np.int32)
         _lib.sim_info_many(_addr(self.buf), 1, _addr(out))
         return out
 
@@ -129,8 +131,8 @@ class SimBatch:
         _lib.sim_advance_many(_addr(self.buf), len(a), _addr(a))
 
     def info(self):
-        """int32 (n, 3): lives, level, pacman cell."""
-        out = np.zeros((len(self.buf), 3), np.int32)
+        """int32 (n, 6), columns INFO (see CSim.info)."""
+        out = np.zeros((len(self.buf), len(INFO)), np.int32)
         _lib.sim_info_many(_addr(self.buf), len(self.buf), _addr(out))
         return out
 

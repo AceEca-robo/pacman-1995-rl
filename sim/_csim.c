@@ -406,10 +406,14 @@ void sim_obs_many(const Sim *s, int n, float *grid, float *vec, int cell_safety)
     for (i = 0; i < n; i++) sim_obs(&s[i], grid + (size_t)i * nch * CELLS, vec + 3 * i, cell_safety);
 }
 
-/* summaries for planning: lives, level, done per sim */
+/* per sim: lives, level, pacman cell (y * W + x), score, food left (eats),
+   pacman's direction */
+#define NINFO 6
 void sim_info_many(const Sim *s, int n, int32_t *out) {
     int i;
     for (i = 0; i < n; i++) {
-        out[3 * i] = s[i].lives; out[3 * i + 1] = s[i].level; out[3 * i + 2] = s[i].px + W * s[i].py;
+        int32_t *o = out + NINFO * i;
+        o[0] = s[i].lives; o[1] = s[i].level; o[2] = s[i].px + W * s[i].py;
+        o[3] = (int32_t)s[i].score; o[4] = s[i].eats; o[5] = s[i].pd;
     }
 }
