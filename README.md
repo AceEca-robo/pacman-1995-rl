@@ -40,7 +40,7 @@ level 2, whose maze differs from level 1 in 23 cells.
   observation), incl. an exact copy of glibc `random()`. Given the same seed
   and actions they produce the game's JSON state lines byte for byte
   (`scripts/verify_sim.py`: random, sticky-random and best_v04 games,
-  0 differences on 760k steps). Python ~180k steps/s, C ~0.9M steps/s per
+  0 differences: 610k steps Python, 600k C). Python ~180k steps/s, C ~0.9M steps/s per
   call and ~12M steps/s batched, on one core.
 
 ## Install and run
