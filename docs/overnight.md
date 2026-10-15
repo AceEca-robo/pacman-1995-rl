@@ -2449,7 +2449,7 @@ with lookahead. No training tonight.
   best_v04 one skips without the checkpoint, ~90 s), a negative control
   (a sim that ignores "left" is caught), state() == json.loads(state_json()),
   clone independence.
-- 02:35 C port for the planner (the policy in the rollouts needs an
+- 02:15 C port for the planner (the policy in the rollouts needs an
   observation per rollout step): sim/_csim.c + sim/csim.py (ctypes, built
   by gcc -O2 on import; `CSim` with PacmanSim's API, `SimBatch` = n sims in
   one numpy array, stepped and observed in C; a sim is a 1,136-byte struct,
