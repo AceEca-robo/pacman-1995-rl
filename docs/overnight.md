@@ -2194,3 +2194,6 @@ crash, conservative choice + note when unclear).
   death report of the best one finishes by 07:30. The run stays resumable
   (`--resume`).
 - 04:04 Health: dqfd3: 258360010 steps, 3,873 steps/s, Q 95.3, NaN no, disk 28 GB, tmux up  ok
+- 05:00 Health: dqfd3: 269820016 steps, 4,092 steps/s, Q 97.5, NaN no, disk 28 GB, tmux up  ok.
+  40-game evals 258-268M: 75.2-79.4%, min 45-55%, none kept (drifting
+  slightly down after the extension). Supervisor 260M 78.9% / 55% / 1.52.
