@@ -2637,3 +2637,10 @@ with lookahead. No training tonight.
   H80/K16 after H60/K16, a hard stop at 06:30). 12 worker processes fill
   7.8 of the 8 GB; a few "allocation failed with OOM" warnings at the start,
   the caching allocator recovered and all workers kept running.
+- 02:50 H60/K16 done (8673 s, 241k decisions, 250M rollout sim steps,
+  28.8k/s with the H60/K32 run beside it): 99.4% per maze / worst 90%
+  (maze 11: 2 game overs of 20) / 0.42 deaths per game, overrides 8.5%,
+  all four dropped on 16.3% of the decisions (H40/K8: 21%). The same as the
+  H40/K8 baseline (99.4% / 95% / 0.39) within noise. The run's JSON says
+  commit ca1dd3e: plan_eval.py reads HEAD at the end; the code is ba2dca0's
+  (the later commit only touched the journal). H80/K16 started in its slot.
