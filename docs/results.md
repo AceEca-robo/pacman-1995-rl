@@ -1366,3 +1366,14 @@ the sim, 10 games per run replayed in the real game (0 differences).
 Level-1 deaths are per game over the whole run (the planner's games last
 ~16k steps and 20+ levels). Reference for greedy best_v04 in the real game:
 78.4% / 1.48 (40 games). Outputs: runs/plan_eval/{greedy,plan}_full.json.
+
+Noiseless variant (configs/plan_exact.yaml: K = 1, eps = 0, one exact
+forecast per direction): per-maze mean 97.5%, min 80% (maze 9), deaths per
+game 0.05, 350 decisions/s; from level 1 all 20 games reach the 30,000-step
+cap (22.3 / 17 / 48 levels, a lower bound). All misses are 30k-step
+timeouts with 0 deaths: best_v04 circles a block and the exact planner has
+no reason to override it. Replay check: 0 of 10 differ.
+
+| mode | per-maze mean | min | from level 1 | deaths/game | decisions/s |
+|---|---|---|---|---|---|
+| plan exact K=1 eps=0 | 97.5% | 80% | 22.3 / 17 / 48 (all capped) | 0.05 | 350 |

@@ -2507,3 +2507,24 @@ with lookahead. No training tonight.
   ~16k steps through 20+ levels) and on mazes 14-16 (0.3-0.5).
 - 03:19 Started the noiseless variant configs/plan_exact.yaml (K = 1,
   eps = 0: one exact forecast per direction) in tmux `plan`.
+- 04:08 Noiseless variant done (50 min, 1.04M decisions, 350 decisions/s,
+  14k rollout steps/s): deaths per game 0.05 (vs 0.34 noisy, 1.47 greedy),
+  but per-maze mean 97.5% (min 80%, maze 9). Every game that missed the
+  clear hit the 30,000-step cap with 0 deaths: best_v04 circles a block
+  (e.g. `UUUULLDDDDRR` repeated) with 1-80 food left. With the exact
+  forecast the planner almost never overrides (0.2%), so nothing breaks the
+  loop; in the greedy runs deaths reset the positions, and the noisy
+  planner overrides 6% of the time, which apparently breaks the circles.
+  From level 1 all 20 games hit the cap (22.3 levels mean, median 17, max
+  48, 0.45 deaths per 30k steps) — a lower bound. Replay of 10 games in
+  the real game: 0 differences.
+
+### Ideas for later (sim/ planner)
+- Loop breaker for the exact planner: when the last N cells repeat with no
+  food eaten, prefer the surviving direction whose rollout eats the most
+  food (or use the remaining food count as a rollout score instead of
+  pure survival). The cheapest variant should already fix maze 9.
+- The planner as a teacher: plan-mode games (0 differences in the real
+  game) as demonstrations for DQfD instead of hand-picked escapes.
+- Faster planning: batch the first-round rollouts of all games in one
+  forward pass (now 156-350 decisions/s, GPU-bound on small batches).
