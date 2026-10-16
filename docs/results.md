@@ -1377,3 +1377,31 @@ no reason to override it. Replay check: 0 of 10 differ.
 | mode | per-maze mean | min | from level 1 | deaths/game | decisions/s |
 |---|---|---|---|---|---|
 | plan exact K=1 eps=0 | 97.5% | 80% | 22.3 / 17 / 48 (all capped) | 0.05 | 350 |
+
+### Honest planner (2026-10-16): ghost randomness resampled in every rollout
+
+The oracle variants above clone the game's random() state, so their
+rollouts replay the real ghost future. In the honest variant every rollout
+clone is reseeded (sim_reseed_many: new random() seed, new ghost
+random-move rates); only the visible state is kept. Same protocol and
+seeds; H = 40, eps = 0.1; 10 games per run replayed in the real game, 0
+differences in every run.
+
+| variant | per-maze mean | min | from level 1 (mean / median / max) | deaths/game | decisions/s |
+|---|---|---|---|---|---|
+| greedy best_v04 | 79.7% | 45% | 1.70 / 1 / 5 | 1.47 | 11,900 |
+| honest K4 thr 0.25 | 94.1% | 85% | 4.4 / 4 / 10 | 0.88 | 45 (4 runs sharing the GPU) |
+| honest K4 thr 0.5 | 96.6% | 90% | 6.2 / 3 / 25 | 0.75 | 38 (shared) |
+| honest K8 thr 0.25 | 96.9% | 90% | 7.5 / 7 / 17 | 0.68 | 43 (shared) |
+| **honest K8 thr 0.5** | **99.1%** | **95%** | **7.7 / 8 / 14** | **0.56** | 43 (shared) |
+| honest K8 thr 0.5 + loop breaker, no step cap | 99.4% | 95% | 7.7 / 8 / 14 | 0.55 | 128 (2 runs) |
+| oracle K4 eps 0.1 thr 0.25 | 100% | 100% | 22.4 / 20 / 39 | 0.34 | 156 |
+| oracle exact K1 eps 0 | 97.5% | 80% | 22.3 / 17 / 48 (all at the 30k cap) | 0.05 | 350 |
+| oracle exact + loop breaker, no cap (mazes 2..16) | 100% | 100% | — | 0.02 | 194 |
+
+Honest K8 thr 0.5 per maze (cleared / deaths): 1: 100/3.10 2: 100/0.30
+3: 100/0.40 4: 100/0.00 5: 100/0.30 6: 100/0.15 7: 100/0.20 8: 100/0.05
+9: 100/0.50 10: 100/0.15 11: 100/0.50 12: 100/0.60 13: 95/0.60
+14: 100/0.70 15: 95/0.85 16: 95/0.50. Every honest miss is a game over;
+the loop breaker matters only for the oracle-exact planner (its 30k-step
+timeouts). Outputs: runs/plan_eval/h_*.json, x_lb.json.

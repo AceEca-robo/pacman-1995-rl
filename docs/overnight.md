@@ -2528,3 +2528,53 @@ with lookahead. No training tonight.
   game) as demonstrations for DQfD instead of hand-picked escapes.
 - Faster planning: batch the first-round rollouts of all games in one
   forward pass (now 156-350 decisions/s, GPU-bound on small batches).
+
+## 2026-10-16 day: honest planner, loop breaker, play.py --agent planner
+
+- 09:12 Question: does clone() include the ghosts' random state? Yes: the
+  Sim struct holds the glibc random() ring, the one generator the game
+  uses for the ghosts' random moves, the bonus and the board choice above
+  level 16. With the same pacman actions a rollout replays the real future
+  move for move, so the night's planner is an oracle: it reads the ghosts'
+  future instead of predicting it (with eps = 0 a single rollout is an
+  exact forecast). Its 100% is an upper bound, not an agent result.
+- Honest variant (plan.ghost_rng: reseed, sim_reseed_many in sim/_csim.c):
+  every rollout clone gets a fresh random() seed and its four ghosts get
+  newly drawn random-move rates (randmv, 4..11, drawn once per game and not
+  visible in the state line); the visible state (board, positions, modes,
+  timers) stays. The k-th clone of every candidate direction gets the same
+  seed (common random numbers), so the directions are compared on the same
+  K ghost futures. This is the main number: it is what a player who sees
+  the screen could achieve with a perfect model of the game's rules.
+- Loop breaker (plan.loop_breaker): after 400 steps without food, for the
+  next 40 decisions all four directions are rolled out and the kept one
+  with the highest Q - 10 * (visits of the cell after the move in the last
+  400 steps) is played (best_v04's gap between its two best Q values is
+  6 / 9 / 12 at the median / 90th / 99th percentile).
+- 09:15-11:47 Four honest runs at once (4 processes each; the GPU's 8 GB
+  were full, so the full pytest run during them hit CUDA OOM in 23 tests;
+  rerun on CPU only: 139 passed, the timing-dependent
+  test_ppo_pacman_run_eval_resume failed under load and passed alone).
+  Commit 808d955 had been made after the OOM run: my `pytest | tail` chain
+  did not stop on the failure — use `set -o pipefail` or check the summary
+  line before committing.
+- Honest results (per-maze mean / min, from level 1 mean / median / max,
+  deaths per game): K4 thr 0.25: 94.1% / 85%, 4.4 / 4 / 10, 0.88;
+  K4 thr 0.5: 96.6% / 90%, 6.2 / 3 / 25, 0.75; K8 thr 0.25: 96.9% / 90%,
+  7.5 / 7 / 17, 0.68; K8 thr 0.5: 99.1% / 95%, 7.7 / 8 / 14, 0.56. All the
+  honest misses are game overs (no step-cap timeouts): sampled ghost
+  futures make the planner override more often (4-10%), which also keeps
+  best_v04 out of its circles. Threshold 0.5 beats 0.25: with eps-noise
+  in the rollouts the death share is pessimistic, and 0.25 drops the good
+  move too often (all four dropped on 26% of the decisions vs 21%).
+- 11:26-12:29 Loop breaker, no step cap: honest K8 thr 0.5 + breaker
+  99.4% / 95%, 7.7 / 8 / 14, 0.55 deaths (breaker active on 0.9% of the
+  decisions; the two misses are game overs) — the same as without it, as
+  the honest planner had no loops left. Oracle exact (K1 eps 0) + breaker
+  on mazes 2..16: 100% in all 300 games, longest 1645 steps, 0.02 deaths
+  per game; it removes the night's 30k-step timeouts (97.5% -> 100%).
+- play.py --agent planner (default configs/plan_honest_lb.yaml): the game
+  in its window in real time, a CSim follows it in lock-step and the
+  observations are compared every tick. 200 ticks under xvfb on the GPU:
+  in sync, the game's own 0.25 s per tick is the limit (planner ~40-130
+  decisions/s for one game).

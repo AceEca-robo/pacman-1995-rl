@@ -1,0 +1,31 @@
+# scripts/plan_eval.py, exact-lookahead (oracle) variant with the loop breaker
+# (see plan_honest_lb.yaml), without a step cap.
+checkpoint: runs/best_v04/best.pt
+
+plan:
+  horizon: 40           # H: sim steps per rollout (the candidate move + H-1 policy steps)
+  rollouts: 1           # K: one rollout: without noise it is the exact future
+  epsilon: 0.0          # no noise: the sim clones the game's random() too
+  # a direction is dropped when more than this share of its K rollouts lose
+  # a life; the kept direction with the highest Q is played (all dropped:
+  # the one with the fewest deaths, then the highest Q)
+  death_threshold: 0.25
+  loop_breaker:
+    stall_steps: 400
+    active_steps: 40
+    penalty: 10.0
+
+# evaluation protocol of scripts/evaluate.py --levels --stop-at-clear:
+# `episodes` games from level 1 (to game over or max_steps; also the
+# level-1 entry of the per-maze table), `level_episodes` games from each of
+# levels 2..16 that end when the start level is cleared; seeds seed..
+eval:
+  seed: 0
+  episodes: 20
+  level_episodes: 20
+  max_steps: null
+
+run:
+  workers: 4            # processes (one CUDA context each)
+  games_per_worker: 48  # games played in lock-step per process
+  device: cuda

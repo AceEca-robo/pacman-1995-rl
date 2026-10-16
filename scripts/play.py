@@ -9,9 +9,10 @@
     python scripts/play.py --agent planner --seed 0 --display :0   # best_v04 + rollouts
 
 --agent planner: scripts/plan_eval.py's planner (--plan-config, default
-the honest variant configs/plan_honest.yaml) plays the game: a sim (sim/)
-follows the game in lock-step and the planner's rollouts run in clones of
-it; the observation of the game is checked against the sim's every tick.
+the honest variant with the loop breaker, configs/plan_honest_lb.yaml)
+plays the game: a sim (sim/) follows the game in lock-step and the
+planner's rollouts run in clones of it; the observation of the game is
+checked against the sim's every tick.
 
 The game runs without --fast (0.25 s per tick, half while pacman is super).
 With --record, the game window is grabbed (xwd) once per tick, after the
@@ -120,7 +121,7 @@ def main():
                    help="stop after this many ticks (a full heuristic game is ~1250, 5 min)")
     p.add_argument("--scale", type=float, default=1.0, help="GIF frame scale")
     p.add_argument("--level", type=int, default=None, help="start on this level (maze), 1-16")
-    p.add_argument("--plan-config", default=os.path.join(ROOT, "configs", "plan_honest.yaml"),
+    p.add_argument("--plan-config", default=os.path.join(ROOT, "configs", "plan_honest_lb.yaml"),
                    help="planner only: a scripts/plan_eval.py config")
     p.add_argument("--device", help="planner only: torch device (default: the config's)")
     args = p.parse_args()
