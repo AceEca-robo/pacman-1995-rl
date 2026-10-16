@@ -12,11 +12,14 @@ V04 = os.path.join(ROOT, "runs", "best_v04", "best.pt")
 
 
 @pytest.mark.skipif(not os.path.exists(V04), reason="runs/best_v04/best.pt not present")
-@pytest.mark.parametrize("mode", ["plan", "greedy"])
-def test_plan_eval_smoke(tmp_path, mode):
-    with open(os.path.join(ROOT, "configs", "plan.yaml")) as f:
+@pytest.mark.parametrize("mode,config,extra", [
+    ("plan", "plan.yaml", {}), ("greedy", "plan.yaml", {}), ("plan", "plan_honest.yaml", {}),
+    ("plan", "plan_honest.yaml", {"loop_breaker": {"stall_steps": 5, "active_steps": 3,
+                                                   "penalty": 10.0}})])
+def test_plan_eval_smoke(tmp_path, mode, config, extra):
+    with open(os.path.join(ROOT, "configs", config)) as f:
         cfg = yaml.safe_load(f)
-    cfg["plan"].update(horizon=6, rollouts=2)
+    cfg["plan"].update(horizon=6, rollouts=2, **extra)
     cfg["eval"].update(episodes=1, level_episodes=2, max_steps=40)
     cfg["run"].update(workers=1, games_per_worker=2, device="cpu")
     conf = tmp_path / "plan.yaml"
@@ -32,3 +35,23 @@ def test_plan_eval_smoke(tmp_path, mode):
     assert all(len(g["actions"]) == g["length"] <= 40 for g in res["games"])
     if mode == "greedy":
         assert res["overrides"] == 0
+    assert (res["breaker"] > 0) == bool(extra)
+
+
+def test_reseed_keeps_visible_state():
+    """sim_reseed_many: the state line is the same, the ghosts' future is not."""
+    import numpy as np
+    sys.path.insert(0, ROOT)
+    from sim.csim import SimBatch, CSim
+    sim = CSim(5, 3)
+    for a in [2] * 30:
+        sim.advance(a)
+    b = SimBatch(3)
+    for i in range(3):
+        b.set(i, sim)
+    b.reseed([11, 12, 11])
+    assert all(b.get(i).state_json() == sim.state_json() for i in range(3))
+    for _ in range(60):
+        b.advance(np.full(3, 4))
+    lines = [b.get(i).state_json() for i in range(3)]
+    assert lines[0] == lines[2] and lines[0] != lines[1]

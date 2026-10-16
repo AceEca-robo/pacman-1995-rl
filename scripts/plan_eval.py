@@ -31,6 +31,7 @@ import multiprocessing
 import os
 import sys
 import time
+from collections import Counter, deque
 
 import numpy as np
 import yaml
@@ -55,6 +56,7 @@ class QNet:
         agent = DQNAgent(checkpoint, epsilon=0.0, device=device)
         self.torch, self.net, self.device = torch, agent.net, agent.device
         self.cell_safety = bool((agent.env_overrides.get("obs") or {}).get("cell_safety"))
+        self.env_overrides = agent.env_overrides
         assert agent.n_actions == 5
         self.forwards = 0
 
@@ -84,6 +86,13 @@ def batch_advance(buf, actions):
     b.advance(actions)
 
 
+def batch_reseed(buf, seeds):
+    from sim.csim import SimBatch
+    b = SimBatch(0)
+    b.buf = buf
+    b.reseed(seeds)
+
+
 def batch_info(buf):
     from sim.csim import SimBatch
     b = SimBatch(0)
@@ -96,12 +105,20 @@ class Planner:
         p = cfg["plan"]
         self.net, self.H, self.K = net, int(p["horizon"]), int(p["rollouts"])
         self.eps, self.thr = float(p["epsilon"]), float(p["death_threshold"])
+        self.ghost_rng = p.get("ghost_rng", "oracle")
+        assert self.ghost_rng in ("oracle", "reseed"), self.ghost_rng
+        lb = p.get("loop_breaker") or {}
+        self.penalty = float(lb.get("penalty", 0.0))
         self.sim_steps = 0
 
-    def rollout(self, rows, first, u, ra):
+    def rollout(self, rows, first, u, ra, reseeds=None):
         """rows: (R, SIZE) sims; first: (R,) first action; u, ra: (R, H)
-        noise. Returns bool (R,): lost a life within H steps."""
+        noise; reseeds: (R,) random() seeds of the clones ("honest"
+        planner) or None (the clones keep the game's own random() state).
+        Returns bool (R,): lost a life within H steps."""
         buf = rows.copy()
+        if reseeds is not None:
+            batch_reseed(buf, reseeds)
         lives = batch_info(buf)[:, 0]
         batch_advance(buf, first)
         self.sim_steps += len(buf)
@@ -127,9 +144,13 @@ class Planner:
             idx = idx[~died]
         return dead
 
-    def choose(self, buf, info, q, noise_seeds):
+    def choose(self, buf, info, q, noise_seeds, visits=None):
         """buf (G, SIZE) game states, info (G, 6), q (G, 5); noise_seeds: a
-        seed sequence per game for this step. Returns (actions, stats)."""
+        seed sequence per game for this step; visits: per game None or a
+        Counter of recently visited cells (loop breaker active: all four
+        directions are rolled out and the kept one with the highest
+        Q - penalty * visits[cell after the move] is played). Returns
+        (actions, stats)."""
         G, K, H = len(buf), self.K, self.H
         pd = info[:, 5]
         qd = q[:, :4].copy()
@@ -145,33 +166,81 @@ class Planner:
             rng = np.random.default_rng(s)
             u[g] = rng.random((4, K, H))
             ra[g] = rng.integers(0, 5, (4, K, H))
+        # the k-th clone of every direction gets the same ghost future
+        # (common random numbers: the directions are compared on equal terms)
+        rs = None
+        if self.ghost_rng == "reseed":
+            rs = np.empty((G, K), np.uint32)
+            for g, s in enumerate(noise_seeds):
+                rs[g] = np.random.default_rng([*s, 1]).integers(1, 2**31 - 1, K)
+        visits = visits if visits is not None else [None] * G
+        breaker = np.array([v is not None for v in visits])
         frac = np.full((G, 4), np.nan)   # by rank in `order`
         c0 = order[:, 0]
         gi = np.repeat(np.arange(G), K)
         ki = np.tile(np.arange(K), G)
-        dead = self.rollout(buf[gi], act[gi, c0[gi]], u[gi, c0[gi], ki], ra[gi, c0[gi], ki])
+        dead = self.rollout(buf[gi], act[gi, c0[gi]], u[gi, c0[gi], ki], ra[gi, c0[gi], ki],
+                            None if rs is None else rs[gi, ki])
         frac[:, 0] = dead.reshape(G, K).mean(1)
-        bad = np.flatnonzero(frac[:, 0] > self.thr)
+        bad = np.flatnonzero((frac[:, 0] > self.thr) | breaker)
         if len(bad):
             gi = np.repeat(bad, 3 * K)
             ri = np.tile(np.repeat(np.arange(1, 4), K), len(bad))
             ki = np.tile(np.arange(K), 3 * len(bad))
             ci = order[gi, ri]
-            dead = self.rollout(buf[gi], act[gi, ci], u[gi, ci, ki], ra[gi, ci, ki])
+            dead = self.rollout(buf[gi], act[gi, ci], u[gi, ci, ki], ra[gi, ci, ki],
+                                None if rs is None else rs[gi, ki])
             frac[bad, 1:] = dead.reshape(len(bad), 3, K).mean(2)
         rank = np.zeros(G, np.int64)
         all_bad = np.zeros(G, bool)
         for g in bad:
             ok = np.flatnonzero(frac[g] <= self.thr)
-            if len(ok):
+            if len(ok) and visits[g] is not None:
+                one = np.repeat(buf[g:g + 1], 4, 0)
+                batch_advance(one, act[g, order[g]])
+                cells = batch_info(one)[:, 2]
+                score = [qd[g, order[g, r]] - self.penalty * visits[g][cells[r]] for r in ok]
+                rank[g] = ok[int(np.argmax(score))]
+            elif len(ok):
                 rank[g] = ok[0]
             else:
                 rank[g] = int(np.argmin(frac[g]))   # first minimum: highest Q
                 all_bad[g] = True
         choice = order[np.arange(G), rank]
         actions = act[np.arange(G), choice]
-        return actions, {"second_round": np.isin(np.arange(G), bad), "all_dropped": all_bad,
-                         "frac_best": frac[:, 0]}
+        return actions, {"second_round": np.isin(np.arange(G), bad) & ~breaker,
+                         "all_dropped": all_bad, "breaker": breaker, "frac_best": frac[:, 0]}
+
+
+class Stall:
+    """Loop breaker state of one game (plan.loop_breaker): after
+    stall_steps steps without food, the next active_steps decisions get the
+    visited-cell penalty (cells of the last stall_steps steps)."""
+
+    def __init__(self, cfg):
+        lb = cfg["plan"].get("loop_breaker") or {}
+        self.on = bool(lb)
+        self.stall, self.active = int(lb.get("stall_steps", 0)), int(lb.get("active_steps", 0))
+        self.cells = deque()
+        self.count = Counter()
+        self.last_food, self.until, self.t = 0, -1, 0
+
+    def update(self, cell, ate):
+        """After a step: pacman's cell, whether food was eaten (or a level
+        cleared)."""
+        self.t += 1
+        if ate:
+            self.last_food = self.t
+        self.cells.append(cell)
+        self.count[cell] += 1
+        if len(self.cells) > self.stall:
+            self.count[self.cells.popleft()] -= 1
+        if self.on and self.t >= self.until and self.t - self.last_food >= self.stall:
+            self.until = self.t + self.active
+
+    def visits(self):
+        """Counter for Planner.choose, or None when inactive."""
+        return self.count if self.t < self.until else None
 
 
 def play_games(tasks, cfg, mode, device, worker=0):
@@ -180,7 +249,8 @@ def play_games(tasks, cfg, mode, device, worker=0):
     net = QNet(os.path.join(ROOT, cfg["checkpoint"]), device)
     planner = Planner(net, cfg)
     G = int(cfg["run"]["games_per_worker"])
-    max_steps = int(cfg["eval"]["max_steps"])
+    max_steps = cfg["eval"]["max_steps"]
+    max_steps = float("inf") if max_steps is None else int(max_steps)
     queue = list(tasks)
     games, rows = [], np.zeros((0, SIZE), np.uint8)
     results = []
@@ -194,7 +264,7 @@ def play_games(tasks, cfg, mode, device, worker=0):
             games.append({"seed": seed, "start_level": level, "stop": stop, "length": 0,
                           "deaths": 0, "level": level, "lives": int(info[0]), "eats": int(info[4]),
                           "food_eaten": 0, "actions": [], "overrides": 0, "second_round": 0,
-                          "all_dropped": 0})
+                          "all_dropped": 0, "breaker": 0, "stall": Stall(cfg)})
             rows = np.concatenate([rows, sim.buf[None]])
         info = batch_info(rows)
         grid, vec = batch_obs(net, rows)
@@ -202,7 +272,8 @@ def play_games(tasks, cfg, mode, device, worker=0):
         greedy = q.argmax(1).astype(np.int32)
         if mode == "plan":
             seeds = [[g["seed"], g["start_level"], g["length"]] for g in games]
-            actions, st = planner.choose(rows, info, q, seeds)
+            actions, st = planner.choose(rows, info, q, seeds,
+                                         [g["stall"].visits() for g in games])
             # the planner's choice moves pacman like the greedy action when
             # both are the same direction (N counts as pacman's direction)
             same = (actions == greedy)
@@ -210,6 +281,7 @@ def play_games(tasks, cfg, mode, device, worker=0):
                 g["overrides"] += int(not same[i])
                 g["second_round"] += int(st["second_round"][i])
                 g["all_dropped"] += int(st["all_dropped"][i])
+                g["breaker"] += int(st["breaker"][i])
         else:
             actions = greedy
         batch_advance(rows, actions)
@@ -222,8 +294,10 @@ def play_games(tasks, cfg, mode, device, worker=0):
             lives, level, eats = int(info[i, 0]), int(info[i, 1]), int(info[i, 4])
             if lives < g["lives"]:
                 g["deaths"] += g["lives"] - lives
+            ate = level != g["level"] or eats < g["eats"]
             if level == g["level"] and eats < g["eats"]:
                 g["food_eaten"] += g["eats"] - eats
+            g["stall"].update(int(info[i, 2]), ate)
             g["lives"], g["eats"] = lives, eats
             g["level"] = max(g["level"], level)
             g["score"] = int(info[i, 3])
@@ -233,6 +307,7 @@ def play_games(tasks, cfg, mode, device, worker=0):
                                       and not (g["stop"] and g["level"] > g["start_level"]))
                 g["levels_cleared"] = g["level"] - g["start_level"]
                 g["actions"] = "".join("UDLRN"[a] for a in g["actions"])
+                del g["stall"]
                 results.append(g)
             else:
                 keep.append(i)
@@ -287,6 +362,7 @@ def summarize(games, cfg, levels):
     out["overrides"] = sum(g["overrides"] for g in games) / n
     out["second_round"] = sum(g["second_round"] for g in games) / n
     out["all_dropped"] = sum(g["all_dropped"] for g in games) / n
+    out["breaker"] = sum(g["breaker"] for g in games) / n
     out["deaths_per_game"] = float(np.mean([g["deaths"] for g in games]))
     return out
 

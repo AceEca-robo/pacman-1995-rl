@@ -299,6 +299,18 @@ void sim_advance(Sim *s, int action) {
     s->phase = 1;
 }
 
+/* "honest" clones (scripts/plan_eval.py): forget the hidden randomness.
+   Each sim's random() is reseeded and the ghosts' random-move rates
+   (randmv, drawn once per game) are drawn again from the new state; the
+   visible state (board, positions, modes, timers) stays. */
+void sim_reseed_many(Sim *s, int n, const uint32_t *seeds) {
+    int i, j;
+    for (i = 0; i < n; i++) {
+        srnd(&s[i], seeds[i]);
+        for (j = 0; j < 4; j++) s[i].g[j].randmv = (int)(rnd(&s[i]) % 8) + 4;
+    }
+}
+
 /* n sims at stride sizeof(Sim), one action each */
 void sim_advance_many(Sim *s, int n, const int32_t *actions) {
     int i;

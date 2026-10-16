@@ -39,6 +39,7 @@ def _load():
     lib.sim_obs.argtypes = [p, p, p, i]
     lib.sim_obs_many.argtypes = [p, i, p, p, i]
     lib.sim_info_many.argtypes = [p, i, p]
+    lib.sim_reseed_many.argtypes = [p, i, p]
     for k in range(LEVELS):
         lib.sim_set_board(k, BOARD_CELLS[k])
     return lib
@@ -135,6 +136,13 @@ class SimBatch:
         out = np.zeros((len(self.buf), len(INFO)), np.int32)
         _lib.sim_info_many(_addr(self.buf), len(self.buf), _addr(out))
         return out
+
+    def reseed(self, seeds):
+        """Forget the hidden randomness: reseed each sim's random() (raw
+        glibc seeds, uint32) and redraw the ghosts' random-move rates."""
+        s = np.ascontiguousarray(seeds, np.uint32)
+        assert len(s) == len(self.buf)
+        _lib.sim_reseed_many(_addr(self.buf), len(s), _addr(s))
 
     def obs(self, grid=None, vec=None, cell_safety=True):
         n = len(self.buf)

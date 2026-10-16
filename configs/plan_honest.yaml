@@ -1,0 +1,25 @@
+# scripts/plan_eval.py, "honest" planner: every rollout clone gets a fresh
+# random() seed and redrawn ghost random-move rates (sim_reseed_many), so
+# the rollouts sample the ghosts' futures instead of reading the real one.
+# The visible game state is the same; plan.yaml is the oracle variant.
+checkpoint: runs/best_v04/best.pt
+
+plan:
+  horizon: 40           # H: sim steps per rollout (the candidate move + H-1 policy steps)
+  rollouts: 4           # K: rollouts per candidate direction (each its own ghost future)
+  epsilon: 0.1          # noise of the rollout policy (best_v04 greedy, else a uniform action)
+  ghost_rng: reseed     # oracle: clones keep the game's random() state
+  # a direction is dropped when more than this share of its K rollouts lose
+  # a life (--threshold overrides it)
+  death_threshold: 0.25
+
+eval:
+  seed: 0
+  episodes: 20
+  level_episodes: 20
+  max_steps: 30000
+
+run:
+  workers: 6            # processes (one CUDA context each)
+  games_per_worker: 48  # games played in lock-step per process
+  device: cuda
