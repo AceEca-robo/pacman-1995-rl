@@ -23,6 +23,10 @@ The games are played in the sim itself, which repeats the real game state
 for state (scripts/verify_sim.py); --replay-check replays some finished
 games' actions in the real game and compares the final state line.
 Protocol as scripts/evaluate.py --levels --stop-at-clear (see the config).
+--maze-only stops the level-1 games at the clear too (16 maze games, no
+games from level 1). Every finished game is appended to <out>.jsonl as it
+ends, with a progress line; --summarize <jsonl> summarizes such a file (a
+stopped run included).
 """
 
 import argparse
@@ -243,8 +247,9 @@ class Stall:
         return self.count if self.t < self.until else None
 
 
-def play_games(tasks, cfg, mode, device, worker=0):
-    """Play the (level, seed, stop_at_clear) tasks in lock-step batches."""
+def play_games(tasks, cfg, mode, device, worker=0, sink=None):
+    """Play the (level, seed, stop_at_clear) tasks in lock-step batches;
+    sink(game) is called for every game as it ends."""
     from sim.csim import SIZE, CSim
     net = QNet(os.path.join(ROOT, cfg["checkpoint"]), device)
     planner = Planner(net, cfg)
@@ -309,6 +314,8 @@ def play_games(tasks, cfg, mode, device, worker=0):
                 g["actions"] = "".join("UDLRN"[a] for a in g["actions"])
                 del g["stall"]
                 results.append(g)
+                if sink is not None:
+                    sink(g)
             else:
                 keep.append(i)
         games = [games[i] for i in keep]
@@ -318,18 +325,37 @@ def play_games(tasks, cfg, mode, device, worker=0):
             "rollout_sim_steps": planner.sim_steps, "forwards": net.forwards}
 
 
+_SINK = {}
+
+
+def _init_sink(path, lock, done, total, t0):
+    _SINK.update(path=path, lock=lock, done=done, total=total, t0=t0)
+
+
+def _write_game(g):
+    """Append a finished game to the run's JSONL and print a progress line."""
+    with _SINK["lock"]:
+        with open(_SINK["path"], "a") as f:
+            f.write(json.dumps(g) + "\n")
+        _SINK["done"].value += 1
+        n = _SINK["done"].value
+    print(f"game {n}/{_SINK['total']} level {g['start_level']} seed {g['seed']}: "
+          f"{g['length']} steps, {g['levels_cleared']} levels, {g['deaths']} deaths"
+          f"{' (cap)' if g['truncated'] else ''}, {time.time() - _SINK['t0']:.0f} s", flush=True)
+
+
 def _worker(args):
     tasks, cfg, mode, device, worker = args
-    return play_games(tasks, cfg, mode, device, worker)
+    return play_games(tasks, cfg, mode, device, worker, _write_game if _SINK else None)
 
 
-def make_tasks(cfg, levels):
+def make_tasks(cfg, levels, maze_only=False):
     e = cfg["eval"]
     seed, n1, nl = int(e["seed"]), int(e["episodes"]), int(e["level_episodes"])
     tasks = []
-    if 1 in levels:
+    if 1 in levels and not maze_only:
         tasks += [(1, seed + i, False) for i in range(max(n1, nl))]
-    tasks += [(lv, seed + i, True) for lv in levels if lv != 1 for i in range(nl)]
+    tasks += [(lv, seed + i, True) for lv in levels if lv != 1 or maze_only for i in range(nl)]
     return tasks
 
 
@@ -340,6 +366,8 @@ def summarize(games, cfg, levels):
         by.setdefault(g["start_level"], []).append(g)
     per_level = {}
     for lv in levels:
+        if lv not in by:
+            continue
         gs = sorted(by[lv], key=lambda g: g["seed"])[:int(e["level_episodes"])]
         per_level[lv] = {"episodes": len(gs),
                          "cleared": float(np.mean([g["levels_cleared"] >= 1 for g in gs])),
@@ -349,14 +377,16 @@ def summarize(games, cfg, levels):
     out = {"per_level": per_level,
            "per_maze_mean": float(np.mean([v["cleared"] for v in per_level.values()])),
            "min_level_cleared": min(v["cleared"] for v in per_level.values())}
-    if 1 in by:
-        from1 = sorted(by[1], key=lambda g: g["seed"])[:int(e["episodes"])]
+    from1 = [g for g in by.get(1, []) if not g["stop"]]
+    if from1:
+        from1 = sorted(from1, key=lambda g: g["seed"])[:int(e["episodes"])]
         cl = np.array([g["levels_cleared"] for g in from1])
         out["from_level1"] = {"episodes": len(from1), "mean_levels_cleared": float(cl.mean()),
                               "median_levels_cleared": float(np.median(cl)),
                               "max_levels_cleared": int(cl.max()),
                               "mean_score": float(np.mean([g["score"] for g in from1])),
                               "truncated": float(np.mean([g["truncated"] for g in from1]))}
+        out["from_level1"].update(deaths_per_1k_steps(from1))
     n = sum(g["length"] for g in games)
     out["decisions"] = n
     out["overrides"] = sum(g["overrides"] for g in games) / n
@@ -365,6 +395,25 @@ def summarize(games, cfg, levels):
     out["breaker"] = sum(g["breaker"] for g in games) / n
     out["deaths_per_game"] = float(np.mean([g["deaths"] for g in games]))
     return out
+
+
+def deaths_per_1k_steps(games, n_boot=10000, seed=0):
+    """Deaths per 1000 steps over the games (capped games count with their
+    steps) with a 95% bootstrap interval over games."""
+    d = np.array([g["deaths"] for g in games], float)
+    n = np.array([g["length"] for g in games], float)
+    rng = np.random.default_rng(seed)
+    i = rng.integers(0, len(d), (n_boot, len(d)))
+    boot = 1000 * d[i].sum(1) / n[i].sum(1)
+    return {"deaths_per_1k_steps": float(1000 * d.sum() / n.sum()),
+            "deaths_per_1k_steps_ci95": [float(np.percentile(boot, 2.5)),
+                                         float(np.percentile(boot, 97.5))],
+            "steps": int(n.sum())}
+
+
+def print_summary(res):
+    print(json.dumps({k: v for k, v in res.items() if k not in ("config", "per_level")}, indent=1))
+    print("per level cleared:", " ".join(f"{lv}:{v['cleared']:.0%}" for lv, v in res["per_level"].items()))
 
 
 def replay_check(games, n):
@@ -401,8 +450,22 @@ def main():
     p.add_argument("--workers", type=int, help="override run.workers")
     p.add_argument("--replay-check", type=int, default=0, metavar="N",
                    help="replay N finished games in the real game")
-    p.add_argument("--out", help="JSON with the summary and every game (default runs/plan_eval/)")
+    p.add_argument("--maze-only", action="store_true",
+                   help="level-1 games stop at the clear too (no games from level 1)")
+    p.add_argument("--summarize", metavar="JSONL",
+                   help="only summarize the games of a (possibly stopped) run's JSONL")
+    p.add_argument("--out", help="JSON with the summary and every game (default runs/plan_eval/);"
+                   " the games are also appended to <out minus .json>.jsonl as they end")
     args = p.parse_args()
+    if args.summarize:
+        with open(args.summarize) as f:
+            games = [json.loads(line) for line in f if line.strip()]
+        cfg = load_cfg(args.config)
+        levels = sorted({g["start_level"] for g in games})
+        res = summarize(games, cfg, levels)
+        res.update(games_played=len(games))
+        print_summary(res)
+        return
     cfg = load_cfg(args.config)
     if args.episodes is not None:
         cfg["eval"]["episodes"] = args.episodes
@@ -413,13 +476,23 @@ def main():
     if args.workers is not None:
         cfg["run"]["workers"] = args.workers
     levels = [int(x) for x in args.levels.split(",")] if args.levels else list(range(1, LEVELS + 1))
-    tasks = make_tasks(cfg, levels)
-    tasks.sort(key=lambda t: t[0] != 1)          # the long games first
+    tasks = make_tasks(cfg, levels, args.maze_only)
+    if args.maze_only:
+        # seed-major: a stopped run has about as many games of every maze
+        tasks.sort(key=lambda t: (t[1], t[0]))
+    else:
+        tasks.sort(key=lambda t: t[0] != 1)      # the long games first
     nw = int(cfg["run"]["workers"])
     split = [tasks[i::nw] for i in range(nw)]
+    out = args.out or os.path.join(ROOT, "runs", "plan_eval",
+                                   f"{args.mode}_{time.strftime('%m%d_%H%M')}.json")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    jsonl = os.path.splitext(out)[0] + ".jsonl"
+    open(jsonl, "w").close()
     t0 = time.perf_counter()
     ctx = multiprocessing.get_context("spawn")
-    with ctx.Pool(nw) as pool:
+    sink = (jsonl, ctx.Lock(), ctx.Value("i", 0), len(tasks), time.time())
+    with ctx.Pool(nw, initializer=_init_sink, initargs=sink) as pool:
         parts = pool.map(_worker, [(s, cfg, args.mode, cfg["run"]["device"], i)
                                    for i, s in enumerate(split) if s])
     wall = time.perf_counter() - t0
@@ -433,13 +506,9 @@ def main():
     if args.replay_check:
         res["replay_check"] = {"games": min(args.replay_check, len(games)),
                                "diverged": replay_check(games, args.replay_check)}
-    out = args.out or os.path.join(ROOT, "runs", "plan_eval",
-                                   f"{args.mode}_{time.strftime('%m%d_%H%M')}.json")
-    os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
         json.dump({**res, "games": games}, f)
-    print(json.dumps({k: v for k, v in res.items() if k not in ("config", "per_level")}, indent=1))
-    print("per level cleared:", " ".join(f"{lv}:{v['cleared']:.0%}" for lv, v in res["per_level"].items()))
+    print_summary(res)
     print("written", out)
 
 
