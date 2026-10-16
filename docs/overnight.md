@@ -2578,3 +2578,34 @@ with lookahead. No training tonight.
   observations are compared every tick. 200 ticks under xvfb on the GPU:
   in sync, the game's own 0.25 s per tick is the limit (planner ~40-130
   decisions/s for one game).
+
+## 2026-10-16 evening: planner grid, stopped and re-planned
+
+- 13:47 Grid started (honest, thr 0.5, loop breaker; two runs on the GPU
+  at a time): H40/K16, H60/K8, H60/K16, H80/K16, H60/K32, 16 mazes x 20
+  games + 20 games from level 1 with a 100k-step cap.
+- 20:47 Stopped after 7 h with the first pair (H80/K16, H60/K32) still
+  running and nothing saved. The wall time of a run is set by its longest
+  game from level 1: one game cannot be parallelised, every decision is H
+  sequential rollout steps on the GPU (past runs: ~0.26 s per decision for
+  H40/K8 with two runs on the GPU, ~0.4-0.6 s expected for H60-80), and the
+  stronger planners rarely die, so a game from level 1 can run to the cap:
+  100k steps = 11-17 h per game. plan_eval.py also writes its results only
+  at the end, so a stopped run leaves nothing.
+- Added scripts/plan_bench.py (decision latency of the planner on one game,
+  the play.py case: mean / p95 / max per decision), not run on the GPU yet.
+- Plan for the next session (option 2):
+  1. plan_eval.py: write every finished game to a JSONL as it ends (and a
+     progress line), so stopped runs keep their games.
+  2. The five grid configs (configs/plan_grid_*.yaml) on the 16 mazes x
+     20 games first (levels 2..16 stop at the clear; level 1 as a maze
+     game only), two runs on the GPU at a time; table against
+     plan_honest_lb (H40/K8).
+  3. plan_bench.py on all six configs with the GPU otherwise idle:
+     decisions/s for one game; real time needs >= 10/s with a margin (a
+     decision has 0.25 s, 0.0625 s while pacman is super). The best config
+     that fits becomes the default in configs/plan_honest_lb.yaml.
+  4. Then the games from level 1, cap 30,000 steps (the grid configs are
+     set to it), with deaths per 1000 steps as the metric (games that reach
+     the cap still count), results written per game.
+  5. Conclusion: horizon-bound or rollout-count-bound.
