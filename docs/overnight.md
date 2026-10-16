@@ -2495,3 +2495,15 @@ with lookahead. No training tonight.
   the surviving path — the noisy death share is a pessimistic danger score
   and the fallback (fewest deaths) does much of the work.
 - 02:22 Full planner run started (tmux `plan`, 6 processes, GPU at 100%).
+- 03:18 Full planner run done (57 min, 534k decisions, 156 decisions/s,
+  27k rollout sim steps/s, 92M rollout steps in total). Every maze cleared
+  in 20/20 games (greedy best_v04 in the same sim with the same seeds:
+  79.7%, min 45% on maze 9); deaths per game 0.34 vs 1.47. From level 1:
+  22.4 levels cleared on average (median 20, min 11, max 39; one game of
+  20 hit the 30,000-step cap) vs 1.70 greedy. Replay of 10 planner games in
+  the real game: 0 differences, so the numbers hold in the game itself, not
+  only in the sim. Overrides 6.3%, second round 23%, all dropped 18%.
+  Most remaining deaths are on level 1 (3.0 per game: those games run
+  ~16k steps through 20+ levels) and on mazes 14-16 (0.3-0.5).
+- 03:19 Started the noiseless variant configs/plan_exact.yaml (K = 1,
+  eps = 0: one exact forecast per direction) in tmux `plan`.

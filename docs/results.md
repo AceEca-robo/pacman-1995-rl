@@ -1328,3 +1328,41 @@ radius 5; docs/dqfd4_deaths_{compare,mazes,summary}.png):
 | in the life's first 200 ticks | 53.0% | 50.4% | 53.0% |
 
 The escape demos did not reduce the squeezes. best_v04 stays the best.
+
+## Rollout planner in sim/ (2026-10-16 night)
+
+scripts/plan_eval.py: best_v04 picks the move unless a 40-step rollout in
+the C sim (sim/, a byte-exact port of the game: 0 divergences on 610k
+Python / 600k C verified steps) shows that it loses a life; then the
+next-best surviving direction by Q is played. Protocol of evaluate.py
+--levels --stop-at-clear: 20 games per maze (levels 2..16 stop at clear),
+20 games from level 1 to game over or 30,000 steps; seeds 0..19; played in
+the sim, 10 games per run replayed in the real game (0 differences).
+
+| level | greedy cleared | greedy deaths | plan cleared | plan deaths |
+|---|---|---|---|---|
+| 1 | 80% | 2.80 | 100% | 3.00 |
+| 2 | 70% | 1.40 | 100% | 0.00 |
+| 3 | 90% | 1.45 | 100% | 0.10 |
+| 4 | 80% | 1.20 | 100% | 0.20 |
+| 5 | 90% | 1.25 | 100% | 0.10 |
+| 6 | 85% | 1.30 | 100% | 0.00 |
+| 7 | 90% | 1.05 | 100% | 0.05 |
+| 8 | 95% | 0.85 | 100% | 0.00 |
+| 9 | 45% | 1.90 | 100% | 0.10 |
+| 10 | 90% | 1.05 | 100% | 0.20 |
+| 11 | 80% | 1.15 | 100% | 0.05 |
+| 12 | 85% | 1.45 | 100% | 0.30 |
+| 13 | 80% | 1.40 | 100% | 0.25 |
+| 14 | 70% | 1.75 | 100% | 0.50 |
+| 15 | 65% | 1.80 | 100% | 0.30 |
+| 16 | 80% | 1.65 | 100% | 0.30 |
+
+| mode | per-maze mean | min | from level 1 (mean / median / max) | deaths/game | decisions/s |
+|---|---|---|---|---|---|
+| greedy best_v04 | 79.7% | 45% | 1.70 / 1 / 5 | 1.47 | 11,900 |
+| plan H=40 K=4 eps=0.1 thr=0.25 | **100%** | **100%** | **22.4 / 20 / 39** | **0.34** | 156 (27k rollout steps/s, 6 processes, 1 GPU) |
+
+Level-1 deaths are per game over the whole run (the planner's games last
+~16k steps and 20+ levels). Reference for greedy best_v04 in the real game:
+78.4% / 1.48 (40 games). Outputs: runs/plan_eval/{greedy,plan}_full.json.
