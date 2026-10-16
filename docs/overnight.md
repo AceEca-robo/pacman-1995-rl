@@ -2609,3 +2609,31 @@ with lookahead. No training tonight.
      set to it), with deaths per 1000 steps as the metric (games that reach
      the cap still count), results written per game.
   5. Conclusion: horizon-bound or rollout-count-bound.
+
+## 2026-10-17 night: planner grid on the 16 mazes, decision latency (no training)
+
+- 00:15 Plan from the evening section, with the user's edits: grid of
+  H60/K16, H80/K16, H60/K32 (honest, thr 0.5, loop breaker), 16 mazes x 20
+  games, two runs on the GPU at a time; plan_bench.py on all four configs;
+  then games from level 1 with the best fitting config if time is left.
+- plan_eval.py (ba2dca0): every finished game is appended to
+  `<out>.jsonl` with a progress line (game N of M, level, seed, steps,
+  levels, deaths); `--maze-only` stops the level-1 games at the clear as
+  well and orders the tasks seed-major, so a stopped run has about the same
+  number of games per maze; `--summarize <jsonl>` summarizes a stopped run;
+  the from-level-1 summary has deaths per 1000 steps with a 95% bootstrap
+  interval over games. pytest: 141 passed.
+- Baseline on the same footing: h_lb (H40/K8 + breaker) has full games from
+  level 1, so its 0.55 deaths per game include the deaths after the first
+  clear. Replaying its level-1 games in the sim up to the first clear gives
+  the maze-only numbers: 99.4% per maze / worst 95% / 0.39 deaths per game
+  (h_k8_t50 without breaker: 99.1% / 95% / 0.40; the user's quoted 0.56 is
+  the full-game figure).
+- 00:22 plan_bench.py (GPU otherwise idle, levels 9 and 14, 300 decisions
+  each, one game): see the latency table below. (A `tmux has -s` typo made
+  my wait loop exit at once and I truncated the live log; the JSON was
+  written at the end and is complete.)
+- 00:25 Grid started (runs/plan_grid2/grid.sh: H60/K32 and H60/K16 at once,
+  H80/K16 after H60/K16, a hard stop at 06:30). 12 worker processes fill
+  7.8 of the 8 GB; a few "allocation failed with OOM" warnings at the start,
+  the caching allocator recovered and all workers kept running.
