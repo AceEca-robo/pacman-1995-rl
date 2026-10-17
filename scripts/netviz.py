@@ -17,7 +17,7 @@ Panels, all of the state the decision was made on:
      direction;
   6. status line: tick, level, lives, score, ms per decision.
 
-    python scripts/netviz.py --bench --frames 300     # sim only, no game: decisions/s with viz
+    python scripts/netviz.py --ticks 300     # sim only, no game: decisions/s with viz
     python scripts/netviz.py --snapshot docs/viz_frame.png --level 9 --ticks 120
 """
 

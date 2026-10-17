@@ -2,14 +2,16 @@
 # random() seed and redrawn ghost random-move rates (sim_reseed_many), so
 # the rollouts sample the ghosts' futures instead of reading the real one.
 # The visible game state is the same; plan.yaml is the oracle variant.
-# This one: K = 8, threshold 0.5 and the loop breaker, without a step cap.
-# Kept as the default after the 2026-10-17 grid (docs/results.md): H60/K16
-# plays the same, H80/K16 worse, H60/K32 dies less but does not fit real time.
+# This one: H = 40, K = 32, threshold 0.5 and the loop breaker, without a
+# step cap. The default since the 2026-10-17 day grid (docs/results.md):
+# all 16 mazes cleared in 320 games, 0.23 deaths per game (K = 8, the
+# default before: 0.39), 20 decisions/s with p95 53 ms. H60/K16 plays like
+# K = 8, H80/K16 worse, H60/K32 dies more and does not fit real time.
 checkpoint: runs/best_v04/best.pt
 
 plan:
   horizon: 40           # H: sim steps per rollout (the candidate move + H-1 policy steps)
-  rollouts: 8           # K: rollouts per candidate direction (each its own ghost future)
+  rollouts: 32          # K: rollouts per candidate direction (each its own ghost future)
   epsilon: 0.1          # noise of the rollout policy (best_v04 greedy, else a uniform action)
   ghost_rng: reseed     # oracle: clones keep the game's random() state
   # a direction is dropped when more than this share of its K rollouts lose

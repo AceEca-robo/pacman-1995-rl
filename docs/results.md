@@ -1420,7 +1420,7 @@ pacman is super).
 
 | config | games | per-maze | worst | deaths/game (95% CI) | common: per-maze / worst / deaths | all dropped | decisions/s | p95 / max ms |
 |---|---|---|---|---|---|---|---|---|
-| **H40/K8 (default)** | 320 | 99.4% | 95% | 0.39 (0.32-0.46) | 99.6% / 93% / 0.41 | 21% | 43.5 | 24 / 70 |
+| H40/K8 (default until the H40 grid below) | 320 | 99.4% | 95% | 0.39 (0.32-0.46) | 99.6% / 93% / 0.41 | 21% | 43.5 | 24 / 70 |
 | H60/K16 | 320 | 99.4% | 90% | 0.42 (0.35-0.49) | 99.0% / 85% / 0.44 | 16% | 19.1 | 75 / 149 |
 | H80/K16 | 303 (stopped) | 94.2% | 79% | 0.67 (0.57-0.77) | 94.2% / 67% / 0.64 | 27% | 12.7 | 184 / 201 |
 | H60/K32 | 213 (OOM) | 99.6% | 93% | 0.30 (0.23-0.38) | 99.6% / 93% / 0.30 | 13% | 12.5 | 199 / 265 |
@@ -1439,3 +1439,44 @@ From level 1, 10 games (seeds 0-9), cap 30,000 steps (none reached it):
 
 (H40/K8 over all 20 seeds: 7.65 levels, 0.55 (0.46-0.68).) Outputs:
 runs/plan_grid2/.
+
+### Planner grid, H = 40 (2026-10-17 day): more rollouts at the short horizon
+
+Same setup as above (honest, thr 0.5, loop breaker, eps 0.1, 16 mazes x 20
+games, seeds 0-19, --maze-only); H40/K16 and H40/K32 ran side by side with
+4 workers each, all 320 games finished. Latency: plan_bench.py, idle GPU,
+mazes 2, 9, 14, 15 x 400 decisions (runs/plan_grid3/bench.json).
+
+| config | games | per-maze | worst | deaths/game (95% CI) | game overs | all dropped | decisions/s | p95 / max ms |
+|---|---|---|---|---|---|---|---|---|
+| H40/K8 | 320 | 99.4% | 95% | 0.39 (0.32-0.46) | 2 | 21% | 43.3 | 24 / 70 |
+| H40/K16 | 320 | 98.8% | 90% | 0.33 (0.27-0.40) | 4 | 19% | 30.6 | 37 / 100 |
+| **H40/K32 (default)** | 320 | **100%** | **100%** | **0.23 (0.18-0.28)** | 0 | 14% | 20.1 | 53 / 170 |
+| H60/K32 | 213 (OOM) | 99.6% | 93% | 0.30 (0.23-0.38) | 1 | 13% | 12.2 | 201 / 282 |
+
+On the 213 games H60/K32 kept (per-maze / worst / deaths): H40/K8 99.6% /
+93% / 0.40, H40/K16 99.1% / 92% / 0.31, H40/K32 100% / 100% / 0.23,
+H60/K32 99.6% / 93% / 0.30.
+
+Paired deaths per game (bootstrap 95% CI over games): on all 320,
+H40/K32 - H40/K8 = -0.16 (-0.24..-0.08), H40/K32 - H40/K16 = -0.11
+(-0.18..-0.03), H40/K16 - H40/K8 = -0.05 (-0.14..+0.03); on the 213 common
+ones, H40/K32 - H60/K32 = -0.08 (-0.17..+0.01).
+
+H40/K32 is the new default (configs/plan_honest_lb.yaml): the only config
+without a lost maze, 40% fewer deaths than K8, and p95 53 ms fits the
+0.25 s tick with a margin (the 62.5 ms super-pacman tick only on average).
+The rollout count, not the horizon, decides.
+
+With the network view (scripts/netviz.py --ticks 400, sim only, idle GPU,
+mazes 2, 9, 14, 15): `trace=True` rolls out all four directions every
+decision and records the cells, so a decision costs about three times as
+much as in the bench:
+
+| config | decision ms | drawing ms | total ms (p95) | decisions/s |
+|---|---|---|---|---|
+| H40/K32 | 157-166 | 7 | 164-173 (188-193) | 5.8-6.1 |
+| H40/K8 | 55-63 | 5 | 60-69 (71-73) | 14.6-16.7 |
+
+H40/K32 with --viz still fits the 0.25 s tick, not the super-pacman one.
+Frame: docs/viz_frame.png (level 9, tick 119). Outputs: runs/plan_grid3/.

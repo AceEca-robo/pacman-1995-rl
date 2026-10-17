@@ -2743,3 +2743,20 @@ with lookahead. No training tonight.
   and H60/K32 (paired, results.md), H40/K32 as the default (it meets the
   rule: p95 < 200 ms, fewer deaths), the viz decisions/s on the idle GPU,
   docs/viz_frame.png, push.
+- 14:40 Resumed. Paired table in docs/results.md ("Planner grid, H = 40"):
+  H40/K32 - H40/K8 = -0.16 deaths per game (CI -0.24..-0.08), - H40/K16 =
+  -0.11 (-0.18..-0.03), - H60/K32 on the 213 common games = -0.08
+  (-0.17..+0.01). H40/K32 is the default now (configs/plan_honest_lb.yaml,
+  rollouts 8 -> 32); the tests override K, nothing else read it.
+- The network view costs more than the drawing: netviz.py --ticks 400 on the
+  idle GPU (mazes 2/9/14/15) gives H40/K32 157-166 ms per decision + 7 ms
+  drawing, p95 of the sum 188-193 ms, 5.8-6.1 decisions/s; H40/K8 55-63 + 5
+  ms, 14.6-16.7/s. trace=True rolls out all four directions on every
+  decision and records cells per step, ~3x the bench's 50 ms. With --viz
+  H40/K32 still fits the 0.25 s tick, not the 62.5 ms super-pacman one.
+- docs/viz_frame.png: netviz.py --snapshot, level 9, tick 119 (sim only).
+  netviz.py's docstring named a --bench --frames mode that does not exist;
+  fixed to --ticks.
+- Ideas for later: (5) a cheaper trace for --viz (record cells on the GPU
+  and copy once per decision; roll out the "shown only" directions with
+  fewer rollouts), so the view keeps up with super pacman.
