@@ -1496,4 +1496,16 @@ the tick (one normal tick in each run). For watching and
 recording use configs/plan_honest_k8.yaml: with K = 32 the view slows the
 game down by a third while pacman is super. --record .mp4 writes 1920x1080
 at 25 fps, no audio (both windows, 1944 px wide, scaled by 0.99).
-Frame: docs/viz_frame.png (level 9, tick 119). Outputs: runs/plan_grid3/.
+Outputs: runs/plan_grid3/.
+
+Single 1920x1080 window (play.py --viz since 2026-10-17 afternoon: the real
+game on a private Xvfb, grabbed every tick and shown in the centre; mp4 fed
+to ffmpeg by a thread), same setup, 1000 ticks:
+
+| config | --record | normal ticks: late / stretched > 10 ms | super ticks: late / stretched > 10 ms | super tick wall median / max |
+|---|---|---|---|---|
+| H40/K8 (plan_honest_k8.yaml) | no | 0.1% / 0.1% (831) | 0% / 0% (169) | 125 / 126 ms |
+| H40/K8 | mp4 | 0.1% / 0.1% (831) | 0% / 0% (169) | 125 / 126 ms |
+| H40/K32 (200 ticks) | mp4 | 1.0% / 1.0% (100) | 100% / 100% (100) | 195 / 226 ms |
+
+Frame: docs/viz_frame.png (H40/K32, level 9, tick 130, from a --record mp4).

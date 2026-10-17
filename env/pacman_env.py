@@ -300,7 +300,9 @@ def _load_config(config):
 
 
 def _die_with_parent():
-    # Children get SIGTERM if the Python process dies without close().
+    # Children get SIGTERM if the Python process dies without close(), and
+    # ignore the terminal's Ctrl+C: the Python side decides when they stop.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
     except OSError:

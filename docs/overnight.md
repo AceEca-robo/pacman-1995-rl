@@ -2793,3 +2793,40 @@ with lookahead. No training tonight.
   threshold 0.25, no loop breaker, 30k cap) and I overwrote it without
   looking. Its old content is back as configs/plan_honest_k8_t25.yaml; the
   name plan_honest_k8.yaml stays the viewing config the user asked for.
+
+## 2026-10-17 evening: one 1920x1080 window for --viz, clean exit (no training)
+
+- play.py --viz is one pygame window now: panels 1-2 left, the game in the
+  centre with the caption "pacman 1.0 (1995) - played by the network",
+  3-4 right, the planner and the status line at the bottom. --record writes
+  that window (1920x1080, no padding needed).
+- The user asked to push the game window behind ours with xdotool. That
+  does not work: game/basis.h has #define RAISE, and on VisibilityNotify
+  the game calls XRaiseWindow (usrinter.cc:148-151), so it comes back on
+  top; on a display without a compositor (Xvfb) a covered window also
+  grabs as whatever covers it. Instead the game runs on a private Xvfb
+  (play.py starts it with -displayfd, own session, stops it at the end):
+  nothing covers it, only our window is on the screen. No change to game/.
+- The capture: PIL ImageGrab with xdisplay (xcb), no xwd process per tick;
+  its box has to be the window's inner corner plus width + 2 x border
+  (xwininfo) to equal xwd -id pixel for pixel (checked: 0 pixels differ;
+  the first try with the border on all sides was shifted by 5 px).
+- --sim-only (planner): no game process and no Xvfb, the sim plays at the
+  game's pace (sleeps to 0.25 / (1 + super) s per tick), the centre shows
+  the sim's maze, caption "(sim)".
+- Clean exit: a SIGINT handler sets a flag, the loop ends after the tick,
+  the finally block closes the env (socket, game), the Xvfb and ffmpeg (the
+  file is complete). The children no longer get the terminal's Ctrl+C:
+  Xvfb and ffmpeg run in their own session, env's _die_with_parent also
+  sets SIGINT to SIG_IGN in the game (the game still quits when the socket
+  closes or the parent dies). Ctrl+C before the loop: caught in
+  __main__, the finally blocks have cleaned up. Tested with SIGINT to the
+  whole process group (as a terminal does) during a recording and with
+  --sim-only, and with WM_DELETE_WINDOW (python-xlib, what a close button
+  sends): exit code 0, empty stderr, no Xvfb / game / ffmpeg left, no
+  /tmp/pacman-env-* and no X socket of the private display.
+- Mp4Writer feeds ffmpeg from a thread (queue of 32 frames): with K = 32
+  and --record, 51% of the normal ticks were late before (repeated
+  1920x1080 frames written synchronously), 1% after. K = 8 with --record:
+  0% of the super ticks late (table in results.md).
+- docs/viz_frame.png: a frame of a --record mp4 of the real game (K = 32).

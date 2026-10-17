@@ -7,7 +7,8 @@
     xvfb-run -a -s "-screen 0 1280x1024x24" python scripts/play.py --agent dqn \
         --checkpoint runs/dqfd0/best.pt --level 7 --record docs/x.gif --max-steps 400
     python scripts/play.py --agent planner --seed 0 --display :0   # best_v04 + rollouts
-    python scripts/play.py --agent planner --level 9 --viz --record docs/viz.mp4 --max-steps 400
+    python scripts/play.py --agent planner --level 9 --viz --record runs/viz.mp4 --max-steps 400
+    python scripts/play.py --agent planner --level 9 --viz --sim-only    # no game process
 
 --agent planner: scripts/plan_eval.py's planner (--plan-config, default
 the honest variant with the loop breaker, configs/plan_honest_lb.yaml)
@@ -22,32 +23,42 @@ Needs xdotool and xwd. The window must stay visible: X has no backing store
 here, a covered part of the window is grabbed as whatever covers it (the
 game raises itself when obscured).
 
---viz (dqn and planner): a second window (scripts/netviz.py, pygame) next to
-the game shows the network's input planes, conv activations, saliency, Q /
-V / A and the planner's rollouts, redrawn every tick for the state the
-decision was made on. With --record both windows go side by side into the
-file; a .mp4 is written by ffmpeg as 1920x1080 at 25 fps without sound
-(the two windows centred, scaled down only if they do not fit; frames
-repeated to keep the tick durations), anything else is a GIF. At the end
-it prints the share of decisions that took longer than the game's tick
-(0.25 s, 0.125 s while pacman is super): the game waits for the action, so
-a late decision stretches that tick.
+--viz (dqn and planner): one 1920x1080 window (scripts/netviz.py, pygame):
+the game in the centre, the network's input planes and conv activations
+left, saliency and Q / V / A right, the planner's rollouts and the status
+line at the bottom, redrawn every tick for the state the decision was made
+on. The real game runs on a private Xvfb (started and stopped here) and its
+window is grabbed every tick, so only our window is on the screen; lowering
+the game window under ours on the same display does not work, the game
+raises itself whenever it is obscured (#define RAISE, game/basis.h).
+--sim-only (planner): no game process, the sim plays at the game's speed
+and the centre shows the sim's maze. With --record the window goes to the
+file: .mp4 by ffmpeg as 1920x1080 at 25 fps without sound (frames repeated
+to keep the tick durations), anything else a GIF. Ctrl+C or closing the
+window ends the game cleanly (exit code 0, the file is still written). At
+the end it prints the share of decisions that took longer than the game's
+tick (0.25 s, 0.125 s while pacman is super): the game waits for the
+action, so a late decision stretches that tick.
 """
 
 import argparse
 import os
+import queue
+import select
+import signal
 import struct
 import subprocess
 import sys
+import threading
 import time
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageGrab
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from agents.heuristic_agent import HeuristicAgent  # noqa: E402
-from env.pacman_env import PacmanEnv  # noqa: E402
+from env.pacman_env import PacmanEnv, _die_with_parent  # noqa: E402
 
 WINDOW_NAME = r"^Pacman v\. 1\.0"  # PACTITLE in game/pac.h
 
@@ -84,24 +95,54 @@ def grab(display, window):
     return Image.frombuffer("RGB", (width, height), raw, "raw", mode, bytes_per_line, 1)
 
 
-def window_geometry(display, window):
-    """(x, y, width, height) of an X window, via xdotool."""
-    out = subprocess.run(["xdotool", "getwindowgeometry", "--shell", window],
-                         env={**os.environ, "DISPLAY": display}, capture_output=True,
-                         text=True).stdout
-    g = dict(line.split("=", 1) for line in out.split() if "=" in line)
-    return int(g["X"]), int(g["Y"]), int(g["WIDTH"]), int(g["HEIGHT"])
+def window_box(display, window):
+    """(left, top, right, bottom) of the screen area that xwd -id grabs for
+    an X window: from its inner corner, width and height plus twice the
+    border (checked pixel for pixel against grab()), via xwininfo."""
+    out = subprocess.run(["xwininfo", "-id", window], env={**os.environ, "DISPLAY": display},
+                         capture_output=True, check=True).stdout.decode("latin-1")
+    g = {k.strip(): int(v) for k, v in (line.split(":", 1) for line in out.splitlines()
+                                        if ":" in line and line.split(":", 1)[1].strip().isdigit())}
+    x, y, b = g["Absolute upper-left X"], g["Absolute upper-left Y"], g["Border width"]
+    return x, y, x + g["Width"] + 2 * b, y + g["Height"] + 2 * b
 
 
-def screen_size(display):
-    out = subprocess.run(["xdotool", "getdisplaygeometry"], env={**os.environ, "DISPLAY": display},
-                         capture_output=True, text=True).stdout.split()
-    return (int(out[0]), int(out[1])) if len(out) == 2 else (10 ** 5, 10 ** 5)
+class PrivateX:
+    """A private Xvfb for the game window (--viz): nothing covers it there,
+    so it can be grabbed every tick."""
+
+    def __init__(self, size=(1024, 768), timeout=10.0):
+        r, w = os.pipe()
+        # own session: the terminal's Ctrl+C goes to us only
+        self.proc = subprocess.Popen(
+            ["Xvfb", "-displayfd", str(w), "-screen", "0", f"{size[0]}x{size[1]}x24",
+             "-nolisten", "tcp"], pass_fds=(w,), stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True, preexec_fn=_die_with_parent)
+        os.close(w)
+        try:
+            ready = select.select([r], [], [], timeout)[0]
+            num = os.read(r, 16).decode().strip() if ready else ""
+        finally:
+            os.close(r)
+        if not num:
+            self.close()
+            sys.exit("Xvfb did not start")
+        self.name = ":" + num
+
+    def close(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
 
 
 class Mp4Writer:
     """RGB frames with their durations -> H.264 mp4 at a fixed rate and frame
-    size (ffmpeg), no audio track."""
+    size (ffmpeg), no audio track. A thread feeds ffmpeg, so that encoding
+    does not hold up the game loop."""
 
     def __init__(self, path, size, fps=25, out=(1920, 1080)):
         self.fps, self.size, self.n, self.t, self.shown = fps, size, 0, 0.0, 0
@@ -114,34 +155,31 @@ class Mp4Writer:
             ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
              "-s", f"{size[0]}x{size[1]}", "-r", str(fps), "-i", "-", "-vf", vf, "-an",
              "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", path],
-            stdin=subprocess.PIPE)
+            stdin=subprocess.PIPE, start_new_session=True)
+        self.queue = queue.Queue(maxsize=32)   # (frame bytes, repeats); ~200 MB at most
+        self.thread = threading.Thread(target=self._feed, daemon=True)
+        self.thread.start()
+
+    def _feed(self):
+        while (item := self.queue.get()) is not None:
+            data, k = item
+            for _ in range(k):
+                self.proc.stdin.write(data)
 
     def add(self, img, duration):
         """img (h, w, 3) uint8 shown for duration seconds."""
         self.t += duration
         k = round(self.t * self.fps) - self.shown
-        data = np.ascontiguousarray(img).tobytes()
-        for _ in range(max(k, 0)):
-            self.proc.stdin.write(data)
+        if k > 0:
+            self.queue.put((np.ascontiguousarray(img).tobytes(), k))
         self.shown += max(k, 0)
         self.n += 1
 
     def close(self):
+        self.queue.put(None)
+        self.thread.join()
         self.proc.stdin.close()
         self.proc.wait()
-
-
-def side_by_side(game, viz):
-    """Game window (PIL) left, viz frame (array) right, on one dark canvas
-    with even sides (H.264)."""
-    g = np.asarray(game.convert("RGB"))
-    h = max(g.shape[0], viz.shape[0])
-    w = g.shape[1] + viz.shape[1]
-    out = np.zeros((h + h % 2, w + w % 2, 3), np.uint8)
-    out[:] = (14, 16, 22)
-    out[:g.shape[0], :g.shape[1]] = g
-    out[:viz.shape[0], g.shape[1]:g.shape[1] + viz.shape[1]] = viz
-    return out
 
 
 def make_agent(args):
@@ -206,17 +244,22 @@ def main():
                    help="planner only: a scripts/plan_eval.py config")
     p.add_argument("--device", help="planner only: torch device (default: the config's)")
     p.add_argument("--viz", action="store_true",
-                   help="dqn / planner: the network view in a second window (scripts/netviz.py)")
+                   help="dqn / planner: one window with the game and the network view "
+                        "(scripts/netviz.py)")
+    p.add_argument("--sim-only", action="store_true",
+                   help="with --viz, planner only: no game process, the sim at the game's speed")
     args = p.parse_args()
     if args.viz and args.agent == "heuristic":
         sys.exit("--viz needs a network: --agent dqn or planner")
+    if args.sim_only and not (args.viz and args.agent == "planner"):
+        sys.exit("--sim-only needs --viz and --agent planner")
 
     agent = (PlannerAgent(args.plan_config, args.device, trace=args.viz)
              if args.agent == "planner" else make_agent(args))
+    if args.viz:
+        return play_viz(args, agent)
     env = PacmanEnv(display=args.display, fast=False,
                     config={"max_episode_steps": None, **agent.env_overrides})
-    if args.viz:
-        return play_viz(args, agent, env)
     frames, durations = [], []
     try:
         obs, info = env.reset(seed=args.seed, options=(
@@ -259,43 +302,56 @@ def main():
               f"median tick {np.median(durations[1:]) * 1000:.0f} ms")
 
 
-def play_viz(args, agent, env):
-    """main() with --viz: the game, the network view next to it, and (with
-    --record) both side by side in one file."""
-    from scripts.netviz import H as VIZ_H, W as VIZ_W, Viz, status_line
+def play_viz(args, agent):
+    """main() with --viz: one window with the game in its centre (the real
+    game on a private Xvfb, grabbed every tick, or the sim with --sim-only)
+    and, with --record, that window in the file."""
+    from scripts.netviz import GAME_CAPTION, Viz, status_line
+    stop = []
+    # Ctrl+C: finish the tick, then close everything as at a game over
+    signal.signal(signal.SIGINT, lambda *_: stop.append(True))
     net, device = (agent.net.net, agent.net.device) if args.agent == "planner" else \
         (agent.net, agent.device)
     mp4 = bool(args.record) and args.record.lower().endswith(".mp4")
     writer, frames, durations, t_dec, t_viz = None, [], [], [], []
     t_agent, ticks, supers, deaths = [], [], [], 0   # per tick: our time, wall time, super
-    os.environ["DISPLAY"] = args.display
+    xserver = env = None
+    steps, total, term = 0, 0.0, False
     try:
-        obs, info = env.reset(seed=args.seed, options=(
-            {"start_level": args.level} if args.level else None))
-        if args.agent == "planner":
+        if args.sim_only:
             agent.reset(args.seed, args.level or 1)
+            obs, info = agent.sim.obs(agent.net.cell_safety), sim_info(agent)
         else:
-            agent.reset(seed=args.seed)
-        window = find_window(args.display)
-        x, y, w, _ = window_geometry(args.display, window)
-        # right of the game window, but on the screen
-        sw, sh = screen_size(args.display)
-        vx = min(x + w + 8, max(0, sw - VIZ_W))
-        viz = Viz(net, device, agent.env_overrides.get("obs"), pos=(vx, max(0, min(y, sh - VIZ_H))))
-        total, steps, t_prev, prev_img = 0.0, 0, time.perf_counter(), None
+            xserver = PrivateX()
+            env = PacmanEnv(display=xserver.name, fast=False,
+                            config={"max_episode_steps": None, **agent.env_overrides})
+            obs, info = env.reset(seed=args.seed, options=(
+                {"start_level": args.level} if args.level else None))
+            if args.agent == "planner":
+                agent.reset(args.seed, args.level or 1)
+            else:
+                agent.reset(seed=args.seed)
+            box = window_box(xserver.name, find_window(xserver.name))
+        os.environ["DISPLAY"] = args.display   # our window on the user's screen
+        viz = Viz(net, device, agent.env_overrides.get("obs"),
+                  caption=GAME_CAPTION + (" (sim)" if args.sim_only else ""))
+        signal.signal(signal.SIGINT, lambda *_: stop.append(True))   # after SDL's init
+        t_prev, prev_img = time.perf_counter(), None
         t_obs = time.perf_counter()
-        while True:
-            game_img = grab(args.display, window) if args.record else None
+        while not stop:
+            game_img = None if args.sim_only else np.asarray(ImageGrab.grab(
+                bbox=box, xdisplay=xserver.name).convert("RGB"))
             t0 = time.perf_counter()
             a = agent.act(obs)
             t1 = time.perf_counter()
             viz.update(obs, a, getattr(agent, "last_trace", None),
                        status_line(steps, info["level"], viz.maze_of(obs["grid"]), info["lives"],
-                                   deaths, info["score"], t1 - t0, t_viz[-1] if t_viz else None))
+                                   deaths, info["score"], t1 - t0, t_viz[-1] if t_viz else None),
+                       game=game_img)
             t_dec.append(t1 - t0)
             t_viz.append(time.perf_counter() - t1)
             if args.record:
-                img = side_by_side(game_img, viz.frame())
+                img = viz.frame()
                 now = time.perf_counter()
                 if prev_img is not None:
                     if mp4:
@@ -314,20 +370,39 @@ def play_viz(args, agent, env):
                 prev_img, t_prev = img, now
             lives = info["lives"]
             t_agent.append(time.perf_counter() - t_obs)
-            obs, r, term, trunc, info = env.step(a)
+            if args.sim_only:
+                # agent.act advanced the sim; wait as long as the game would
+                obs, info = agent.sim.obs(agent.net.cell_safety), sim_info(agent)
+                tick = 0.25 / (1 + bool(obs["vec"][1] > 0))
+                time.sleep(max(0.0, t_obs + tick - time.perf_counter()))
+                term, trunc = info["lives"] == 0, False
+            else:
+                obs, r, term, trunc, info = env.step(a)
+                total += r
             now = time.perf_counter()
             ticks.append(now - t_obs)
             t_obs = now
             # the game slept for 0.25 / (1 + super) before sending this state
             supers.append(bool(obs["vec"][1] > 0))
             deaths += int(info["lives"] < lives)
-            total += r
             steps += 1
             if term or trunc or viz.closed or (args.max_steps and steps >= args.max_steps):
                 break
+    finally:
+        if env is not None:
+            env.close()
+        if xserver is not None:
+            xserver.close()
+        if writer is not None:
+            writer.add(prev_img, 1.0)
+            writer.close()
+    if stop:
+        print("interrupted (Ctrl+C)")
+    print(f"{steps} steps, {'' if args.sim_only else f'reward {total:.1f}, '}"
+          f"score {info['score']}, level {info['level']}, lives {info['lives']}, "
+          f"deaths {deaths}{' (game over)' if term else ''}")
+    if steps:
         tot = np.array(t_dec) + np.array(t_viz)
-        print(f"{steps} steps, reward {total:.1f}, score {info['score']}, level {info['level']}, "
-              f"lives {info['lives']}{' (game over)' if term else ''}")
         print(f"decision {np.mean(t_dec) * 1000:.0f} ms + viz {np.mean(t_viz) * 1000:.0f} ms per "
               f"tick (p95 of the sum {np.percentile(tot, 95) * 1000:.0f} ms): "
               f"{1 / np.mean(tot):.1f} decisions/s possible")
@@ -335,16 +410,12 @@ def play_viz(args, agent, env):
         for name, m, tick in (("normal", ~supers, 0.25), ("super", supers, 0.125)):
             if m.any():
                 print(f"{name} ticks ({tick * 1000:.0f} ms): {m.sum()}, decision + viz"
-                      f"{' + grab' if args.record else ''} longer than the tick: "
+                      f"{' + grab' if not args.sim_only else ''} longer than the tick: "
                       f"{np.mean(t_agent[m] > tick):.1%} (max {t_agent[m].max() * 1000:.0f} ms), "
                       f"ticks stretched by > 10 ms: {np.mean(ticks[m] > tick + 0.01):.1%}, "
                       f"wall time median {np.median(ticks[m]) * 1000:.0f} ms, "
                       f"max {ticks[m].max() * 1000:.0f} ms")
-    finally:
-        env.close()
     if writer is not None:
-        writer.add(prev_img, 1.0)
-        writer.close()
         print(f"wrote {args.record}: {writer.n} ticks, {writer.shown} frames at {writer.fps} fps, "
               f"{os.path.getsize(args.record) / 1e6:.1f} MB")
     elif args.record and frames:
@@ -356,5 +427,14 @@ def play_viz(args, agent, env):
               f"{os.path.getsize(args.record) / 1e6:.1f} MB")
 
 
+def sim_info(agent):
+    """The planner's sim state as the env's info keys play_viz reads."""
+    i = agent.prev
+    return {"lives": int(i[0]), "level": int(i[1]), "score": int(i[3])}
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:   # Ctrl+C outside the --viz loop; the finally blocks cleaned up
+        print("interrupted (Ctrl+C)")
