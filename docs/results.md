@@ -1415,8 +1415,9 @@ clear. H60/K32 lost two workers to CUDA OOM at the start (213 games kept);
 H80/K16 was stopped at 06:30 (303 games, the unfinished ones are its
 longest). "Common" = the 207 (maze, seed) games played by all four.
 Latency: scripts/plan_bench.py, one game, GPU otherwise idle, mazes 2, 9,
-14, 15 x 400 decisions; a decision has 0.25 s in real time (0.0625 s while
-pacman is super).
+14, 15 x 400 decisions; a decision has 0.25 s in real time (0.125 s while
+pacman is super; "0.0625 s" before 2026-10-17 was a misreading of
+game/timing.cc, corrected below).
 
 | config | games | per-maze | worst | deaths/game (95% CI) | common: per-maze / worst / deaths | all dropped | decisions/s | p95 / max ms |
 |---|---|---|---|---|---|---|---|---|
@@ -1465,7 +1466,8 @@ ones, H40/K32 - H60/K32 = -0.08 (-0.17..+0.01).
 
 H40/K32 is the new default (configs/plan_honest_lb.yaml): the only config
 without a lost maze, 40% fewer deaths than K8, and p95 53 ms fits the
-0.25 s tick with a margin (the 62.5 ms super-pacman tick only on average).
+0.25 s tick and the 0.125 s super-pacman tick with a margin (without the
+network view).
 The rollout count, not the horizon, decides.
 
 With the network view (scripts/netviz.py --ticks 400, sim only, idle GPU,
@@ -1478,5 +1480,20 @@ much as in the bench:
 | H40/K32 | 157-166 | 7 | 164-173 (188-193) | 5.8-6.1 |
 | H40/K8 | 55-63 | 5 | 60-69 (71-73) | 14.6-16.7 |
 
-H40/K32 with --viz still fits the 0.25 s tick, not the super-pacman one.
+In the game (play.py --viz, Xvfb 1920x1080, level 9, seed 0, 1000 ticks):
+the game waits for the action, so a decision longer than the tick
+stretches that tick. The super tick is 0.125 s (game/timing.cc sleeps up
+to 0.25 / (1 + super) before every state line), measured: median 125 ms.
+
+| config | --record | normal ticks: late / stretched > 10 ms | super ticks: late / stretched > 10 ms | super tick wall median / max |
+|---|---|---|---|---|
+| H40/K32 | no | 0.1% / 0.3% (704) | 98.6% / 98.3% (296) | 166 / 203 ms |
+| H40/K8 (configs/plan_honest_k8.yaml) | no | 0.1% / 0.1% (831) | 0% / 0% (169) | 125 / 126 ms |
+| H40/K8 | mp4 | 0.1% / 0.1% (831) | 3.0% / 0.6% (169) | 125 / 139 ms |
+
+"Late": decision + drawing (+ the xwd grab with --record) took longer than
+the tick (one normal tick in each run). For watching and
+recording use configs/plan_honest_k8.yaml: with K = 32 the view slows the
+game down by a third while pacman is super. --record .mp4 writes 1920x1080
+at 25 fps, no audio (both windows, 1944 px wide, scaled by 0.99).
 Frame: docs/viz_frame.png (level 9, tick 119). Outputs: runs/plan_grid3/.

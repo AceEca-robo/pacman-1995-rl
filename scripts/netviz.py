@@ -30,13 +30,15 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from env.pacman_env import CH, HEIGHT, WIDTH, _passable_neighbours, safe_exits_field  # noqa: E402
+from env.pacman_env import (CH, HEIGHT, WIDTH, _passable_neighbours, maze_layouts,  # noqa: E402
+                             safe_exits_field)
 
 W, H = 1280, 800
 BG = (14, 16, 22)
 PANEL = (24, 27, 36)
 FG = (225, 228, 235)
 DIM = (130, 136, 150)
+FAINT = (100, 105, 118)   # secondary labels
 ACCENT = (255, 204, 0)
 RED = (235, 64, 52)
 GREEN = (80, 200, 120)
@@ -109,6 +111,8 @@ class Viz:
         self.probe = NetProbe(net, device)
         self.heat, self.vir = lut("inferno"), lut("viridis")
         self.nbrs = {}
+        # wall masks of the 16 mazes: above level 16 the game draws them at random
+        self.maze_walls = np.array([[[c == "#" for c in row] for row in m] for m in maze_layouts()])
         self.closed = False
         obs_cfg = obs_cfg or {}
         # the cell-safety plane comes after CHANNELS and the food distance plane
@@ -129,6 +133,26 @@ class Viz:
         r = img.get_rect(**{anchor: pos})
         self.screen.blit(img, r)
         return r
+
+    def maze_of(self, grid):
+        """The maze (1-16) whose walls the observation shows, 0 if none."""
+        hit = np.flatnonzero((self.maze_walls == (grid[CH["walls"]] > 0)).all((1, 2)))
+        return int(hit[0]) + 1 if len(hit) else 0
+
+    def arrow(self, d, center, size, color):
+        """An arrow for direction d (0..3 U/D/L/R) of height size; N (4) is a
+        ring: keep going."""
+        cx, cy = center
+        if d == 4:
+            self.pg.draw.circle(self.screen, color, (cx, cy), size * 0.3, max(2, round(size / 10)))
+            return
+        h, sw = size / 2, size * 0.14
+        # pointing up, then rotated: (along, across) -> screen
+        pts = [(h, 0), (0.1 * h, -0.5 * size * 0.9), (0.1 * h, -sw), (-h, -sw), (-h, sw),
+               (0.1 * h, sw), (0.1 * h, 0.5 * size * 0.9)]
+        ux, uy = ((0, -1), (0, 1), (-1, 0), (1, 0))[d]
+        self.pg.draw.polygon(self.screen, color,
+                             [(cx + a * ux - b * uy, cy + a * uy + b * ux) for a, b in pts])
 
     def panel(self, rect, title):
         pg = self.pg
@@ -260,7 +284,7 @@ class Viz:
                               border_radius=3)
             self.text(f"{q[i]:.1f}", (x + bw / 2, min(yv, zero) - 4), 22,
                       FG if i == played else DIM, "midbottom")
-            self.text(DIR_NAMES[i], (x + bw / 2, bot + 6), 30, FG if i == played else DIM, "midtop")
+            self.arrow(i, (x + bw / 2, bot + 18), 24, FG if i == played else DIM)
             if i == greedy:
                 self.text("greedy", (x + bw / 2, bot + 32), 18, ACCENT, "midtop")
         self.pg.draw.line(self.screen, DIM, (bx - 6, zero), (bx + 5 * (bw + gap) - gap + 6, zero), 1)
@@ -280,7 +304,7 @@ class Viz:
             return
         K, Hh = tr["cells"].shape[1], tr["cells"].shape[2]
         self.panel(rect, f"5  PLANNER  K={K} rollouts x H={Hh} steps per direction")
-        lw = 150
+        lw = 210
         cs, ox, oy = self.draw_maze(grid, (x0 + 10, y0 + 36, w - lw - 30, h - 44), 0.55)
         pg = self.pg
         pac = np.flatnonzero(grid[CH["pacman"]].reshape(-1))
@@ -314,21 +338,26 @@ class Viz:
         # legend: direction, death share, dropped
         lx, ly = x0 + w - lw - 10, y0 + 50
         self.text("death share", (lx, ly), 20, DIM)
-        self.text(f"drop if > {tr['threshold']:.2f}", (lx, ly + 20), 18, DIM)
+        self.text(f"drop if > {tr['threshold']:.2f}", (lx, ly + 19), 15, FAINT)
+        row = 72
         for r in range(4):
             a = int(tr["act"][r])
             name = DIR_NAMES[a] if a < 4 else "N"
             f = tr["frac"][r]
             dropped = f > tr["threshold"]
-            yy = ly + 56 + r * 44
-            col = DIR_COLORS[a]
-            rr = self.text(f"{name}  {f:4.0%}", (lx, yy), 30, col if not dropped else DIM)
+            yy = ly + 44 + r * row
+            col = RED if dropped else DIR_COLORS[a]
+            rn = self.text(name, (lx + 8, yy), 60, col)
+            self.arrow(a, (rn.right + 20, rn.centery - 3), 34, col)
+            rr = self.text(f"{f:4.0%}", (lx + lw - 10, yy), 60, col, "topright")
             if dropped:
-                pg.draw.line(self.screen, RED, (rr.left - 2, rr.centery), (rr.right + 2, rr.centery), 3)
-            tag = "played" if a == played else ("" if tr["needed"][r] else "shown only")
-            if tag:
-                self.text(tag, (lx + 4, yy + 26), 16, ACCENT if a == played else DIM)
-        self.text("red: lost a life", (lx, ly + 56 + 4 * 44 + 6), 18, RED)
+                pg.draw.line(self.screen, RED, (rn.left - 4, rr.centery - 3),
+                             (rr.right + 4, rr.centery - 3), 4)
+            if a == played:
+                pg.draw.rect(self.screen, GREEN, (lx, yy - 6, lw, row - 8), 3, border_radius=6)
+            elif not tr["needed"][r]:
+                self.text("shown only", (lx + 10, yy + 45), 15, FAINT)
+        self.text("red: lost a life", (lx, ly + 44 + 4 * row), 18, RED)
 
     def _line(self, pts, col, cs, ox, oy):
         if len(pts) >= 2:
@@ -337,7 +366,13 @@ class Viz:
 
     def draw_status(self, s):
         self.pg.draw.rect(self.screen, PANEL, (0, 0, W, 40))
-        self.text(s, (14, 20), 30, FG, "midleft")
+        # the default font has no arrow glyphs: draw them
+        x = 14
+        for i, part in enumerate(s.split("\u2192")):
+            if i:
+                self.arrow(3, (x + 12, 20), 18, FG)
+                x += 30
+            x = self.text(part, (x, 20), 30, FG, "midleft").right
 
     # --- frame ------------------------------------------------------------------
 
@@ -369,9 +404,9 @@ class Viz:
         self.pg.image.save(self.screen, path)
 
 
-def status_line(tick, level, lives, score, t_decision, t_viz=None):
-    s = f"tick {tick}    level {level}    lives {lives}    score {score}    " \
-        f"{t_decision * 1000:.0f} ms / decision"
+def status_line(tick, level, maze, lives, deaths, score, t_decision, t_viz=None):
+    s = f"tick {tick}   level {level} \u2192 maze {maze}   lives {lives}   deaths {deaths}   " \
+        f"score {score}   {t_decision * 1000:.0f} ms / decision"
     if t_viz is not None:
         s += f"    (+{t_viz * 1000:.0f} ms drawing)"
     return s
@@ -390,15 +425,18 @@ def main():
     agent = PlannerAgent(args.plan_config, args.device, trace=True)
     agent.reset(args.seed, args.level)
     viz = Viz(agent.net.net, agent.net.device, agent.env_overrides.get("obs"), headless=True)
-    t_dec, t_viz = [], []
+    t_dec, t_viz, deaths = [], [], 0
     for t in range(args.ticks):
         obs = agent.sim.obs(agent.net.cell_safety)
+        lives = agent.prev[0]
         t0 = time.perf_counter()
         a = agent.act(obs)
         t1 = time.perf_counter()
         i = agent.prev
-        viz.update(obs, a, agent.last_trace, status_line(t, i[1], i[0], i[3], t1 - t0,
-                                                         t_viz[-1] if t_viz else None))
+        deaths += int(i[0] < lives)
+        viz.update(obs, a, agent.last_trace,
+                   status_line(t, i[1], viz.maze_of(obs["grid"]), i[0], deaths, i[3], t1 - t0,
+                               t_viz[-1] if t_viz else None))
         t_viz.append(time.perf_counter() - t1)
         t_dec.append(t1 - t0)
         if i[0] == 0:

@@ -6,8 +6,9 @@ case), per config: mean / p95 / max seconds per decision and decisions/s.
 
 Each config plays the same games (--levels, seeds from --seed) in the sim
 for --decisions decisions each; the GPU should be otherwise idle. The game
-in real time gives a decision 0.25 s (0.0625 s while pacman is super: half
-the tick, two state lines per tick).
+in real time gives a decision 0.25 s (0.125 s while pacman is super: every
+state line follows a timing(super) call that sleeps up to 0.25 / 2 s,
+game/timing.cc; measured with play.py --viz, see docs/results.md).
 """
 
 import argparse

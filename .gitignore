@@ -11,3 +11,6 @@ __pycache__/
 build/
 *.egg-info/
 sim/_csim*.so*
+
+# videos written by play.py --record
+*.mp4

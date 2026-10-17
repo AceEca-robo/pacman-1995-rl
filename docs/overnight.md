@@ -2760,3 +2760,32 @@ with lookahead. No training tonight.
 - Ideas for later: (5) a cheaper trace for --viz (record cells on the GPU
   and copy once per decision; roll out the "shown only" directions with
   fewer rollouts), so the view keeps up with super pacman.
+
+## 2026-10-17 afternoon: network view edits, K = 8 viewing config, mp4 (no training)
+
+- The user's edits after watching --viz on screen: panel 5 shows the
+  direction letters and death shares twice as large with an arrow next to
+  the letter, the played direction in a green frame (no "played" label),
+  dropped ones in red and struck through, "drop if" and "shown only" small
+  and grey; panel 4 labels the Q bars with arrows (N: a ring); the status
+  line has "level N -> maze N" (the maze is matched by its walls, the game
+  picks a random one above level 16) and the deaths of the game. The
+  default pygame font has no arrow glyphs, the arrows are drawn polygons.
+- configs/plan_honest_k8.yaml: the default with K = 8, for watching.
+- Correction: the super-pacman tick is 0.125 s, not 62.5 ms. timing() in
+  game/timing.cc sleeps up to 0.25 / (1 + is_super()) since the previous
+  call, and there is one call before every state line (two per main-loop
+  pass while super). Measured in the game: super ticks median 125 ms. The
+  "62.5 ms" in the sections above is wrong; results.md and plan_bench.py
+  are corrected.
+- play.py --viz now prints per tick kind (normal / super) the share of
+  decisions that took longer than the tick and of ticks stretched by more
+  than 10 ms (the game blocks on the action, a late decision stretches the
+  tick). Xvfb 1920x1080, level 9, 1000 ticks: K = 8 0% of 169 super ticks
+  late (max 90 ms), with --record mp4 3.0% late / 0.6% stretched (max
+  139 ms); K = 32 98.6% late, super ticks median 166 ms instead of 125.
+- --record .mp4: always 1920x1080 at 25 fps (ffmpeg pad, scale down only
+  if larger: the two windows are 1944 px wide, scaled by 0.99), -an. A
+  200-tick test: 926 frames, 37.0 s (= 90 x 0.25 + 110 x 0.125 s of game),
+  ffprobe shows one h264 stream, no audio. *.mp4 is in .gitignore now.
+- docs/viz_frame.png redrawn with the new panels.

@@ -26,8 +26,12 @@ game raises itself when obscured).
 the game shows the network's input planes, conv activations, saliency, Q /
 V / A and the planner's rollouts, redrawn every tick for the state the
 decision was made on. With --record both windows go side by side into the
-file; a .mp4 is written by ffmpeg at 20 fps (frames repeated to keep the
-tick durations), anything else is a GIF.
+file; a .mp4 is written by ffmpeg as 1920x1080 at 25 fps without sound
+(the two windows centred, scaled down only if they do not fit; frames
+repeated to keep the tick durations), anything else is a GIF. At the end
+it prints the share of decisions that took longer than the game's tick
+(0.25 s, 0.125 s while pacman is super): the game waits for the action, so
+a late decision stretches that tick.
 """
 
 import argparse
@@ -96,14 +100,21 @@ def screen_size(display):
 
 
 class Mp4Writer:
-    """RGB frames with their durations -> H.264 mp4 at a fixed rate (ffmpeg)."""
+    """RGB frames with their durations -> H.264 mp4 at a fixed rate and frame
+    size (ffmpeg), no audio track."""
 
-    def __init__(self, path, size, fps=20):
+    def __init__(self, path, size, fps=25, out=(1920, 1080)):
         self.fps, self.size, self.n, self.t, self.shown = fps, size, 0, 0.0, 0
+        # centred on the background colour, scaled down only if larger than out
+        s = min(1.0, out[0] / size[0], out[1] / size[1])
+        w, h = 2 * round(size[0] * s / 2), 2 * round(size[1] * s / 2)
+        vf = (f"scale={w}:{h}:flags=lanczos," if s < 1 else "") + \
+            f"pad={out[0]}:{out[1]}:({out[0]}-iw)/2:({out[1]}-ih)/2:color=0x0e1016"
         self.proc = subprocess.Popen(
             ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
-             "-s", f"{size[0]}x{size[1]}", "-r", str(fps), "-i", "-", "-c:v", "libx264",
-             "-pix_fmt", "yuv420p", "-crf", "20", path], stdin=subprocess.PIPE)
+             "-s", f"{size[0]}x{size[1]}", "-r", str(fps), "-i", "-", "-vf", vf, "-an",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", path],
+            stdin=subprocess.PIPE)
 
     def add(self, img, duration):
         """img (h, w, 3) uint8 shown for duration seconds."""
@@ -256,6 +267,7 @@ def play_viz(args, agent, env):
         (agent.net, agent.device)
     mp4 = bool(args.record) and args.record.lower().endswith(".mp4")
     writer, frames, durations, t_dec, t_viz = None, [], [], [], []
+    t_agent, ticks, supers, deaths = [], [], [], 0   # per tick: our time, wall time, super
     os.environ["DISPLAY"] = args.display
     try:
         obs, info = env.reset(seed=args.seed, options=(
@@ -271,14 +283,15 @@ def play_viz(args, agent, env):
         vx = min(x + w + 8, max(0, sw - VIZ_W))
         viz = Viz(net, device, agent.env_overrides.get("obs"), pos=(vx, max(0, min(y, sh - VIZ_H))))
         total, steps, t_prev, prev_img = 0.0, 0, time.perf_counter(), None
+        t_obs = time.perf_counter()
         while True:
             game_img = grab(args.display, window) if args.record else None
             t0 = time.perf_counter()
             a = agent.act(obs)
             t1 = time.perf_counter()
             viz.update(obs, a, getattr(agent, "last_trace", None),
-                       status_line(steps, info["level"], info["lives"], info["score"], t1 - t0,
-                                   t_viz[-1] if t_viz else None))
+                       status_line(steps, info["level"], viz.maze_of(obs["grid"]), info["lives"],
+                                   deaths, info["score"], t1 - t0, t_viz[-1] if t_viz else None))
             t_dec.append(t1 - t0)
             t_viz.append(time.perf_counter() - t1)
             if args.record:
@@ -299,7 +312,15 @@ def play_viz(args, agent, env):
                                           round(pil.height * args.scale)), Image.NEAREST)
                     frames.append(pil.quantize(colors=128, method=Image.Quantize.FASTOCTREE))
                 prev_img, t_prev = img, now
+            lives = info["lives"]
+            t_agent.append(time.perf_counter() - t_obs)
             obs, r, term, trunc, info = env.step(a)
+            now = time.perf_counter()
+            ticks.append(now - t_obs)
+            t_obs = now
+            # the game slept for 0.25 / (1 + super) before sending this state
+            supers.append(bool(obs["vec"][1] > 0))
+            deaths += int(info["lives"] < lives)
             total += r
             steps += 1
             if term or trunc or viz.closed or (args.max_steps and steps >= args.max_steps):
@@ -310,6 +331,15 @@ def play_viz(args, agent, env):
         print(f"decision {np.mean(t_dec) * 1000:.0f} ms + viz {np.mean(t_viz) * 1000:.0f} ms per "
               f"tick (p95 of the sum {np.percentile(tot, 95) * 1000:.0f} ms): "
               f"{1 / np.mean(tot):.1f} decisions/s possible")
+        t_agent, ticks, supers = np.array(t_agent), np.array(ticks), np.array(supers)
+        for name, m, tick in (("normal", ~supers, 0.25), ("super", supers, 0.125)):
+            if m.any():
+                print(f"{name} ticks ({tick * 1000:.0f} ms): {m.sum()}, decision + viz"
+                      f"{' + grab' if args.record else ''} longer than the tick: "
+                      f"{np.mean(t_agent[m] > tick):.1%} (max {t_agent[m].max() * 1000:.0f} ms), "
+                      f"ticks stretched by > 10 ms: {np.mean(ticks[m] > tick + 0.01):.1%}, "
+                      f"wall time median {np.median(ticks[m]) * 1000:.0f} ms, "
+                      f"max {ticks[m].max() * 1000:.0f} ms")
     finally:
         env.close()
     if writer is not None:
