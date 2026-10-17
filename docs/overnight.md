@@ -2734,3 +2734,12 @@ with lookahead. No training tonight.
   worst 90% (maze 12: 2 game overs) / 0.33 deaths per game (95% CI
   0.27-0.40), 4 game overs in 320 games (H40/K8: 2), all four dropped on
   19% of the decisions. Fewer deaths than H40/K8 (0.39), more lost mazes.
+- 12:59 H40/K32 done (8019 s): 100% on all 16 mazes, no game over in 320
+  games, 0.23 deaths per game, all four dropped on 14% of the decisions.
+- 13:05 plan_bench.py, idle GPU, mazes 2/9/14/15 x 400 decisions: H40/K8
+  43.3/s (p95 24 ms, max 70), H40/K16 30.6/s (37 / 100), H40/K32 20.1/s
+  (53 / 170; a second-round decision 127 ms), H60/K32 12.2/s (201 / 282).
+- 13:06 Paused at the user's request. Still to do: the table against H40/K8
+  and H60/K32 (paired, results.md), H40/K32 as the default (it meets the
+  rule: p95 < 200 ms, fewer deaths), the viz decisions/s on the idle GPU,
+  docs/viz_frame.png, push.
