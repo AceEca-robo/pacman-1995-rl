@@ -2730,3 +2730,7 @@ with lookahead. No training tonight.
   open on the same X server (32 before); grab() handles both now.
 - pytest (CPU, during the grid): 142 passed, test_ppo_pacman_run_eval_resume
   failed under load (checkpoint.pt not written yet) and passed alone.
+- 12:17 H40/K16 done (5496 s with H40/K32 beside it): 98.8% per maze /
+  worst 90% (maze 12: 2 game overs) / 0.33 deaths per game (95% CI
+  0.27-0.40), 4 game overs in 320 games (H40/K8: 2), all four dropped on
+  19% of the decisions. Fewer deaths than H40/K8 (0.39), more lost mazes.
