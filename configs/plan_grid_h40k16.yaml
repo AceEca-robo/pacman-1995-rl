@@ -2,7 +2,7 @@
 # random() seed and redrawn ghost random-move rates (sim_reseed_many), so
 # the rollouts sample the ghosts' futures instead of reading the real one.
 # The visible game state is the same; plan.yaml is the oracle variant.
-# Planner grid (2026-10-16): plan_honest_lb.yaml with H = 40, K = 16 and a
+# Planner grid (2026-10-16, run 2026-10-17 with 4 workers): plan_honest_lb.yaml with H = 40, K = 16 and a
 # 30k-step cap.
 checkpoint: runs/best_v04/best.pt
 
@@ -31,6 +31,6 @@ eval:
   max_steps: 30000     # cap of the games from level 1 (the others stop at the clear)
 
 run:
-  workers: 6            # processes (one CUDA context each)
+  workers: 4            # processes (one CUDA context each)
   games_per_worker: 48  # games played in lock-step per process
   device: cuda

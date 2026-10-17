@@ -115,21 +115,28 @@ class Planner:
         self.penalty = float(lb.get("penalty", 0.0))
         self.sim_steps = 0
 
-    def rollout(self, rows, first, u, ra, reseeds=None):
+    def rollout(self, rows, first, u, ra, reseeds=None, trace=False):
         """rows: (R, SIZE) sims; first: (R,) first action; u, ra: (R, H)
         noise; reseeds: (R,) random() seeds of the clones ("honest"
         planner) or None (the clones keep the game's own random() state).
-        Returns bool (R,): lost a life within H steps."""
+        Returns bool (R,): lost a life within H steps; with trace also
+        pacman's cell after every step, int (R, H), -1 from the step that
+        lost the life on (the cell there is the restart cell)."""
         buf = rows.copy()
         if reseeds is not None:
             batch_reseed(buf, reseeds)
         lives = batch_info(buf)[:, 0]
         batch_advance(buf, first)
         self.sim_steps += len(buf)
-        now = batch_info(buf)[:, 0]
+        inf = batch_info(buf)
+        now = inf[:, 0]
         dead = now < lives
         lives = now
         idx = np.flatnonzero(~dead)
+        cells = None
+        if trace:
+            cells = np.full((len(buf), self.H), -1, np.int32)
+            cells[idx, 0] = inf[idx, 2]
         for t in range(1, self.H):
             if not len(idx):
                 break
@@ -140,21 +147,28 @@ class Planner:
             a[noisy] = ra[idx, t][noisy]
             batch_advance(sub, a)
             self.sim_steps += len(sub)
-            now = batch_info(sub)[:, 0]
+            inf = batch_info(sub)
+            now = inf[:, 0]
             died = now < lives[idx]
             lives[idx] = now
             buf[idx] = sub
             dead[idx[died]] = True
+            if trace:
+                cells[idx[~died], t] = inf[~died, 2]
             idx = idx[~died]
-        return dead
+        return (dead, cells) if trace else dead
 
-    def choose(self, buf, info, q, noise_seeds, visits=None):
+    def choose(self, buf, info, q, noise_seeds, visits=None, trace=False):
         """buf (G, SIZE) game states, info (G, 6), q (G, 5); noise_seeds: a
         seed sequence per game for this step; visits: per game None or a
         Counter of recently visited cells (loop breaker active: all four
         directions are rolled out and the kept one with the highest
         Q - penalty * visits[cell after the move] is played). Returns
-        (actions, stats)."""
+        (actions, stats). trace (for scripts/netviz.py): all four directions
+        are rolled out (the choice is the same: the extra rollouts are only
+        recorded) and stats["trace"] holds, by rank in Q order, the
+        directions' actions, death shares, rollout cells (G, 4, K, H), deaths
+        (G, 4, K) and which ranks the choice itself needed."""
         G, K, H = len(buf), self.K, self.H
         pd = info[:, 5]
         qd = q[:, :4].copy()
@@ -183,18 +197,29 @@ class Planner:
         c0 = order[:, 0]
         gi = np.repeat(np.arange(G), K)
         ki = np.tile(np.arange(K), G)
-        dead = self.rollout(buf[gi], act[gi, c0[gi]], u[gi, c0[gi], ki], ra[gi, c0[gi], ki],
-                            None if rs is None else rs[gi, ki])
+        out = self.rollout(buf[gi], act[gi, c0[gi]], u[gi, c0[gi], ki], ra[gi, c0[gi], ki],
+                           None if rs is None else rs[gi, ki], trace)
+        dead, cells = out if trace else (out, None)
         frac[:, 0] = dead.reshape(G, K).mean(1)
         bad = np.flatnonzero((frac[:, 0] > self.thr) | breaker)
-        if len(bad):
-            gi = np.repeat(bad, 3 * K)
-            ri = np.tile(np.repeat(np.arange(1, 4), K), len(bad))
-            ki = np.tile(np.arange(K), 3 * len(bad))
+        if trace:
+            tr_cells = np.full((G, 4, K, H), -1, np.int32)
+            tr_dead = np.zeros((G, 4, K), bool)
+            tr_cells[:, 0] = cells.reshape(G, K, H)
+            tr_dead[:, 0] = dead.reshape(G, K)
+        more = np.arange(G) if trace else bad
+        if len(more):
+            gi = np.repeat(more, 3 * K)
+            ri = np.tile(np.repeat(np.arange(1, 4), K), len(more))
+            ki = np.tile(np.arange(K), 3 * len(more))
             ci = order[gi, ri]
-            dead = self.rollout(buf[gi], act[gi, ci], u[gi, ci, ki], ra[gi, ci, ki],
-                                None if rs is None else rs[gi, ki])
-            frac[bad, 1:] = dead.reshape(len(bad), 3, K).mean(2)
+            out = self.rollout(buf[gi], act[gi, ci], u[gi, ci, ki], ra[gi, ci, ki],
+                               None if rs is None else rs[gi, ki], trace)
+            dead, cells = out if trace else (out, None)
+            frac[more, 1:] = dead.reshape(len(more), 3, K).mean(2)
+            if trace:
+                tr_cells[:, 1:] = cells.reshape(G, 3, K, H)
+                tr_dead[:, 1:] = dead.reshape(G, 3, K)
         rank = np.zeros(G, np.int64)
         all_bad = np.zeros(G, bool)
         for g in bad:
@@ -212,8 +237,16 @@ class Planner:
                 all_bad[g] = True
         choice = order[np.arange(G), rank]
         actions = act[np.arange(G), choice]
-        return actions, {"second_round": np.isin(np.arange(G), bad) & ~breaker,
-                         "all_dropped": all_bad, "breaker": breaker, "frac_best": frac[:, 0]}
+        st = {"second_round": np.isin(np.arange(G), bad) & ~breaker,
+              "all_dropped": all_bad, "breaker": breaker, "frac_best": frac[:, 0]}
+        if trace:
+            needed = np.zeros((G, 4), bool)
+            needed[:, 0] = True
+            needed[bad, 1:] = True
+            st["trace"] = {"act": act[np.arange(G)[:, None], order], "frac": frac,
+                           "cells": tr_cells, "dead": tr_dead, "needed": needed,
+                           "rank": rank, "threshold": self.thr}
+        return actions, st
 
 
 class Stall:

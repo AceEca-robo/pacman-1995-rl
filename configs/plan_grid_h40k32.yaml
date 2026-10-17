@@ -1,0 +1,36 @@
+# scripts/plan_eval.py, "honest" planner: every rollout clone gets a fresh
+# random() seed and redrawn ghost random-move rates (sim_reseed_many), so
+# the rollouts sample the ghosts' futures instead of reading the real one.
+# The visible game state is the same; plan.yaml is the oracle variant.
+# Planner grid (2026-10-16, run 2026-10-17 with 4 workers): plan_honest_lb.yaml with H = 40, K = 32 and a
+# 30k-step cap.
+checkpoint: runs/best_v04/best.pt
+
+plan:
+  horizon: 40           # H: sim steps per rollout (the candidate move + H-1 policy steps)
+  rollouts: 32          # K: rollouts per candidate direction (each its own ghost future)
+  epsilon: 0.1          # noise of the rollout policy (best_v04 greedy, else a uniform action)
+  ghost_rng: reseed     # oracle: clones keep the game's random() state
+  # a direction is dropped when more than this share of its K rollouts lose
+  # a life (--threshold overrides it)
+  death_threshold: 0.5
+  # after stall_steps steps without food, for active_steps decisions all four
+  # directions are rolled out and the kept one with the highest
+  # Q - penalty * (visits of the cell after the move in the last stall_steps
+  # steps) is played; best_v04's Q gap between the two best directions is
+  # 6 / 9 / 12 at the median / 90th / 99th percentile
+  loop_breaker:
+    stall_steps: 400
+    active_steps: 40
+    penalty: 10.0
+
+eval:
+  seed: 0
+  episodes: 20
+  level_episodes: 20
+  max_steps: 30000     # cap of the games from level 1 (the others stop at the clear)
+
+run:
+  workers: 4            # processes (one CUDA context each)
+  games_per_worker: 48  # games played in lock-step per process
+  device: cuda

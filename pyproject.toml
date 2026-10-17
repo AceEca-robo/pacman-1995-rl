@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest==9.1.1"]
+# scripts/play.py --viz (scripts/netviz.py); --record to .mp4 also needs ffmpeg
+viz = ["pygame==2.6.1"]
 
 [tool.setuptools]
 packages = ["env", "agents"]

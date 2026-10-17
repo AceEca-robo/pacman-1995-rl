@@ -2702,3 +2702,31 @@ with lookahead. No training tonight.
   close to the threshold) would cut the worst case; (4) at most 4-5
   workers per run when two runs share the 8 GB GPU, and a check of the
   first minute's log for tracebacks.
+
+## 2026-10-17 day: H40/K16 and H40/K32; play.py --viz (no training)
+
+- 10:46 Grid A started (runs/plan_grid3/): H40/K16 and H40/K32 (new
+  configs/plan_grid_h40k32.yaml), honest, thr 0.5, loop breaker, 16 mazes
+  x 20 games, --maze-only, 4 workers per run, both at once. First minute:
+  no OOM or traceback in either log, 8 processes use 5.8 of the 8 GB.
+- B, the network view: scripts/netviz.py + play.py --viz. A pygame window
+  (1280x800, dark) right of the game window, redrawn every tick for the
+  state the decision was made on: (1) input planes (walls + food, ghosts by
+  state, cell safety; safe exits are computed from the cell-safety plane
+  with env's safe_exits_field, best_v04 has no such input plane), (2) the
+  16 most active maps of each of the three conv ReLUs (forward hooks, only
+  recording during the viz pass, not in the rollouts), (3) saliency
+  |dQ(played)/d input| summed over the channels on a copy of the maze,
+  (4) Q of U/D/L/R/N with the played action coloured and the greedy one
+  marked, V and A - mean(A), (5) the planner's K rollouts per direction
+  (red: lost a life, dropped directions struck through, death share),
+  (6) a status line with tick, level, lives, score and ms per decision.
+  Planner.choose(trace=True) rolls out all four directions (the ones the
+  choice did not need are marked "shown only") and records pacman's cell
+  per rollout step; the choice is unchanged (tests/test_netviz.py checks
+  it on 120 decisions). --record with --viz writes both windows side by
+  side, .mp4 through ffmpeg at 20 fps, else a GIF.
+- xwd reports 24 bpp for the game window as soon as a pygame window is
+  open on the same X server (32 before); grab() handles both now.
+- pytest (CPU, during the grid): 142 passed, test_ppo_pacman_run_eval_resume
+  failed under load (checkpoint.pt not written yet) and passed alone.
