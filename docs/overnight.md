@@ -2644,3 +2644,21 @@ with lookahead. No training tonight.
   H40/K8 baseline (99.4% / 95% / 0.39) within noise. The run's JSON says
   commit ca1dd3e: plan_eval.py reads HEAD at the end; the code is ba2dca0's
   (the later commit only touched the journal). H80/K16 started in its slot.
+- 04:37 H60/K32 ended with exit 1: two of its six workers had hit CUDA OOM
+  in their first second (00:25, the "allocation failed" warnings were not
+  all recovered), and Pool.map only raised it when the other four were done.
+  Their 107 games are lost, the four others' 213 games are in the JSONL
+  (thanks to the per-game JSONL; 13-14 games per maze). No time to replay
+  the missing ones before 06:30 with two runs on the GPU. Lesson: with 12
+  CUDA contexts on 8 GB check the first minute's log for tracebacks, not
+  only nvidia-smi; better fewer workers per run.
+  Partial H60/K32 (213 games): 99.6% per maze / worst 93% (maze 1: 1 of 14)
+  / 0.30 deaths per game; compared on the same games below.
+- 04:38 The free slot: games from level 1 (step d). The best config that
+  fits real time stays H40/K8 (see the conclusion), and its 20 games from
+  level 1 already exist (h_lb, seeds 0-19, longest 9676 steps, so a 30k
+  cap changes nothing; the sim is deterministic, a rerun of seeds 0-9 would
+  replay the same games): 7.65 levels, 0.55 deaths per 1000 steps (95% CI
+  0.46-0.68); seeds 0-9: 6.8 levels, 0.64 (0.51-0.88). The slot runs
+  H60/K16 from level 1 instead, seeds 0-9, cap 30k, stopped at 07:00
+  (runs/plan_grid2/from1_h60k16.*, 5 workers x 2 games).
