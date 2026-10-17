@@ -1405,3 +1405,37 @@ Honest K8 thr 0.5 per maze (cleared / deaths): 1: 100/3.10 2: 100/0.30
 14: 100/0.70 15: 95/0.85 16: 95/0.50. Every honest miss is a game over;
 the loop breaker matters only for the oracle-exact planner (its 30k-step
 timeouts). Outputs: runs/plan_eval/h_*.json, x_lb.json.
+
+### Planner grid (2026-10-17): horizon H and rollouts K, maze games only
+
+Honest planner, thr 0.5, loop breaker, eps 0.1; 16 mazes x 20 games
+(seeds 0-19) stopped at the clear (plan_eval.py --maze-only; level 1 too).
+H40/K8 is h_lb with its level-1 games replayed in the sim up to the first
+clear. H60/K32 lost two workers to CUDA OOM at the start (213 games kept);
+H80/K16 was stopped at 06:30 (303 games, the unfinished ones are its
+longest). "Common" = the 207 (maze, seed) games played by all four.
+Latency: scripts/plan_bench.py, one game, GPU otherwise idle, mazes 2, 9,
+14, 15 x 400 decisions; a decision has 0.25 s in real time (0.0625 s while
+pacman is super).
+
+| config | games | per-maze | worst | deaths/game (95% CI) | common: per-maze / worst / deaths | all dropped | decisions/s | p95 / max ms |
+|---|---|---|---|---|---|---|---|---|
+| **H40/K8 (default)** | 320 | 99.4% | 95% | 0.39 (0.32-0.46) | 99.6% / 93% / 0.41 | 21% | 43.5 | 24 / 70 |
+| H60/K16 | 320 | 99.4% | 90% | 0.42 (0.35-0.49) | 99.0% / 85% / 0.44 | 16% | 19.1 | 75 / 149 |
+| H80/K16 | 303 (stopped) | 94.2% | 79% | 0.67 (0.57-0.77) | 94.2% / 67% / 0.64 | 27% | 12.7 | 184 / 201 |
+| H60/K32 | 213 (OOM) | 99.6% | 93% | 0.30 (0.23-0.38) | 99.6% / 93% / 0.30 | 13% | 12.5 | 199 / 265 |
+
+Paired deaths per game on the common games (bootstrap 95% CI): H60/K32 -
+H60/K16 = -0.14 (-0.25..-0.03); H60/K32 - H40/K8 = -0.11 (-0.22..0.00);
+H60/K16 - H40/K8 = +0.03 (-0.09..+0.16); H80/K16 - H60/K16 = +0.20
+(+0.06..+0.34). All misses are game overs.
+
+From level 1, 10 games (seeds 0-9), cap 30,000 steps (none reached it):
+
+| config | levels mean / median / max | deaths per 1000 steps (95% CI) | steps |
+|---|---|---|---|
+| H40/K8 (h_lb, same seeds) | 6.8 / 7 / 13 | 0.64 (0.51-0.88) | 50,179 |
+| H60/K16 | 7.9 / 8 / 17 | 0.49 (0.37-0.69) | 61,707 |
+
+(H40/K8 over all 20 seeds: 7.65 levels, 0.55 (0.46-0.68).) Outputs:
+runs/plan_grid2/.

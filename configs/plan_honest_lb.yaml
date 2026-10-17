@@ -3,6 +3,8 @@
 # the rollouts sample the ghosts' futures instead of reading the real one.
 # The visible game state is the same; plan.yaml is the oracle variant.
 # This one: K = 8, threshold 0.5 and the loop breaker, without a step cap.
+# Kept as the default after the 2026-10-17 grid (docs/results.md): H60/K16
+# plays the same, H80/K16 worse, H60/K32 dies less but does not fit real time.
 checkpoint: runs/best_v04/best.pt
 
 plan:

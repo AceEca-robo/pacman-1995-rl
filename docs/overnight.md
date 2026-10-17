@@ -2662,3 +2662,43 @@ with lookahead. No training tonight.
   0.46-0.68); seeds 0-9: 6.8 levels, 0.64 (0.51-0.88). The slot runs
   H60/K16 from level 1 instead, seeds 0-9, cap 30k, stopped at 07:00
   (runs/plan_grid2/from1_h60k16.*, 5 workers x 2 games).
+- 06:30 H80/K16 stopped by the deadline (timeout, exit 124) with 303 of 320
+  games: 94.2% per maze / worst 79% / 0.67 deaths per game, 18 game overs.
+  It drops all four directions on 27% of the decisions (H60/K16: 16%) and
+  overrides twice as often (17% vs 8.5%): with eps = 0.1 noise over 80
+  steps the rollouts die of their own noise, the death share becomes
+  pessimistic and the threshold stops separating the directions.
+- 06:37 H60/K16 from level 1 (seeds 0-9, all 10 finished, none at the
+  30k cap): 7.9 / 8 / 17 levels, 0.49 deaths per 1000 steps (95% CI
+  0.37-0.69); H40/K8 on the same seeds 6.8 / 7 / 13, 0.64 (0.51-0.88). The
+  intervals overlap; per seed the two differ wildly (seed 0: 8 vs 2, seed 3:
+  6 vs 17), ten games are not enough for this metric.
+- 06:44 plan_bench.py again on the idle GPU, a larger sample (mazes 2, 9,
+  14, 15 x 400 decisions): H40/K8 43.5/s (p95 24 ms, max 70), H60/K16
+  19.1/s (75 / 149), H80/K16 12.7/s (184 / 201), H60/K32 12.5/s (199 / 265).
+  The 00:22 run agrees on the means. A decision with a second round costs
+  36 / 125 / 132 / 144 ms.
+- Table: docs/results.md, "Planner grid (2026-10-17)".
+- Default: stays H40/K8 (configs/plan_honest_lb.yaml, a comment added). Of
+  the configs that fit real time with a margin (>= 10/s with the worst case
+  under the 0.25 s tick: H40/K8 and H60/K16), H60/K16 is not better on the
+  mazes (99.4% / 90% / 0.42 vs 99.4% / 95% / 0.39; paired deaths difference
+  +0.03, CI -0.09..+0.16) and costs 2.3x the time. H60/K32 is the only
+  config that is better (0.30 deaths per game, -0.11 vs H40/K8 with the CI
+  touching 0, -0.14 vs H60/K16), but 12.5/s on average with p95 199 ms and
+  a max of 265 ms is no margin: some decisions miss the tick, and none of
+  the bigger configs fits the 62.5 ms of super pacman.
+- Conclusion (step e): the planner is bound by the number of rollouts, not
+  by the horizon. A longer horizon at the same K does not help (H40/K8 ~
+  H60/K16) and H80 hurts; doubling K at H60 lowers the deaths by a third.
+  The death share is estimated from K noisy rollouts and the error of that
+  estimate, not the look-ahead, decides; longer rollouts add policy noise.
+- Ideas for later: (1) H40/K16 or H40/K32 — more rollouts at the short
+  horizon should get H60/K32's deaths at half its cost (the config
+  plan_grid_h40k16.yaml exists, it was not in tonight's grid); (2) eps
+  lower for longer horizons (eps = 0.1 over 80 steps is ~8 random moves);
+  (3) the bench is GPU-latency bound with one game: batching the second
+  round into the first (all four directions at once when the best one is
+  close to the threshold) would cut the worst case; (4) at most 4-5
+  workers per run when two runs share the 8 GB GPU, and a check of the
+  first minute's log for tracebacks.
