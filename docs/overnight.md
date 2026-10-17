@@ -2789,3 +2789,7 @@ with lookahead. No training tonight.
   200-tick test: 926 frames, 37.0 s (= 90 x 0.25 + 110 x 0.125 s of game),
   ffprobe shows one h264 stream, no audio. *.mp4 is in .gitignore now.
 - docs/viz_frame.png redrawn with the new panels.
+- Slip: configs/plan_honest_k8.yaml already existed (808d955: K = 8,
+  threshold 0.25, no loop breaker, 30k cap) and I overwrote it without
+  looking. Its old content is back as configs/plan_honest_k8_t25.yaml; the
+  name plan_honest_k8.yaml stays the viewing config the user asked for.
