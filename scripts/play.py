@@ -269,7 +269,7 @@ def main():
         else:
             agent.reset(seed=args.seed)
         window = find_window(args.display) if args.record else None
-        total, steps, t_prev = 0.0, 0, time.perf_counter()
+        total, steps, t_prev, term = 0.0, 0, time.perf_counter(), False
         while True:
             if window:
                 # the game drew this tick before sending the state we just got
@@ -281,7 +281,13 @@ def main():
                 now = time.perf_counter()
                 durations.append(now - t_prev)
                 t_prev = now
-            obs, r, term, trunc, info = env.step(agent.act(obs))
+            try:
+                obs, r, term, trunc, info = env.step(agent.act(obs))
+            except RuntimeError:
+                if env._res["game"].poll() is None:
+                    raise
+                print("the game window was closed")   # by the user: a clean end
+                break
             total += r
             steps += 1
             if term or trunc or (args.max_steps and steps >= args.max_steps):

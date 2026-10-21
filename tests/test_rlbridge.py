@@ -126,10 +126,20 @@ def test_headless_needs_rl():
     assert r.returncode == 1 and b"--rl" in r.stderr
 
 
-def test_level_needs_rl():
+def test_level_must_be_positive():
     env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
-    r = subprocess.run([GAME, "--level", "3"], env=env, capture_output=True, timeout=10)
-    assert r.returncode == 1 and b"--rl" in r.stderr
+    r = subprocess.run([GAME, "--level", "-1"], env=env, capture_output=True, timeout=10)
+    assert r.returncode == 1 and b"n >= 1" in r.stderr
+
+
+def test_level_without_rl(display):
+    """The launcher's "play yourself" starts the keyboard game on a level."""
+    p = subprocess.Popen([GAME, "--level", "3"], env={**os.environ, "DISPLAY": display},
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    time.sleep(1.5)
+    assert p.poll() is None, p.stderr.read()
+    p.terminate()
+    p.wait()
 
 
 def test_level_flag(display, tmp_path):

@@ -43,6 +43,29 @@ level 2, whose maze differs from level 1 in 23 cells.
   0 differences: 610k steps Python, 600k C). Python ~180k steps/s, C ~0.9M steps/s per
   call and ~12M steps/s batched, on one core.
 
+## Install as an app
+
+On Ubuntu / Debian with an X11 desktop (GNOME, also XWayland):
+
+```bash
+git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
+./install.sh        # or ./install.sh --cpu: torch without CUDA, a much smaller download
+```
+
+`install.sh` lists the missing system packages with the `sudo apt install`
+line for them, builds the game, creates `.venv` and puts
+"Pacman 1995 RL" into the applications menu (plus `~/.local/bin/pacman-rl`).
+The menu is in English, Russian or Ukrainian (the switch in the corner): play
+the game yourself, watch the network with the planner
+(`play.py --agent planner --viz`; smooth mode: K = 8 instead of 32), or the
+network alone (`play.py --agent dqn`), from any of the 16 levels. On its first
+start it offers to download the network's weights (`best_v04.pt`, 118 MB,
+[v0.4 release](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.4))
+into `~/.local/share/pacman-rl/` and checks their SHA-256. `./uninstall.sh`
+removes the menu entry (`--purge`: also the weights and the settings).
+
+![the launcher](docs/launcher.png)
+
 ## Install and run
 
 Requirements: Linux with X11 libraries, Python 3.10+. A GPU is optional: on
@@ -75,6 +98,8 @@ installed as the CUDA 13.0 build (`2.14.1+cu130`) from the PyTorch index.
 
 Trained checkpoints are not in the repository (`runs/` is ignored); they are
 attached to the GitHub releases:
+[v0.4](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.4):
+`best_v04.pt` (the planner's network, `runs/best_v04/best.pt`);
 [v0.2](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.2):
 `dqn10_ck9M.pt` (85% of level 1 clears; the v0.2 checkpoint by the rule
 below) and `dqn10_best_food.pt` (81%, picked by food as before v0.2);
@@ -237,7 +262,8 @@ game/      pacman 1.0 sources + RL bridge (C++, X11)
 env/       PacmanEnv (gymnasium), Pacman1995-v0
 sim/       clonable port of the game (Python reference + C), verified byte-equal
 agents/    random, BFS heuristic, DQN (double, dueling, n-step, PER), PPO
-scripts/   train, train_ppo, evaluate, final_eval, supervisor, play, plots, diagnostics
+scripts/   train, train_ppo, evaluate, final_eval, supervisor, play, launcher, plots, diagnostics
+launcher/  the app menu's logic, translations (i18n.py), icon; install.sh / uninstall.sh
 tools/     socket demo client, endgame prefix recorder
 configs/   all hyperparameters (env, agents, runs)
 data/      recorded endgame prefixes

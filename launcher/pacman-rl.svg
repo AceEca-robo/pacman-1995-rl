@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pacman-rl app icon: a yellow circle with a wedge cut out, on the menu's dark background -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#0e1016"/>
+  <path d="M64 64 L102.2 41.95 A44 44 0 1 0 102.2 86.05 Z" fill="#ffcc00"/>
+  <circle cx="60" cy="40" r="5.5" fill="#0e1016"/>
+</svg>

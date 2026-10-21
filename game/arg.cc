@@ -35,7 +35,7 @@ args=rest;			// RL bridge
 if (headless && !rl_socket) {	// RL bridge: no keyboard without X
  fprintf(stderr,"--headless needs --rl\n"); exit(1);
 }
-if (start_level && !rl_socket || start_level<0) {	// RL bridge: --level only for the agent
- fprintf(stderr,"--level needs --rl and n >= 1\n"); exit(1);
+if (start_level<0) {	// RL bridge: --level <n>, also without --rl (launcher)
+ fprintf(stderr,"--level needs n >= 1\n"); exit(1);
 }
 }
