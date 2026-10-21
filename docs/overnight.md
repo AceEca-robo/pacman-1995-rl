@@ -2830,3 +2830,50 @@ with lookahead. No training tonight.
   1920x1080 frames written synchronously), 1% after. K = 8 with --record:
   0% of the super ticks late (table in results.md).
 - docs/viz_frame.png: a frame of a --record mp4 of the real game (K = 32).
+
+## 2026-10-21: the project as a desktop app (no training)
+
+- scripts/launcher.py + launcher/ (core.py, i18n.py, desktop.py, icon):
+  a 960x600 pygame menu in netviz's palette and font. Buttons: play the
+  game yourself (game/pacman --level N), watch the planner (play.py
+  --agent planner --viz, configs/plan_honest_lb.yaml, or
+  plan_honest_k8.yaml with the "smooth mode" switch), the network alone
+  (play.py --agent dqn on the user's display). Level 1-16. EN / RU / UK,
+  every string in launcher/i18n.py (ru / uk plurals for "N futures");
+  language, level and smooth switch in ~/.config/pacman-rl/settings.json.
+  The child's output goes to ~/.cache/pacman-rl/last.log; the menu shows
+  a plain-text reason (no X11, game not built, missing Xvfb/xdotool/xwd
+  with the apt line, missing weights, sim desync, CUDA OOM, else the exit
+  code and the log path) and, after a clean end, the score and level.
+- game: --level no longer needs --rl (arg.cc, the check now only rejects
+  n < 1), so "play yourself" starts on the chosen maze. test_rlbridge's
+  test_level_needs_rl became test_level_must_be_positive +
+  test_level_without_rl.
+- The game polls q once per tick after its 0.25 s sleep (usrinter.cc
+  getinput, XQueryKeymap), so a quick tap can be missed: the hint says
+  "hold Q". Closing the game window ends it with an XIO error (exit 1);
+  the launcher treats that as a normal end. play.py without --viz now ends
+  cleanly when the game window is closed (was a RuntimeError traceback).
+- Weights: release v0.4 carries best_v04.pt (= runs/best_v04/best.pt,
+  118 MB). Without runs/best_v04/best.pt the menu offers to download it
+  over https (urllib, no gh) into ~/.local/share/pacman-rl/best_v04/,
+  with a progress bar and the SHA-256 check (a mismatch deletes the
+  file); the planner then runs from a copy of the config with the
+  absolute checkpoint path in ~/.local/share/pacman-rl/.
+- install.sh (checks commands / headers and prints the sudo apt install
+  line, builds game/ and sim/, .venv with -e .[viz], --cpu for CPU-only
+  torch, desktop entry + icon + ~/.local/bin/pacman-rl), uninstall.sh
+  (--purge also removes weights, settings, log). Checked: a clean clone
+  from GitHub, ./install.sh --cpu in 1 min; the entry shows up in the
+  GNOME overview search with the icon and the Russian name; on a private
+  Xvfb the menu downloaded the weights from the release (hash ok), ran
+  the planner and the plain network, Stop and closing the windows return
+  to the menu, quitting the menu leaves no game / Xvfb behind.
+- CPU only (torch +cpu, 20 threads): the planner takes 2.9 s per
+  decision with K = 32 and 0.8 s with K = 8 with the network view, so the
+  game runs in slow motion (it waits for the action); the menu says so
+  when torch sees no CUDA.
+
+Ideas for later: start the network view in smooth mode by default when
+there is no CUDA; a Flatpak or AppImage instead of install.sh; the
+launcher does not check free disk space before the download.

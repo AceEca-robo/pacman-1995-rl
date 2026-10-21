@@ -90,11 +90,12 @@ STRINGS = {
         "uk": "Менше варіантів на хід: вирішує швидше, але гине трохи частіше.",
     },
     "cpu_note": {
-        "en": "No NVIDIA GPU found: the network runs on the processor and may lag behind the game.",
-        "ru": "Видеокарта NVIDIA не найдена: сеть считает на процессоре и может не поспевать "
-              "за игрой.",
-        "uk": "Відеокарту NVIDIA не знайдено: мережа рахує на процесорі й може не встигати "
-              "за грою.",
+        "en": "No NVIDIA GPU found: the network thinks on the processor, so the game runs "
+              "in slow motion. Smooth mode is about four times faster.",
+        "ru": "Видеокарта NVIDIA не найдена: сеть думает на процессоре, и игра идёт как "
+              "в замедленной съёмке. В плавном режиме примерно вчетверо быстрее.",
+        "uk": "Відеокарту NVIDIA не знайдено: мережа думає на процесорі, і гра йде як "
+              "у сповільненій зйомці. У плавному режимі приблизно вчетверо швидше.",
     },
     "running": {
         "en": "The game is running in its own window. Close it to come back here.",
