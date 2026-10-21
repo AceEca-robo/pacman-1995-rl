@@ -62,7 +62,14 @@ Ukrainian (the switch in the corner of the menu and of the pause menu):
 
 - **Play yourself**: the original game in the centre, your arrow keys
   forwarded to it (XTest, about 1-2 ms); N shows what the network sees in
-  your game and where it would go, without steering;
+  your game and where it would go, without steering. The game polls the
+  keyboard once per tick (0.25 s), which is how the original works: it
+  asks the X server which keys are down at that moment, so a tap shorter
+  than a tick that falls between two polls never reaches it. The app
+  therefore latches the arrows: a pressed arrow stays down on the game's
+  display until the game has polled after the press (seen in the state it
+  sends) or another arrow is pressed. In a test, 50 taps of 30 ms all
+  reached the game, against 4-11 of 50 without the latch;
 - **Watch the neural network**: the planner with the network view
   (`play.py --agent planner --viz`; smooth mode: K = 8 instead of 32);
 - **Network without the planner**: the network alone (`play.py --agent dqn --viz`).

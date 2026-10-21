@@ -4,6 +4,13 @@ person ("play": the game runs with --rl-watch, the app forwards the arrow
 keys with XTest, launcher/xkeys.py). The UI thread draws .snap, the latest
 tick, and never waits for the game.
 
+The game reads the keyboard once per tick, right after it sends its state
+(as the original does, without --rl-watch too), so a tap shorter than a tick
+can fall between two reads. The arrows are latched: a pressed arrow stays
+down on the game's display until the game has read the keyboard after the
+press, or another arrow is pressed; letting the key go does not release it
+before that.
+
 The networks are loaded once per process and kept (_AGENTS): a new session
 starts only after the previous one has let go of them (`after`).
 """
@@ -48,7 +55,8 @@ def _agent(kind, smooth=False):
 
 
 class Session:
-    def __init__(self, mode, level, smooth=False, net_view=False, seed=None, after=None):
+    def __init__(self, mode, level, smooth=False, net_view=False, seed=None, after=None,
+                 env_config=None):
         self.mode, self.level, self.smooth = mode, level, smooth
         self.net_view = net_view    # "play": run the network on every tick (key N)
         self.seed = int.from_bytes(os.urandom(2), "little") if seed is None else seed
@@ -60,23 +68,58 @@ class Session:
         self.obs_cfg = None
         self.game_display = None    # the private Xvfb, e.g. ":2"
         self.keys = None            # XKeys on it ("play")
+        self._klock = threading.Lock()   # the UI thread and the worker share the XKeys
+        self._user = set()          # the arrows the person holds
+        self._latch = {}            # arrow -> states seen since it was pressed
         self.paused = False
         self._stop = threading.Event()
         self._game = None           # the game's Popen
         self._after = after
+        self._env_config = env_config or {}   # extra PacmanEnv config (tests: no ghosts)
         self.thread = threading.Thread(target=self._run, name=f"session-{mode}", daemon=True)
         self.thread.start()
 
     # --- UI thread ------------------------------------------------------------
 
     def key(self, name, down):
-        """An arrow from the app's window to the game ("play")."""
-        if self.keys is not None and not self.paused:
-            self.keys.press(name, down)
+        """An arrow ("Up", ...) from the app's window to the game ("play")."""
+        with self._klock:
+            if self.keys is None or self.paused:
+                return
+            if down:
+                for other in [a for a in self._latch if a != name]:
+                    self._unlatch(other)
+                self._user.add(name)
+                self._latch[name] = 0
+                self.keys.press(name, True)
+            else:
+                self._user.discard(name)
+                if name not in self._latch:
+                    self.keys.press(name, False)
 
     def release_keys(self):
-        if self.keys is not None:
-            self.keys.release_all()
+        with self._klock:
+            self._user.clear()
+            self._latch.clear()
+            if self.keys is not None:
+                self.keys.release_all()
+
+    def _unlatch(self, name):
+        del self._latch[name]
+        if name not in self._user:
+            self.keys.press(name, False)
+
+    def _read_keys(self, st):
+        """The worker got a state: the game reads the keyboard right after
+        sending it. An arrow is let go once a state shows it as pacman's
+        try_dir (the game has taken it; a press of the direction it already
+        tries changes nothing) or, failing that, after two states (the first
+        may have been on its way before the press)."""
+        with self._klock:
+            for name in list(self._latch):
+                self._latch[name] += 1
+                if st["pacman"]["try_dir"] == name[0] or self._latch[name] >= 2:
+                    self._unlatch(name)
 
     def pause(self, on):
         """The agents wait before their next move; a person's game, which does
@@ -129,7 +172,8 @@ class Session:
             # the same seed and level as the reset below: no second game process
             env = PacmanEnv(display=xserver.name, fast=False, watch=self.mode == "play",
                             seed=self.seed, config={"max_episode_steps": None,
-                                                    "start_level": self.level, **overrides})
+                                                    "start_level": self.level, **overrides,
+                                                    **self._env_config})
             obs, info = env.reset(seed=self.seed)
             self._game = env._res["game"]
             if self.mode == "watch":
@@ -156,6 +200,7 @@ class Session:
                                   tick=tick, deaths=deaths, t_dec=None,
                                   human=DIRS.index(d) if d in DIRS else None)
                     obs, info = env.observe()
+                    self._read_keys(env._state)
                     term = bool(env._state["done"])
                 else:
                     if not self._wait():
@@ -181,8 +226,9 @@ class Session:
             if not self._stop.is_set():
                 self.error = (f"{type(e).__name__}: {e}", traceback.format_exc())
         finally:
-            if self.keys is not None:
-                self.keys.close()
+            with self._klock:
+                if self.keys is not None:
+                    self.keys.close()
             if env is not None:
                 env.close()
             if xserver is not None:

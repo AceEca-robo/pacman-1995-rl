@@ -2937,3 +2937,26 @@ launcher does not check free disk space before the download.
 - install.sh also checks xwininfo (x11-utils) and libXtst. SingleMainWindow
   in the .desktop file was dropped again: desktop-file-validate here only
   knows the spec up to 1.4 and install.sh stops on its error.
+
+## 2026-10-21 (evening): the arrows latch in your game (no training)
+
+- The complaint: arrows lag or get lost in your game. The game polls the
+  keyboard once per tick (XQueryKeymap right after it sends its state,
+  0.25 s per tick, half that while pacman is super), as the original does;
+  a tap shorter than a tick that falls between two polls never happened
+  for the game. Without --rl-watch a person at a real keyboard has the same
+  issue in the original.
+- launcher/session.py: a pressed arrow stays down on the game's Xvfb until
+  the game has polled after the press, or another arrow is pressed; the
+  person letting the key go releases it only after that. "Has polled":
+  a state arrives whose pacman try_dir is that arrow (the game sets try_d
+  to every direction it reads; a press of the direction it already tries
+  changes nothing), or two states have arrived since the press (the first
+  may have been sent just before it). The UI thread and the worker share
+  the XKeys connection under a lock.
+- Test (tests/test_session.py::test_short_taps_are_not_lost, no ghosts):
+  50 taps of 30 ms, each in another direction than the last, 0.30-0.55 s
+  apart at random tick phases; the try_dir sequence the game reports
+  shows all 50 in order. The same taps without the latch: 4 and 11 of 50
+  reached the game (two runs). The press itself still goes out at once,
+  the latency measured earlier is unchanged.

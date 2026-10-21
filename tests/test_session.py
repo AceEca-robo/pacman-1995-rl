@@ -70,3 +70,40 @@ def test_the_network_plays_and_stops():
         assert snap["pr"]["q"].shape == (5,) and snap["img"].ndim == 3
     finally:
         close(s)
+
+
+class Recorder(Session):
+    """Remembers when each state arrived and pacman's try_dir in it."""
+    def _read_keys(self, st):
+        self.states.append((time.monotonic(), st["pacman"]["try_dir"]))
+        super()._read_keys(st)
+
+
+def test_short_taps_are_not_lost():
+    """50 taps of 30 ms, each in a direction other than the last, at random
+    points of the game's 0.25 s tick: the game reads the keyboard once per
+    tick, the latch keeps every tap down until it has."""
+    import random
+    rng = random.Random(1)
+    Recorder.states = []
+    s = Recorder("play", level=1, env_config={"ghosts": False})
+    try:
+        assert wait(lambda: s.snap is not None and s.keys is not None), s.error
+        cycle, taps = ["Up", "Left", "Down", "Right"], []
+        for i in range(50):
+            name = cycle[i % 4]
+            taps.append((time.monotonic(), name[0]))
+            s.key(name, True)
+            time.sleep(0.03)
+            s.key(name, False)
+            time.sleep(rng.uniform(0.3, 0.55))
+        time.sleep(0.6)
+        assert not s.over and s.error is None
+    finally:
+        close(s)
+    # every tap differs from the one before: the try_dir the game reports,
+    # with repeats dropped, has to go through all 50 of them in order
+    t0 = taps[0][0]
+    tried = [d for t, d in s.states if t > t0 and d != "S"]   # S: none asked for yet
+    tried = [d for i, d in enumerate(tried) if i == 0 or d != tried[i - 1]]
+    assert tried == [d for _, d in taps], f"tapped {''.join(d for _, d in taps)}, game {''.join(tried)}"
