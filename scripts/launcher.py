@@ -15,7 +15,7 @@ the game (continue / back to the menu / quit). English, Russian or
 Ukrainian (launcher/i18n.py) on every screen, switched in the menu's or the
 pause menu's corner; the language, the level and the switches are kept in
 ~/.config/pacman-rl/settings.json. Without runs/best_v04/best.pt the menu
-offers to download it from the v0.4 release into ~/.local/share/pacman-rl/.
+offers to download it from the v0.5 release into ~/.local/share/pacman-rl/.
 A failed game's traceback goes to ~/.cache/pacman-rl/last.log, the menu
 says what happened in plain words. play.py stays the terminal's tool.
 

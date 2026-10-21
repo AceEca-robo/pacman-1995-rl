@@ -3030,3 +3030,23 @@ launcher does not check free disk space before the download.
 - GitHub description updated (it still said "a DQN clears level 1 in 85%
   of games"); no version in it: there is no v0.5 (pyproject 0.4.0, latest
   release v0.4). video/shot_github.png retaken.
+
+## 2026-10-21 (late night): release v0.5 (no training)
+
+- Version 0.5.0 (pyproject; the app's footer reads pyproject now: an
+  editable install keeps the version it was installed with). The app's
+  checkpoint download points at the v0.5 release (best_v04.pt, the same
+  file and SHA-256 as in v0.4). Menu screenshots retaken.
+- README rewritten for the current state (it still described v0.2: "only
+  level 1 is learned"): install first, the app's three modes, results
+  (network 81.8% per maze, planner H40/K32 320 of 320, 0.23 deaths per
+  game, planner without the network 0%), "The path", how the planner
+  works, limitations and future work as of now.
+- Release v0.5 assets: best_v04.pt and best_v03.pt. **bc0_dagger1 is not
+  attached: its checkpoint (runs/bc0_dagger1/bc_best.pt, which
+  configs/dqfd.yaml and bc_dagger2.yaml point at) is no longer in runs/,
+  and the archive disk does not open that name** (its directory index is
+  corrupt, see the video session above).
+- The video script (docs/video_script.md) and its generators stay local:
+  the two local commits that had them were rebuilt without them before
+  the push (generators moved to video/, both ignored).

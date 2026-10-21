@@ -3,16 +3,142 @@
 Reinforcement learning on the **original pacman 1.0** (1995, Roar Thronaes,
 GPL-2+), the X11 game from the Debian package `pacman` (version 10-21). The
 game is not reimplemented: its C++ sources are compiled with a small bridge
-and driven as a gymnasium environment through a Unix socket. The main lesson
-about generalization: the agents learn a route through one maze, and the game
-has 16 different mazes, so the best agent, which clears level 1, stalls on
-level 2, whose maze differs from level 1 in 23 cells.
+and driven as a gymnasium environment through a Unix socket.
 
-![dqn8 playing](docs/dqn8.gif)
+A network trained from demonstrations (best_v04) plays all 16 mazes of the
+game; before every move a rollout planner tries the four directions in a
+byte-exact copy of the game, with the same network playing the rollouts.
+Together they clear **all 16 mazes in 320 of 320 games, 0.23 deaths per
+game**. The network alone clears 81.8% of the games per maze (the
+heuristic it learned from: 78.2%); the planner without the network
+clears none. A desktop app shows the network thinking, or lets you play
+while it watches.
 
-> v0.2 (2026-10-07): dqn10 clears level 1 in 85% of greedy games; v0.1:
-> dqn8, 67%. Numbers are taken from `docs/results.md` and the session
-> logs `docs/overnight.md`.
+![the planner playing, with the network view](docs/app_watch.png)
+
+> v0.5 (2026-10-21): the app in one window; the planner H40/K32 as its
+> default. Numbers are taken from `docs/results.md` and the session logs
+> `docs/overnight.md`.
+
+## Install
+
+On Ubuntu / Debian with an X11 desktop (GNOME, also XWayland):
+
+```bash
+git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
+./install.sh        # or ./install.sh --cpu: torch without CUDA, a much smaller download
+```
+
+`install.sh` lists the missing system packages with the `sudo apt install`
+line for them, builds the game, creates `.venv` and puts
+"Pacman 1995 RL" into the applications menu (plus `~/.local/bin/pacman-rl`).
+On its first start the app offers to download the network's weights
+(`best_v04.pt`, 118 MB,
+[v0.5 release](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.5))
+into `~/.local/share/pacman-rl/` and checks their SHA-256. `./uninstall.sh`
+removes the menu entry (`--purge`: also the weights and the settings).
+
+The app is one 1920x1080 window (F11: full screen) in English, Russian or
+Ukrainian (the switch in the corner of the menu and of the pause menu),
+with three modes:
+
+- **Watch the neural network**: the network with the planner. Around the
+  real game: what the network sees (its input planes), its convolutions,
+  saliency, Q values, and the planner's rollouts (red: lost a life).
+  Smooth mode uses 8 rollouts per direction instead of 32 (on a CPU the
+  32 play in slow motion).
+- **Network without the planner**: the network alone, greedy.
+- **Play yourself**: the original game in the centre, your arrow keys
+  forwarded to it (XTest, about 1-2 ms); N shows what the network sees in
+  your game and where it would go, without steering. The game polls the
+  keyboard once per tick (0.25 s), as the original does: a tap shorter
+  than a tick that falls between two polls never reaches it. The app
+  therefore latches the arrows: a pressed arrow stays down on the game's
+  display until the game has polled after the press or another arrow is
+  pressed (in a test 50 of 50 taps of 30 ms reached the game, 4-11 of 50
+  without the latch).
+
+Any of the 16 levels; P pauses (continue / back to the menu / quit), Esc goes
+back to the menu, Esc in the menu quits. Each game runs on a private Xvfb
+and is grabbed into the window. `scripts/play.py` does the same from a
+terminal (and records mp4).
+
+| your game, with the network's view (N) | the menu |
+|---|---|
+| ![your game](docs/app_play_network.png) | ![the menu](docs/launcher.png) |
+
+More: `docs/app_*.png` (every screen, also in Russian and Ukrainian).
+
+## Results
+
+| agent | games per maze | mazes cleared (mean of 16) | worst maze | deaths per game |
+|---|---|---|---|---|
+| heuristic (BFS, `agents/heuristic_agent.py`) | 100 | 78.2% | 58% | — |
+| BC: a network copying the heuristic (bc0_dagger3) | 100 | 68.4% | 45% | — |
+| best_v03: DQfD from the BC | 100 | 75.2% | 52% | — |
+| **best_v04**: + the cell-safety plane, greedy | 100 | **81.8%** | **67%** | 1.45 |
+| planner without the network (random rollouts) | 10 | 0% | 0% | 3.0 |
+| **best_v04 + planner H40/K32** | 20 | **100%** | **100%** | **0.23** |
+
+"Mazes cleared": the share of games started on a maze that clear it; the
+first four rows on the final protocol (100 games per maze, seeds
+2000..3599, 95% intervals in `docs/results.md`, "Final results v0.4"), the
+planner rows in the sim on seeds 0..19 / 0..9 (`scripts/plan_eval.py`;
+replayed games match the real game). best_v04's deaths per game: 50 games
+per maze, seeds 5000.. (`scripts/death_report.py`). Levels in a row from
+level 1: best_v04 1.48 (max 6), with the planner (H40/K8) 7.7 (max 14).
+
+## The path
+
+| | stage | result | what made it |
+|---|---|---|---|
+| 1 | random actions | 92 points, level 1 never cleared | — |
+| 2 | dqn0: DQN from scratch, 5M steps | 128 of 172 food, 0% | event reward (dots, death) |
+| 3 | dqn1: 20M steps | 151 of 172 food, 0% | more steps: a plateau |
+| 4 | dqn8 | level 1 cleared in 67% | episodes starting near the end of the level + dots worth more as the board empties |
+| 5 | dqn10 | level 1: 85% | its own endgame openings, prioritized replay |
+| 6 | mm1: all 16 mazes from scratch | ~136 of 172 food on every maze, 0% | — (the plateau again) |
+| 7 | BC of the heuristic | 98.8% agreement, 68.4% per maze | behaviour cloning + DAgger |
+| 8 | best_v03 (DQfD) | 75.2% per maze | RL from the clone, demonstrations in the batch, released gradually |
+| 9 | best_v04 | 81.8% per maze, above the heuristic | a cell-safety plane: cells pacman reaches before any ghost |
+| 10 | sim/ + planner (honest, K = 8) | 99.1% per maze, 7.7 levels in a row | a byte-exact port of the game to roll out the future |
+| 11 | planner H40/K32 | 100% per maze, 320 of 320 games | more rollouts, not a longer horizon |
+
+Watching the games on screen gave both turns of the network part: "stands
+at a wall" (a fixed point of the greedy policy: when nothing moves, the
+same action is chosen again) led to the endgame curriculum, "squeezed in
+a corridor" led to the cell-safety plane. The plane is what best_v04 is
+built on: fed as zeros, it clears 0% (results.md, "Plane ablation"); the
+ablation from best_v03 credits it with most of the gain (+3.0 points
+against +0.8 for the longer horizon).
+
+What did not move the network past best_v04 (`docs/results.md`): training
+on its own deaths (dqfd3, 80.8%), escape demonstrations from 80-120 ticks
+before a death (dqfd4, 80.4%), training longer (dqfd2 to 290M steps:
+75.0%). Squeezes stay 83-85% of its deaths. From the state 40 ticks before
+a death, 52% of the deaths have no surviving continuation in 80 noisy
+rollouts: the trap closes about 100 ticks ahead, and a network that sees
+one frame does not look that far. Earlier dead ends: a heuristic warm
+start, distance shaping, a hunger limit, PPO, a food-distance plane.
+
+## How the planner works
+
+`sim/` is a clonable port of the game (`docs/sim_spec.md`): `PacmanSim`
+(Python) and `CSim`/`SimBatch` (C via ctypes, with the env observation),
+incl. an exact copy of glibc `random()`. Given the same seed and actions
+they produce the game's JSON state lines byte for byte
+(`scripts/verify_sim.py`: 0 differences in 610k Python and 600k C steps).
+
+Before every move `scripts/plan_eval.py`'s planner rolls out the network's
+best direction K times for H steps in clones of the sim (the network plays
+the rollouts, with 10% random moves); if more than half of the rollouts
+lose a life, the other directions are rolled out too and the best one by
+Q that does not is played. "Honest": every clone gets new ghost randomness,
+so the rollouts sample futures instead of reading the real one (cloning the
+game's random state — the "oracle" — gives 22.4 levels in a row; not used).
+A loop breaker steers pacman away from cells it keeps revisiting without
+eating. The default, `configs/plan_honest_lb.yaml`: H = 40, K = 32, 20
+decisions/s on one GPU (p95 53 ms; a tick is 0.25 s).
 
 ## How the game became an environment
 
@@ -31,77 +157,38 @@ level 2, whose maze differs from level 1 in 23 cells.
   `--rl-watch` (with `--rl`): the states are sent, but pacman is steered from
   the keyboard (the app's "play yourself" with the network watching).
 - Throughput: a single headless env runs at about 32k steps/s with random
-  actions (`scripts/bench_env.py`, 2026-10-07, `docs/results.md`); DQN
-  training with 4 envs ran at 1.8-3.5k env steps/s (median 2.6k, dqn0,
-  `docs/results.md`).
+  actions (`scripts/bench_env.py`, `docs/results.md`).
 - `env/pacman_env.py`: `Pacman1995-v0`, a gymnasium env that starts the game
   (headless by default, or in a window with `display=":0"`) and serves the
   socket.
-- `sim/`: a clonable port of the game for planning (`docs/sim_spec.md`):
-  `PacmanSim` (Python) and `CSim`/`SimBatch` (C via ctypes, with the env
-  observation), incl. an exact copy of glibc `random()`. Given the same seed
-  and actions they produce the game's JSON state lines byte for byte
-  (`scripts/verify_sim.py`: random, sticky-random and best_v04 games,
-  0 differences: 610k steps Python, 600k C). Python ~180k steps/s, C ~0.9M steps/s per
-  call and ~12M steps/s batched, on one core.
 
-## Install as an app
+## Observation and reward
 
-On Ubuntu / Debian with an X11 desktop (GNOME, also XWayland):
+The observation is a `Dict`: 21 binary/count planes over the 23 x 33 board
+(walls, gate, dots, energizers, pacman and its direction, last requested
+direction, ghosts by state and direction, bonus) and a small vector (lives,
+supertime, level); optional extra planes: food distance, **cell safety**
+(1 on every cell pacman reaches strictly before every normal ghost; all of
+its reachable cells while it is super; best_v04 has it) and safe exits.
+Details: [docs/observation.md](docs/observation.md).
 
-```bash
-git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
-./install.sh        # or ./install.sh --cpu: torch without CUDA, a much smaller download
-```
+The reward counts events, not the game score: dot +1, energizer +2, ghost +5,
+level +50, death -20, step -0.02, and from dqn8 on dots worth more as the
+board empties (`1 + 20 / max(food left, 1)`). The game score has a hole: the
+ghost score doubles with every ghost eaten and the counter only resets when
+pacman stops being super, while eaten ghosts revive during super mode. The
+heuristic scored 102400 points for a single ghost once (`docs/results.md`,
+Notes). A reward based on the score would mostly teach ghost chains.
 
-`install.sh` lists the missing system packages with the `sudo apt install`
-line for them, builds the game, creates `.venv` and puts
-"Pacman 1995 RL" into the applications menu (plus `~/.local/bin/pacman-rl`).
-It is one 1920x1080 window (F11: full screen) in English, Russian or
-Ukrainian (the switch in the corner of the menu and of the pause menu):
+## From source, training
 
-- **Play yourself**: the original game in the centre, your arrow keys
-  forwarded to it (XTest, about 1-2 ms); N shows what the network sees in
-  your game and where it would go, without steering. The game polls the
-  keyboard once per tick (0.25 s), which is how the original works: it
-  asks the X server which keys are down at that moment, so a tap shorter
-  than a tick that falls between two polls never reaches it. The app
-  therefore latches the arrows: a pressed arrow stays down on the game's
-  display until the game has polled after the press (seen in the state it
-  sends) or another arrow is pressed. In a test, 50 taps of 30 ms all
-  reached the game, against 4-11 of 50 without the latch;
-- **Watch the neural network**: the planner with the network view
-  (`play.py --agent planner --viz`; smooth mode: K = 8 instead of 32);
-- **Network without the planner**: the network alone (`play.py --agent dqn --viz`).
-
-Any of the 16 levels; P pauses (continue / back to the menu / quit), Esc goes
-back to the menu, Esc in the menu quits. Each game runs on a private Xvfb
-and is grabbed into the window. On its first start it offers to download
-the network's weights (`best_v04.pt`, 118 MB,
-[v0.4 release](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.4))
-into `~/.local/share/pacman-rl/` and checks their SHA-256. `./uninstall.sh`
-removes the menu entry (`--purge`: also the weights and the settings).
-`scripts/play.py` stays the terminal's tool.
-
-![the menu](docs/launcher.png)
-
-| your game, with the network's view (N) | the planner playing |
-|---|---|
-| ![your game](docs/app_play_network.png) | ![the planner](docs/app_watch.png) |
-
-More: `docs/app_*.png` (every screen, also in Russian and Ukrainian).
-
-## Install and run
-
-Requirements: Linux with X11 libraries, Python 3.10+. A GPU is optional: on
-CPU evaluation and play work the same and training is slower (about 435 env
-steps/s in a short check with the GPU hidden, against 1.8-3.5k with an
-RTX 4060 laptop GPU).
+Requirements: Linux with X11 libraries, Python 3.10+. A GPU is optional for
+play and evaluation, needed in practice for training and for the planner
+at K = 32 in real time.
 
 ```bash
-git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
 sudo apt install build-essential xutils-dev libx11-dev libncurses-dev   # g++, xmkmf, X11, curses
-sudo apt install xvfb xdotool x11-apps   # tests on a virtual display, play.py --record (xwd)
+sudo apt install xvfb xdotool x11-apps x11-utils   # tests on a virtual display, play.py --record
 cd game && xmkmf && make && cd ..
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/python -m pytest
@@ -111,176 +198,63 @@ The dependency versions in `pyproject.toml` are the tested ones; torch was
 installed as the CUDA 13.0 build (`2.14.1+cu130`) from the PyTorch index.
 
 ```bash
-# watch an agent in the game window (real time), optionally record a GIF or
-# a 1920x1080 mp4 (--agent random: the baseline; --viz --lang ru: the network
-# view in Russian)
+# watch an agent in the game (real time); --viz: the network view window;
+# --record: a GIF, or a 1920x1080 mp4; --lang en/ru/uk for the view
+.venv/bin/python scripts/play.py --agent planner --level 9 --viz
+.venv/bin/python scripts/play.py --agent dqn --checkpoint runs/best_v04/best.pt --viz \
+    --record runs/viz.mp4 --max-steps 400
 .venv/bin/python scripts/play.py --agent heuristic --seed 0 --display :0
-.venv/bin/python scripts/play.py --agent dqn --checkpoint runs/dqn1s1/best_food.pt \
-    --display :0 --record docs/agent.gif --max-steps 400
+
+# the planner on all 16 mazes (in the sim), the network alone on the same games
+.venv/bin/python scripts/plan_eval.py --config configs/plan_honest_lb.yaml --maze-only
+.venv/bin/python scripts/plan_eval.py --config configs/plan_honest_lb.yaml --maze-only --mode greedy
 
 # train (long runs belong in tmux) and evaluate
-.venv/bin/python scripts/train.py --config configs/dqn_long.yaml --seed 1 --run-name dqn1s1
-.venv/bin/python scripts/evaluate.py --agent dqn --checkpoint runs/dqn1s1/best_food.pt --episodes 100
+.venv/bin/python scripts/train.py --config configs/dqfd2.yaml --run-name dqfd2 \
+    --resume-from runs/best_v03/best.pt
+.venv/bin/python scripts/train_eval.py --config configs/dqfd2.yaml \
+    --checkpoint runs/best_v04/best.pt --episodes 100 --seed 2000 --seed-blocks
 ```
+
+All hyperparameters live in `configs/*.yaml`. `scripts/supervisor.py` watches
+runs (evaluations, extension and stop rules), `scripts/final_table.py` makes
+the final tables with bootstrap intervals.
 
 Trained checkpoints are not in the repository (`runs/` is ignored); they are
 attached to the GitHub releases:
+[v0.5](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.5):
+`best_v04.pt` (the planner's network; the app downloads it) and
+`best_v03.pt` (dqfd1@110M);
 [v0.4](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.4):
-`best_v04.pt` (the planner's network, `runs/best_v04/best.pt`);
+`best_v04.pt`;
 [v0.2](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.2):
-`dqn10_ck9M.pt` (85% of level 1 clears; the v0.2 checkpoint by the rule
-below) and `dqn10_best_food.pt` (81%, picked by food as before v0.2);
+`dqn10_ck9M.pt` (level 1 in 85%), `dqn10_best_food.pt`;
 [v0.1](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.1):
-`dqn8_best_food.pt` (67%) and `dqn1s1_best_food.pt` (its starting point).
-Put them anywhere and pass the path with `--checkpoint`.
-
-All hyperparameters live in `configs/*.yaml`. `scripts/supervisor.py` watches
-runs (evaluations every 500k steps, one restart after a crash),
-`scripts/final_eval.py` does the final 100-game evaluations.
-
-## Observation and reward
-
-The observation is a `Dict`: 21 binary/count planes over the 23 x 33 board
-(walls, gate, dots, energizers, pacman and its direction, last requested
-direction, ghosts by state and direction, bonus) and a small vector (lives,
-supertime, level); optional extra parts (a food-distance plane, steps since
-the last food). Details: [docs/observation.md](docs/observation.md).
-
-The reward counts events, not the game score: dot +1, energizer +2, ghost +5,
-level +50, death -20, step -0.02. The game score has a hole: the ghost score
-doubles with every ghost eaten and the counter only resets when pacman stops
-being super, while eaten ghosts revive during super mode. The heuristic
-scored 102400 points for a single ghost once (`docs/results.md`, Notes). A
-reward based on the score would mostly teach ghost chains.
-
-## Results
-
-Final evaluation: 100 games, seeds 0..99, greedy (eps 0), no shaping; food =
-dots + energizers eaten per game, 172 on level 1.
-
-**Checkpoint rule (v0.2+):** the checkpoint with the highest share of games
-clearing level 1 on seeds 1000..1019 (20 greedy games, disjoint from the final
-seeds 0..99), mean food as the second key (`best_metric: level1_cleared`,
-`eval_seed: 1000` in `configs/dqn.yaml`). Before v0.2 the most food on the
-selection games (`best_food.pt`) was used, which stopped tracking level
-clears once the agents ate into level 2. From `docs/results.md`
-("Summary of all runs"):
-
-| agent / run | checkpoint | mean food | level 1 cleared | mean reward | median score |
-|---|---|---|---|---|---|
-| random | - | - | 0% | -53.4 | 80 |
-| heuristic (BFS, `agents/heuristic_agent.py`) | - | - | 82% | 465.5 | 11825 |
-| dqn0, baseline DQN, 5M steps | best.pt | 128.3 | 0% | 61.9 | 1360 |
-| dqn1, 20M steps, 3 seeds (mean +- std) | best_food.pt | 140.6 +- 28.5 | 0% | 23.4 +- 37.4 | 1668 +- 157 |
-| dqn1 seed 1 (best single run) | best_food.pt | 168.8 | 0% | 56.1 | 1855 |
-| dqn1 seed 1, eps 0.05 | best_food.pt | 159.4 | 0% | 99.0 | - |
-| dqn7: dqn1 seed 1 fine-tuned on endgame prefixes, 5M | best_food.pt | 169.4 | 0% | 40.4 | 1760 |
-| **dqn8: dqn7 + endgame dot reward** | best_food.pt | **246.2** | **67%** | **214.8** | **5030** |
-| dqn8, eps 0.05 | best_food.pt | 159.5 | 4% | 102.4 | - |
-| dqn8 setup from dqn1 seed 0 / seed 2 | best_food.pt | 153.9 / 103.2 | 0% / 0% | 67.1 / -40.8 | 1680 / 1395 |
-| dqn8 setup, 3 starting networks (mean +- std) | best_food.pt | 167.8 +- 59.2 | 22% (67 / 0 / 0) | 80.4 +- 104.8 | 2702 +- 1651 |
-| dqn9: dqn8 fine-tuned on its own endgame openings | best_food.pt | 274.4 | 79% | 255.3 | 6050 |
-| **dqn10: dqn9 + prioritized replay, 10M** | 9.0M (rule v0.2+) | **301.4** | **85%** | **280.7** | **6432** |
-| dqn10, picked by food (rule before v0.2) | 5.0M | 284.1 | 81% | 267.0 | 6335 |
-
-Training curves (`docs/training.png`) and evaluation curves
-(`docs/eval.png`); the fine-tunes dqn7, dqn8, dqn8s0, dqn8s2 are plotted from
-their own step 0, they start from networks trained for 17.5-19.5M steps:
-
-![training](docs/training.png)
-
-![eval](docs/eval.png)
-
-Where level 1 is left unfinished (`scripts/diag_endgame.py`, 100 games each):
-dqn1 seed 1 never enters the bottom-right side loop and leaves its two dots
-in every game; seeds 0 and 2 have never-visited regions of their own
-elsewhere; the heuristic eats all of them. After the endgame fine-tune
-(dqn8) the loop is eaten and no cell is left in every game; the same
-fine-tune from seeds 0 and 2 leaves their regions untouched.
-
-| heuristic | dqn1 seed 1, eps 0 | dqn8, eps 0 |
-|---|---|---|
-| ![](docs/leftover_heuristic.png) | ![](docs/leftover_dqn1s1_eps0.png) | ![](docs/leftover_dqn8_eps0.png) |
-
-The GIF at the top is dqn8 (best_food.pt, greedy), the first 400 ticks of
-seed 0 in real time (`scripts/play.py --record`, Xvfb); `docs/dqn1s1.gif`
-shows its starting point, dqn1 seed 1.
-
-## What worked, what did not
-
-Worked:
-- Longer training of the plain DQN (dqn1, 20M steps): the best seed eats
-  168.8 of 172 food items per game.
-- A little randomness at evaluation (eps 0.05): no game stuck until the step
-  limit, the best mean reward (99.0 for dqn1 seed 1).
-- Choosing checkpoints by food eaten instead of mean reward, and by mean
-  instead of median (a median hides games stuck until the step limit).
-- Pushing level 1 clears from 67% to 85% (dqn9, dqn10): dqn8's lost
-  games were deaths late in the level, not blind spots
-  (`docs/dqn8_failures.png`); fine-tuning it on endgame openings from its
-  own games (seeds disjoint from the evaluation) and then adding
-  prioritized replay. Checkpoints are picked on seeds 1000..1019 and
-  evaluated on 0..99.
-- Clearing level 1 (dqn8): fine-tuning the best DQN with episodes that start
-  near the end of level 1 (replayed heuristic openings with <= 15 food left,
-  `data/endgame_prefixes.json`, half of the resets) **and** dots worth more
-  as the board empties (`1 + 20 / max(food left, 1)`): level 1 cleared in
-  67% of 100 greedy games, from 0%.
-
-Did not work (each one seed unless noted, `docs/results.md`):
-- Heuristic warm start of the replay buffer (dqn2): same at 5M, slower at 1M.
-- Potential-based distance shaping (dqn3b), hunger limit (dqn4), PPO (ppo0).
-- A food-distance plane and steps-since-food (dqn5), plus 5-step returns and
-  gamma 0.995 (dqn6): below plain dqn1 at the same step count.
-- The endgame prefixes alone (dqn7): 169.4 food, level 1 never cleared.
-- eps 0.05 with dqn8: level 1 cleared in only 4% of games; the precise
-  endgame does not tolerate random moves.
-- The same endgame fine-tune from dqn1 seeds 0 and 2 (dqn8s0, dqn8s2):
-  level 1 never cleared, food 153.9 and 103.2, their blind regions
-  unchanged. Seed 2's region was not in any recorded prefix; seed 0's was in
-  11 of 28 and still was not learned.
-
-So level 1 is cleared by one agent (dqn8, 67% of greedy games), not by the
-recipe in general: over its three starting networks the mean is 22%. Seeds
-differ more than most changes tried (dqn1: 101.5 to 168.8 food).
+`dqn8_best_food.pt` (67%), `dqn1s1_best_food.pt`.
+Put them in `runs/<name>/best.pt` or pass the path with `--checkpoint`.
 
 ## Known limitations
 
-**Only level 1 is learned.** Training and evaluation use level 1 only
-(evaluation scores and food counts include whatever happens after it, but
-nothing was trained for it). The game has 16 different mazes
-(`boards[LEVELS][...]` in `game/board.h`, `LEVELS 16` in `game/pac.h`):
-level n is played on maze n, and from level 17 on a random one of the 16
-(`Gamedata::setboardlevel`, `game/gamedata.cc`). The level 2 maze differs
-from level 1 in 23 cells of walls and passages, so a level-1 route does not
-carry over. Seen on screen and reproduced (dqn8, seed 0, greedy): it clears
-level 1 at step 518 (score 4790), eats 137 of 172 food items on level 2,
-stops eating after step 826, loses its remaining lives and the game ends at
-step 941 with score 6220 and 35 food items left on level 2.
-
-### A fixed point of the greedy policy
-
-Greedy agents stop and stand still, often next to food. Without ghosts
-(`--no-ghosts`, `configs/env_noghosts.yaml`) every DQN stops for good after
-some dozens of food items and stays until the step limit: when pacman stands
-the observation does not change, so the same action is chosen again. With
-ghosts their movement usually breaks the loop; eps 0.05 at evaluation
-removes the stuck games (`docs/results.md`, Diagnostics). dqn8 has the same
-problem: without ghosts it stops after 32 food items (eps 0).
+- The network alone still dies mostly squeezed between two ghosts in a
+  corridor (83% of best_v04's deaths), and 6% of its games from level 1
+  stand still on a level until the 30,000-tick cap. The planner fixes both
+  only by search: nothing of it is in the network.
+- The planner at K = 32 needs a GPU to keep the game's tick; with the
+  network view it takes ~160 ms per decision, so the 0.125 s ticks while
+  pacman is super stretch to ~195 ms (the smooth mode, K = 8, keeps time).
+- Planner numbers come from 20 games per maze, the network's from 100; a
+  from-level-1 run of the K = 32 planner was not measured.
+- The app was tested on X11 (GNOME) and Xvfb at 1920x1080; not on Wayland
+  without XWayland, not on smaller screens (the window scales).
 
 ## Future work
 
-From "Ideas for later" in `docs/overnight.md`:
-- endgame prefixes per agent, stopping with its own blind-spot cells still
-  full (seed 2's region was in no prefix);
-- the endgame dot reward without prefixes, the dqn8 recipe from scratch, and
-  several training seeds per starting network;
-- a small eps (0.01) or randomness only when the observation repeats: dqn8
-  clears the level in 67% of greedy games but 4% with eps 0.05;
-- at least 3 seeds per config: the seed spread is larger than most effects;
-- separate the effects of the dqn5 observation parts and of the shorter
-  epsilon schedule; a separate seed range for checkpoint selection;
-- level 2 and later: dqn8 already plays into level 2, nothing measured there.
+- Teach the network what the planner finds (distill the planner's choices
+  into it) so that it plays as well without the search.
+- Score escape demonstrations by how many rollouts survive, or find escapes
+  by search, instead of the luckiest of 40 noisy rollouts.
+- A cheaper rollout trace for the network view, so that K = 32 keeps the
+  super tick with the view on.
 
 ## Repository
 
@@ -288,13 +262,13 @@ From "Ideas for later" in `docs/overnight.md`:
 game/      pacman 1.0 sources + RL bridge (C++, X11)
 env/       PacmanEnv (gymnasium), Pacman1995-v0
 sim/       clonable port of the game (Python reference + C), verified byte-equal
-agents/    random, BFS heuristic, DQN (double, dueling, n-step, PER), PPO
-scripts/   train, train_ppo, evaluate, final_eval, supervisor, play, launcher, plots, diagnostics
-launcher/  the app menu's logic, translations (i18n.py), icon; install.sh / uninstall.sh
-tools/     socket demo client, endgame prefix recorder
-configs/   all hyperparameters (env, agents, runs)
-data/      recorded endgame prefixes
-docs/      results, observation, session logs, plots
+agents/    random, BFS heuristic, DQN (double, dueling, n-step, PER, DQfD), BC, PPO
+scripts/   train, evaluate, plan_eval (planner), play, netviz, launcher (the app), reports
+launcher/  the app's logic, sessions, translations (i18n.py), icon; install.sh / uninstall.sh
+tools/     socket demo client, prefix and demo recorders, avoidability
+configs/   all hyperparameters (env, agents, runs, planner)
+data/      recorded endgame and death prefixes
+docs/      results, observation, sim spec, session logs, plots, app screenshots
 tests/     pytest
 ```
 
@@ -303,4 +277,5 @@ tests/     pytest
 The game is pacman 1.0 (c) 1995 Roar Thronaes, GPL-2+ (`game/COPYING`,
 `game/Copyright`, from the Debian package `pacman` 10-21). This repository is
 distributed under the GPL-2.0-or-later as well (`LICENSE`).
-RL bridge, environment and agents: AceEca-robo, written with Claude Code.
+RL bridge, environment, agents, planner and app: AceEca-robo, written with
+Claude Code.

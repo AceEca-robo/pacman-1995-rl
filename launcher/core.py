@@ -20,8 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAME = os.path.join(ROOT, "game", "pacman")
 REPO = "github.com/AceEca-robo/pacman-1995-rl"
 
-# best_v04 as published in the v0.4 release
-CHECKPOINT_URL = f"https://{REPO}/releases/download/v0.4/best_v04.pt"
+# best_v04 as published in the v0.5 release (the same file as in v0.4)
+CHECKPOINT_URL = f"https://{REPO}/releases/download/v0.5/best_v04.pt"
 CHECKPOINT_SHA256 = "ad76723ce7ffb97a53cc915d55fdf3c098bf594c4f269ecd98a3bada372c3cae"
 CHECKPOINT_SIZE = 118190300
 
@@ -47,11 +47,13 @@ USER_CHECKPOINT = os.path.join(DATA_DIR, "best_v04", "best.pt")
 
 
 def version():
+    """pyproject.toml's version: the app runs from the repository, and an
+    editable install keeps the version it was installed with."""
     try:
-        return importlib.metadata.version("pacman-rl")
-    except importlib.metadata.PackageNotFoundError:
         with open(os.path.join(ROOT, "pyproject.toml")) as f:
             return re.search(r'^version = "(.+)"', f.read(), re.M).group(1)
+    except (OSError, AttributeError):
+        return importlib.metadata.version("pacman-rl")
 
 
 # --- settings ---------------------------------------------------------------

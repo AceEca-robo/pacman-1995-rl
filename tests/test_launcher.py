@@ -137,3 +137,10 @@ def test_screenshot(tmp_path, lang):
                     "--lang", lang, "--screenshot", str(out)], check=True, env=env, timeout=60)
     assert out.stat().st_size > 10000
     assert not (tmp_path / "pacman-rl").exists()   # a screenshot does not save settings
+
+
+def test_version_and_download_url(core):
+    with open(os.path.join(ROOT, "pyproject.toml")) as f:
+        v = next(line.split('"')[1] for line in f if line.startswith("version ="))
+    assert core.version() == v
+    assert f"/releases/download/v{'.'.join(v.split('.')[:2])}/best_v04.pt" in core.CHECKPOINT_URL
