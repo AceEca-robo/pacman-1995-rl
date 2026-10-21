@@ -2,6 +2,7 @@
 """Watch an agent play in the game's own window, in real time.
 
     python scripts/play.py --agent heuristic --seed 0 --display :0
+    python scripts/play.py --agent random --seed 0 --record runs/random.mp4 --max-steps 400
     python scripts/play.py --agent dqn --checkpoint runs/dqn0/best.pt --seed 0 \\
         --display :0 --record docs/dqn0.gif --max-steps 400
     xvfb-run -a -s "-screen 0 1280x1024x24" python scripts/play.py --agent dqn \
@@ -17,8 +18,13 @@ planner's rollouts run in clones of it; the observation of the game is
 checked against the sim's every tick.
 
 The game runs without --fast (0.25 s per tick, half while pacman is super).
+--agent random: uniform random actions (seeded by --seed), the baseline
+of docs/results.md.
+
 With --record, the game window is grabbed (xwd) once per tick, after the
-game has drawn it, and written as a GIF with the measured tick durations.
+game has drawn it, and written with the measured tick durations: .mp4 as
+1920x1080 at 25 fps (the window scaled up to the height, pixels kept
+sharp), anything else a GIF.
 Needs xdotool and xwd. The window must stay visible: X has no backing store
 here, a covered part of the window is grabbed as whatever covers it (the
 game raises itself when obscured).
@@ -144,12 +150,15 @@ class Mp4Writer:
     size (ffmpeg), no audio track. A thread feeds ffmpeg, so that encoding
     does not hold up the game loop."""
 
-    def __init__(self, path, size, fps=25, out=(1920, 1080)):
+    def __init__(self, path, size, fps=25, out=(1920, 1080), upscale=False):
         self.fps, self.size, self.n, self.t, self.shown = fps, size, 0, 0.0, 0
-        # centred on the background colour, scaled down only if larger than out
-        s = min(1.0, out[0] / size[0], out[1] / size[1])
+        # centred on the background colour, scaled down only if larger than
+        # out; upscale: also up to fit it (nearest neighbour, the game's pixels)
+        s = min(out[0] / size[0], out[1] / size[1])
+        s = s if upscale else min(1.0, s)
         w, h = 2 * round(size[0] * s / 2), 2 * round(size[1] * s / 2)
-        vf = (f"scale={w}:{h}:flags=lanczos," if s < 1 else "") + \
+        flags = "neighbor" if s > 1 else "lanczos"
+        vf = (f"scale={w}:{h}:flags={flags}," if s != 1 else "") + \
             f"pad={out[0]}:{out[1]}:({out[0]}-iw)/2:({out[1]}-ih)/2:color=0x0e1016"
         self.proc = subprocess.Popen(
             ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
@@ -182,9 +191,25 @@ class Mp4Writer:
         self.proc.wait()
 
 
+class RandomAgent:
+    env_overrides = {}
+
+    def __init__(self, seed):
+        self.rng = np.random.default_rng(seed)
+
+    def reset(self, seed=None):
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+
+    def act(self, obs):
+        return int(self.rng.integers(5))
+
+
 def make_agent(args):
     if args.agent == "heuristic":
         return HeuristicAgent()
+    if args.agent == "random":
+        return RandomAgent(args.seed)
     if not args.checkpoint:
         sys.exit("--agent dqn needs --checkpoint")
     from agents.dqn import DQNAgent
@@ -231,11 +256,12 @@ class PlannerAgent:
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--agent", choices=("heuristic", "dqn", "planner"), required=True)
+    p.add_argument("--agent", choices=("random", "heuristic", "dqn", "planner"), required=True)
     p.add_argument("--checkpoint", help="dqn only: best.pt or checkpoint.pt")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--display", default=os.environ.get("DISPLAY", ":0"))
-    p.add_argument("--record", help="write a GIF of the window here, e.g. docs/heuristic.gif")
+    p.add_argument("--record", help="write the window here: .mp4 (1920x1080) or a GIF, "
+                                    "e.g. docs/heuristic.gif")
     p.add_argument("--max-steps", type=int, default=None,
                    help="stop after this many ticks (a full heuristic game is ~1250, 5 min)")
     p.add_argument("--scale", type=float, default=1.0, help="GIF frame scale")
@@ -248,8 +274,10 @@ def main():
                         "(scripts/netviz.py)")
     p.add_argument("--sim-only", action="store_true",
                    help="with --viz, planner only: no game process, the sim at the game's speed")
+    p.add_argument("--lang", choices=("en", "ru", "uk"), default="en",
+                   help="with --viz: the language of the panels and the status line")
     args = p.parse_args()
-    if args.viz and args.agent == "heuristic":
+    if args.viz and args.agent in ("heuristic", "random"):
         sys.exit("--viz needs a network: --agent dqn or planner")
     if args.sim_only and not (args.viz and args.agent == "planner"):
         sys.exit("--sim-only needs --viz and --agent planner")
@@ -261,6 +289,8 @@ def main():
     env = PacmanEnv(display=args.display, fast=False,
                     config={"max_episode_steps": None, **agent.env_overrides})
     frames, durations = [], []
+    mp4 = bool(args.record) and args.record.lower().endswith(".mp4")
+    writer, prev_img = None, None
     try:
         obs, info = env.reset(seed=args.seed, options=(
             {"start_level": args.level} if args.level else None))
@@ -274,13 +304,23 @@ def main():
             if window:
                 # the game drew this tick before sending the state we just got
                 img = grab(args.display, window)
-                if args.scale != 1.0:
+                now = time.perf_counter()
+                if mp4:
+                    # frame i is shown until frame i+1 was grabbed
+                    if prev_img is not None:
+                        if writer is None:
+                            os.makedirs(os.path.dirname(os.path.abspath(args.record)),
+                                        exist_ok=True)
+                            writer = Mp4Writer(args.record, prev_img.size, upscale=True)
+                        writer.add(np.asarray(prev_img.convert("RGB")), now - t_prev)
+                    prev_img, t_prev = img, now
+                elif args.scale != 1.0:
                     img = img.resize((round(img.width * args.scale), round(img.height * args.scale)),
                                      Image.NEAREST)
-                frames.append(img.quantize(colors=64, method=Image.Quantize.FASTOCTREE))
-                now = time.perf_counter()
-                durations.append(now - t_prev)
-                t_prev = now
+                if not mp4:
+                    frames.append(img.quantize(colors=64, method=Image.Quantize.FASTOCTREE))
+                    durations.append(now - t_prev)
+                    t_prev = now
             try:
                 obs, r, term, trunc, info = env.step(agent.act(obs))
             except RuntimeError:
@@ -296,6 +336,11 @@ def main():
               f"lives {info['lives']}{' (game over)' if term else ''}")
     finally:
         env.close()
+        if writer is not None:
+            writer.add(np.asarray(prev_img.convert("RGB")), 1.0)
+            writer.close()
+            print(f"wrote {args.record}: {writer.n} ticks, {writer.shown} frames at "
+                  f"{writer.fps} fps, {os.path.getsize(args.record) / 1e6:.1f} MB")
 
     if args.record and frames:
         # frame i is shown until frame i+1 was grabbed; GIF delays are in 10 ms units
@@ -340,7 +385,7 @@ def play_viz(args, agent):
             box = window_box(xserver.name, find_window(xserver.name))
         os.environ["DISPLAY"] = args.display   # our window on the user's screen
         viz = Viz(net, device, agent.env_overrides.get("obs"),
-                  caption="viz_caption_sim" if args.sim_only else GAME_CAPTION)
+                  caption="viz_caption_sim" if args.sim_only else GAME_CAPTION, lang=args.lang)
         signal.signal(signal.SIGINT, lambda *_: stop.append(True))   # after SDL's init
         t_prev, prev_img = time.perf_counter(), None
         t_obs = time.perf_counter()
@@ -352,7 +397,8 @@ def play_viz(args, agent):
             t1 = time.perf_counter()
             viz.update(obs, a, getattr(agent, "last_trace", None),
                        status_line(steps, info["level"], viz.maze_of(obs["grid"]), info["lives"],
-                                   deaths, info["score"], t1 - t0, t_viz[-1] if t_viz else None),
+                                   deaths, info["score"], t1 - t0, t_viz[-1] if t_viz else None,
+                                   lang=args.lang),
                        game=game_img)
             t_dec.append(t1 - t0)
             t_viz.append(time.perf_counter() - t1)

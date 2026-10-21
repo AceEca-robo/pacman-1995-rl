@@ -111,7 +111,9 @@ The dependency versions in `pyproject.toml` are the tested ones; torch was
 installed as the CUDA 13.0 build (`2.14.1+cu130`) from the PyTorch index.
 
 ```bash
-# watch an agent in the game window (real time), optionally record a GIF
+# watch an agent in the game window (real time), optionally record a GIF or
+# a 1920x1080 mp4 (--agent random: the baseline; --viz --lang ru: the network
+# view in Russian)
 .venv/bin/python scripts/play.py --agent heuristic --seed 0 --display :0
 .venv/bin/python scripts/play.py --agent dqn --checkpoint runs/dqn1s1/best_food.pt \
     --display :0 --record docs/agent.gif --max-steps 400

@@ -1509,3 +1509,22 @@ to ffmpeg by a thread), same setup, 1000 ticks:
 | H40/K32 (200 ticks) | mp4 | 1.0% / 1.0% (100) | 100% / 100% (100) | 195 / 226 ms |
 
 Frame: docs/viz_frame.png (H40/K32, level 9, tick 130, from a --record mp4).
+
+## Planner without the network (2026-10-21)
+
+configs/plan_random_policy.yaml: the default honest planner (H = 40, K = 32,
+threshold 0.5, loop breaker) with best_v04 taken out: the rollouts play
+uniform random actions and the candidate directions come in a random order,
+so only the rollouts' death shares choose the move. 16 mazes x 10 games
+(seeds 0..9, `plan_eval.py --maze-only`), stopped at the clear, cut at
+10,000 steps; runs/plan_random/maze.json.
+
+| agent | games | mazes cleared | food per game (of 172): mean / median / max | length: mean / median / max | deaths per game |
+|---|---|---|---|---|---|
+| planner, random rollout policy | 160 | 0% (every maze 0%) | 21.2 / 16 / 91 | 549 / 370 / 2239 | 3.0 (all game over) |
+
+For reference (other tables): best_v04 alone 79.7% of the mazes (20 games
+per maze, "Rollout planner in sim/"), best_v04 + this planner 100% (320
+games, "Planner grid, H = 40"); random actions without a planner last 129
+ticks (Baseline results). The planner keeps a random walker alive about 4x
+longer, but without the network nothing leads it to the food.

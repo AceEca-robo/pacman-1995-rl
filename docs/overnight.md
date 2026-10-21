@@ -2960,3 +2960,73 @@ launcher does not check free disk space before the download.
   shows all 50 in order. The same taps without the latch: 4 and 11 of 50
   reached the game (two runs). The press itself still goes out at once,
   the latency measured earlier is unchanged.
+
+## 2026-10-21 (night): materials for the video (no training)
+
+- The Russian script (9 scenes, 15:00) as given, in docs/video_script.md.
+  The script, the materials (stage recordings, tables, cards, scene 2
+  shots, the voice-over) and their generators are kept locally, not in
+  the repository (docs/video_script.md and video/ are ignored).
+- Checkpoints into video/checkpoints/: dqn0 from the archive disk,
+  dqn10_9M from the archive (identical to the v0.2 release file), dqn8 from
+  the v0.1 release, best_v03 (= dqfd1@110M) and best_v04 from runs/. **The
+  archive disk's pacman-rl-archive directory has a corrupt NTFS index**
+  (ntfs-3g: "Corrupt index block signature: vcn 1 inode 217"): listing it
+  fails with an I/O error, names up to dqn6 still open by path, the rest
+  (dqn7..., dqfd*, mm*, best_*) do not. mm1 exists nowhere else (not in a
+  release, not in runs/), so its stage was recorded with dqn10 on level 2
+  instead (the net trained on maze 1 that freezes on maze 2, which is what
+  the voice-over describes). Nothing was written to the disk.
+- scripts/play.py: --agent random (seeded uniform actions); --record .mp4
+  without --viz (the game window scaled to 1080 px high, nearest neighbour,
+  real tick durations); --lang for the network view. scripts/netviz.py:
+  for a network without the cell-safety plane panel 1 now says so instead
+  of showing an empty "input".
+- Seeds picked by replaying greedy games headless (the real-time games then
+  matched them tick for tick): dqn0 seed 1 (stands at a wall at ticks
+  317-336, dies standing), dqn8 seed 5 (clears level 1 at tick 565 without
+  a death), dqn10 level 2 seed 5 (stands 66 ticks, dies standing), best_v03
+  seed 0 (squeezed at ticks 19 and 265), heuristic seed 9 (clears level 1
+  at 584, no death). The planner stage (K = 32 with the view) stretches the
+  super ticks to ~195 ms (as measured on 2026-10-17).
+- Scene 3 rehearsal: best_v04 on maze 9, 20 games, seeds 0..19: 45%, the
+  same as the greedy row for level 9 in "Rollout planner in sim/" (there
+  played in the sim). evaluate.py --levels with --episodes 0 crashes after
+  the games (ValueError on an empty array in levels_suite); not fixed.
+- Voice-over: edge-tts ru-RU-DmitryNeural, 434 s for the 900 s of the
+  script; every scene is shorter than its slot (scenes 5 and 7 fill 44% and
+  41% of theirs).
+  The service now and then answers "No audio was received" (once for
+  minutes on end); the voice-over script retries and keeps what it has.
+
+## 2026-10-21 (late night): video fact-check edits, the planner without the network
+
+- The video script edited after the fact-check: scene 2 "about eighty
+  lines in the game and a small bridge module" (79 lines in the original
+  files + rlbridge.cc/h), scene 4 "in three hours sixteen hundred" (dqn1
+  median 1605 at ~2.7 h of training), scene 5 "on average 78%", scene 6
+  "train longer" as the third attempt (dqfd2 carried on to 290M: 75.0%;
+  the video table now shows it instead of dqfd4@246M), scene 8 with the
+  measured number below. Voice re-recorded for scenes 1, 2, 4, 5, 6, 8, 9.
+- **Planner without the network** (configs/plan_random_policy.yaml,
+  plan.policy: random in scripts/plan_eval.py): H40/K32 honest, rollouts
+  with uniform random actions, random candidate order. 16 mazes x 10
+  games: **0 of 160 cleared**, 21 of 172 food per game, all game over after
+  549 steps on average (results.md "Planner without the network"). 9 s.
+- Scene 1 search (configs/plan_search_clean.yaml; plan_eval
+  eval.stop_at_death / stop_at_level): 240 games of the default planner
+  from level 1, each ended at its first death or at level 17. Stopped
+  after 16 minutes: 6 s per lock-step for 240 games (~40 decisions/s), a
+  16-level game is ~12k steps, so several hours with no guaranteed hit,
+  then ~1 h of real-time recording, and play.py's one-game decisions may
+  differ from the batched ones in float rounding. Scene 1 now says "more
+  than ten levels in a row" (honest K8 from level 1: max 14 in 20 games;
+  H60/K16: max 17 in 10) and shows stage_best_v04.mp4. "Tens of levels"
+  was not used: no honest run reached 20.
+- Pronunciation checked by transcribing the mp3s with faster-whisper
+  (medium, CPU): "ди-кью-эф-ди" comes back as "DQFD"; "Тронэс" came back
+  as "Транес" (stress on the second syllable). The voice-over script now
+  sends stress marks (U+0301) for the name: "Тронес" in both scenes.
+- GitHub description updated (it still said "a DQN clears level 1 in 85%
+  of games"); no version in it: there is no v0.5 (pyproject 0.4.0, latest
+  release v0.4). video/shot_github.png retaken.

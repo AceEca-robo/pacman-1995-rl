@@ -82,3 +82,41 @@ def test_plan_eval_jsonl_maze_only(tmp_path):
                         str(tmp_path / "out.jsonl")], capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stderr[-3000:]
     assert '"games_played": 4' in r.stdout
+
+
+def _run(tmp_path, cfg, *args):
+    conf = tmp_path / "plan.yaml"
+    conf.write_text(yaml.safe_dump(cfg))
+    out = tmp_path / "out.json"
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "plan_eval.py"),
+                        "--config", str(conf), "--out", str(out), *args],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stderr[-3000:]
+    return json.loads(out.read_text())
+
+
+def test_random_policy_planner(tmp_path):
+    """configs/plan_random_policy.yaml: no network is loaded (the checkpoint
+    may be missing), the games still replay in the real game."""
+    with open(os.path.join(ROOT, "configs", "plan_random_policy.yaml")) as f:
+        cfg = yaml.safe_load(f)
+    cfg["checkpoint"] = "runs/does_not_exist.pt"
+    cfg["plan"].update(horizon=6, rollouts=4)
+    cfg["eval"].update(level_episodes=2, max_steps=60)
+    cfg["run"].update(workers=1, games_per_worker=2)
+    res = _run(tmp_path, cfg, "--levels", "3", "--maze-only", "--replay-check", "2")
+    assert len(res["games"]) == 2 and res["replay_check"]["diverged"] == 0
+    assert res["second_round"] > 0   # the random first candidate gets dropped now and then
+
+
+@pytest.mark.skipif(not os.path.exists(V04), reason="runs/best_v04/best.pt not present")
+def test_stop_at_death_and_level(tmp_path):
+    with open(os.path.join(ROOT, "configs", "plan_search_clean.yaml")) as f:
+        cfg = yaml.safe_load(f)
+    cfg["plan"].update(horizon=6, rollouts=2)
+    cfg["eval"].update(episodes=3, max_steps=300, stop_at_level=2)
+    cfg["run"].update(workers=1, games_per_worker=3, device="cpu")
+    res = _run(tmp_path, cfg, "--levels", "1")
+    for g in res["games"]:
+        assert g["deaths"] <= 1 and g["level"] <= 2
+        assert g["deaths"] == 1 or g["level"] == 2 or g["length"] == 300

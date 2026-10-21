@@ -1,0 +1,30 @@
+# scripts/plan_eval.py: search for a game of the default honest planner
+# (configs/plan_honest_lb.yaml: H = 40, K = 32, threshold 0.5, loop
+# breaker) from level 1 that clears 16 levels without losing a life. Each
+# game ends at its first death or on reaching level 17; for the video
+# (the video's opening scene). Use --levels 1 --episodes N.
+checkpoint: runs/best_v04/best.pt
+
+plan:
+  horizon: 40
+  rollouts: 32
+  epsilon: 0.1
+  ghost_rng: reseed
+  death_threshold: 0.5
+  loop_breaker:
+    stall_steps: 400
+    active_steps: 40
+    penalty: 10.0
+
+eval:
+  seed: 0
+  episodes: 240
+  level_episodes: 0
+  max_steps: null
+  stop_at_death: true
+  stop_at_level: 17
+
+run:
+  workers: 6
+  games_per_worker: 40
+  device: cuda

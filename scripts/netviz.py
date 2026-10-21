@@ -255,12 +255,14 @@ class Viz:
         sf = self.maze_rgb(grid, 0.6)
         sf[safe > 0] = GREEN
         sf[grid[CH["pacman"]] > 0] = ACCENT
-        tiles.append((self.tr("viz_safety"), sf))
+        # networks before dqfd2 do not get the plane: say so, not an empty "input"
+        none = self.safety_ch is None
+        tiles.append((self.tr("viz_safety_none" if none else "viz_safety"), sf))
         ex = self.safe_exits(grid)
         se = self.maze_rgb(grid, 0.6)
         se[ex > 0] = self.vir[(ex[ex > 0] * 255).astype(int)]
         se[(grid[CH["pacman"]] > 0) & (ex == 0)] = ACCENT
-        tiles.append((self.tr("viz_exits"), se))
+        tiles.append((self.tr("viz_exits_none" if none else "viz_exits"), se))
         for i, (name, img) in enumerate(tiles):
             tx, ty = x0 + 10 + (i % 2) * (tw + 10), y0 + 36 + (i // 2) * (th + 2)
             cs = min(tw / WIDTH, (th - 18) / HEIGHT)

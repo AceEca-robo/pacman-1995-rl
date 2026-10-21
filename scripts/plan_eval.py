@@ -27,6 +27,13 @@ Protocol as scripts/evaluate.py --levels --stop-at-clear (see the config).
 games from level 1). Every finished game is appended to <out>.jsonl as it
 ends, with a progress line; --summarize <jsonl> summarizes such a file (a
 stopped run included).
+
+plan.policy: random (configs/plan_random_policy.yaml) takes the network
+out: the rollouts play uniform random actions and the candidate order is
+random (a fresh uniform "Q" per decision), so only the death shares of the
+rollouts choose the move — the planner without the network.
+eval.stop_at_death / eval.stop_at_level end a game at its first lost life /
+on reaching that level (a search for a game without deaths).
 """
 
 import argparse
@@ -50,6 +57,23 @@ N_ACTION = 4    # env action "N"
 def load_cfg(path):
     with open(path) as f:
         return yaml.safe_load(f)
+
+
+class RandomPolicy:
+    """Stands in for QNet with plan.policy: random: uniform "Q" values, so
+    the rollout policy plays uniform random actions and the candidates come
+    in a random order. Needs no observation."""
+    random = True
+    cell_safety = False
+    env_overrides = {}
+
+    def __init__(self, seed):
+        self.rng = np.random.default_rng(seed)
+        self.forwards = 0
+
+    def q(self, n):
+        self.forwards += 1
+        return self.rng.random((n, 5))
 
 
 class QNet:
@@ -141,8 +165,11 @@ class Planner:
             if not len(idx):
                 break
             sub = buf[idx]
-            grid, vec = batch_obs(self.net, sub)
-            a = self.net(grid, vec).argmax(1).astype(np.int32)
+            if getattr(self.net, "random", False):
+                a = self.net.q(len(sub)).argmax(1).astype(np.int32)
+            else:
+                grid, vec = batch_obs(self.net, sub)
+                a = self.net(grid, vec).argmax(1).astype(np.int32)
             noisy = u[idx, t] < self.eps
             a[noisy] = ra[idx, t][noisy]
             batch_advance(sub, a)
@@ -284,8 +311,13 @@ def play_games(tasks, cfg, mode, device, worker=0, sink=None):
     """Play the (level, seed, stop_at_clear) tasks in lock-step batches;
     sink(game) is called for every game as it ends."""
     from sim.csim import SIZE, CSim
-    net = QNet(os.path.join(ROOT, cfg["checkpoint"]), device)
+    if cfg["plan"].get("policy", "net") == "random":
+        net = RandomPolicy([int(cfg["eval"]["seed"]), worker])
+    else:
+        net = QNet(os.path.join(ROOT, cfg["checkpoint"]), device)
     planner = Planner(net, cfg)
+    stop_death = bool(cfg["eval"].get("stop_at_death"))
+    stop_level = cfg["eval"].get("stop_at_level")
     G = int(cfg["run"]["games_per_worker"])
     max_steps = cfg["eval"]["max_steps"]
     max_steps = float("inf") if max_steps is None else int(max_steps)
@@ -305,8 +337,11 @@ def play_games(tasks, cfg, mode, device, worker=0, sink=None):
                           "all_dropped": 0, "breaker": 0, "stall": Stall(cfg)})
             rows = np.concatenate([rows, sim.buf[None]])
         info = batch_info(rows)
-        grid, vec = batch_obs(net, rows)
-        q = net(grid, vec)
+        if getattr(net, "random", False):
+            q = net.q(len(rows))
+        else:
+            grid, vec = batch_obs(net, rows)
+            q = net(grid, vec)
         greedy = q.argmax(1).astype(np.int32)
         if mode == "plan":
             seeds = [[g["seed"], g["start_level"], g["length"]] for g in games]
@@ -339,7 +374,8 @@ def play_games(tasks, cfg, mode, device, worker=0, sink=None):
             g["lives"], g["eats"] = lives, eats
             g["level"] = max(g["level"], level)
             g["score"] = int(info[i, 3])
-            end = lives == 0 or g["length"] >= max_steps or (g["stop"] and g["level"] > g["start_level"])
+            end = lives == 0 or g["length"] >= max_steps or (g["stop"] and g["level"] > g["start_level"]) \
+                or (stop_death and g["deaths"] > 0) or (stop_level and g["level"] >= stop_level)
             if end:
                 g["truncated"] = bool(lives > 0 and g["length"] >= max_steps
                                       and not (g["stop"] and g["level"] > g["start_level"]))

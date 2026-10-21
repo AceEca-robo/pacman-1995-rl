@@ -14,3 +14,8 @@ sim/_csim*.so*
 
 # videos written by play.py --record
 *.mp4
+
+# materials for the video (docs/video_script.md)
+video/
+# the video script stays local (its materials and generators are in video/)
+docs/video_script.md

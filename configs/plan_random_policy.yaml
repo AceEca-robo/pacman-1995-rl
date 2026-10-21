@@ -1,0 +1,30 @@
+# scripts/plan_eval.py: the planner without the network. Same planner as
+# configs/plan_honest_lb.yaml (H = 40, K = 32, honest ghosts, threshold 0.5,
+# loop breaker), but the rollouts play uniform random actions instead of
+# best_v04 and the candidate directions come in a random order: a move is
+# chosen by the rollouts' death shares alone. Games cut at 10000 steps (a
+# policy that does not go for food can survive without end).
+checkpoint: runs/best_v04/best.pt   # not loaded with policy: random
+
+plan:
+  policy: random
+  horizon: 40
+  rollouts: 32
+  epsilon: 0.1          # no effect: the rollout policy is random anyway
+  ghost_rng: reseed
+  death_threshold: 0.5
+  loop_breaker:
+    stall_steps: 400
+    active_steps: 40
+    penalty: 10.0
+
+eval:
+  seed: 0
+  episodes: 10
+  level_episodes: 10
+  max_steps: 10000
+
+run:
+  workers: 12
+  games_per_worker: 14
+  device: cpu
