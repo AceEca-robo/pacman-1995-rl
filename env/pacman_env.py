@@ -327,12 +327,16 @@ def _stop_game(res):
 class PacmanEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, config=None, seed=0, display=None, render_mode=None, fast=True):
+    def __init__(self, config=None, seed=0, display=None, render_mode=None, fast=True,
+                 watch=False):
         """config: path to yaml, dict of overrides or None (configs/env_default.yaml).
         seed: --seed of the first game process (reset(seed=...) overrides it).
         display: X display to show the game on; None runs it --headless.
         fast: run the game with --fast (no sleeping); False plays in real time
-        (0.25 s per tick, half that while pacman is super), for watching."""
+        (0.25 s per tick, half that while pacman is super), for watching.
+        watch: the game runs with --rl-watch (needs display, not fast): a
+        person plays with the keyboard, reset() and then observe() read the
+        states it sends; step() is not used."""
         self.cfg = _load_config(config)
         self.render_mode = render_mode
         n_actions = self.cfg.get("actions", 5)
@@ -400,6 +404,7 @@ class PacmanEnv(gym.Env):
         self._finalizer = weakref.finalize(self, _stop_game, self._res)
         self._display = display
         self._fast = fast
+        self._watch = watch
         self._binary = os.path.join(ROOT, self.cfg["game"]["binary"])
         self._state = None   # last state received
         self._steps = 0
@@ -423,6 +428,8 @@ class PacmanEnv(gym.Env):
                 cmd.append("--fast")
             if not self.cfg.get("ghosts", True):
                 cmd.append("--no-ghosts")
+            if self._watch:
+                cmd.append("--rl-watch")
             if level != 1:
                 cmd += ["--level", str(level)]
             env = dict(os.environ)
@@ -586,6 +593,16 @@ class PacmanEnv(gym.Env):
         info["endgame_bonus"] = endgame
         info["hunger"] = hunger
         return self._obs(st), float(reward), terminated, truncated, info
+
+    def observe(self):
+        """watch=True: the next state the game sends (one per tick, the move
+        taken from the keyboard) as (obs, info), like step() without a reward."""
+        prev, st = self._state, self._recv()
+        self._state = st
+        self._steps += 1
+        ev = self._events(prev, st)
+        self._hungry = 0 if ev["eaten_dot"] or ev["eaten_energizer"] else self._hungry + 1
+        return self._obs(st), self._info(st)
 
     def close(self):
         self._finalizer()

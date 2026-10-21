@@ -35,13 +35,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from env.pacman_env import (CH, HEIGHT, WIDTH, _passable_neighbours, maze_layouts,  # noqa: E402
                              safe_exits_field)
+from launcher.i18n import t as _t  # noqa: E402
 
 W, H = 1920, 1080
 GAP = 8
 TOP = 600            # height of the row with panels 1-4 and the game
 SIDE = 594           # width of the left (1-2) and right (3-4) columns: the game
                      # window (678 px with its X border) fits the centre 1:1
-GAME_CAPTION = "pacman 1.0 (1995) \u2014 played by the network"
+GAME_CAPTION = "viz_caption_net"   # launcher/i18n.py key, or the caption itself
 BG = (14, 16, 22)
 PANEL = (24, 27, 36)
 FG = (225, 228, 235)
@@ -97,35 +98,50 @@ class NetProbe:
         finally:
             self.on = False
         A = self.heads["A"][0].detach()
-        return {"q": q[0].detach().cpu().numpy(), "V": float(self.heads["V"][0, 0].detach()),
+        return {"layers": self.layer_names,
+                "q": q[0].detach().cpu().numpy(), "V": float(self.heads["V"][0, 0].detach()),
                 "A": (A - A.mean()).cpu().numpy(), "action": a,
                 "saliency": g.grad[0].abs().sum(0).cpu().numpy(),
                 "acts": {k: x[0].detach().cpu().numpy() for k, x in self.acts.items()}}
 
 
 class Viz:
-    def __init__(self, net, device, obs_cfg=None, headless=False, caption=GAME_CAPTION):
-        os.environ.setdefault("SDL_VIDEO_CENTERED", "1")
-        if headless:
-            os.environ["SDL_VIDEODRIVER"] = "dummy"
+    """screen: draw on this 1920x1080 surface (the app's window) instead of
+    opening a window; net None: no probe of its own (draw() gets the probe's
+    result). lang: the language of the labels (launcher/i18n.py)."""
+
+    def __init__(self, net, device, obs_cfg=None, headless=False, caption=GAME_CAPTION,
+                 screen=None, lang="en"):
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
         import pygame
         self.pg = pygame
-        pygame.init()
-        self.screen = pygame.display.set_mode((W, H))
-        pygame.display.set_caption("pacman: network view")
+        if screen is None:
+            os.environ.setdefault("SDL_VIDEO_CENTERED", "1")
+            if headless:
+                os.environ["SDL_VIDEODRIVER"] = "dummy"
+            pygame.init()
+            screen = pygame.display.set_mode((W, H))
+            pygame.display.set_caption("pacman: network view")
+        self.screen = screen
         self.font = {s: pygame.font.Font(None, s) for s in (18, 22, 26, 30, 36)}
-        self.caption = caption
-        self.probe = NetProbe(net, device)
+        self.caption, self.lang = caption, lang
+        self.probe = NetProbe(net, device) if net is not None else None
         self.heat, self.vir = lut("inferno"), lut("viridis")
         self.nbrs = {}
         # wall masks of the 16 mazes: above level 16 the game draws them at random
         self.maze_walls = np.array([[[c == "#" for c in row] for row in m] for m in maze_layouts()])
         self.closed = False
+        self.configure(obs_cfg)
+
+    def configure(self, obs_cfg):
+        """The env's obs config the network was trained with."""
         obs_cfg = obs_cfg or {}
         # the cell-safety plane comes after CHANNELS and the food distance plane
         self.safety_ch = (CH["bonus"] + 1 + bool(obs_cfg.get("food_distance"))
                           if obs_cfg.get("cell_safety") else None)
+
+    def tr(self, key, **kw):
+        return _t(self.lang, key, **kw)
 
     def safety(self, grid):
         if self.safety_ch is None:
@@ -222,29 +238,29 @@ class Viz:
 
     def draw_inputs(self, grid, rect):
         x0, y0, w, h = rect
-        self.panel(rect, "1  INPUT")
+        self.panel(rect, self.tr("viz_input"))
         tw, th = (w - 30) // 2, (h - 40) // 2
         tiles = []
         wf = self.maze_rgb(grid)
         wf[grid[CH["food"]] > 0] = (230, 210, 170)
         wf[grid[CH["superfood"]] > 0] = (255, 255, 255)
         wf[grid[CH["pacman"]] > 0] = ACCENT
-        tiles.append(("walls + food", wf))
+        tiles.append((self.tr("viz_walls"), wf))
         gh = self.maze_rgb(grid, 0.6)
         for st in ("normal", "hunted", "eyes"):
             gh[grid[CH["ghost_" + st]] > 0] = GHOST_COLORS[st]
         gh[grid[CH["pacman"]] > 0] = ACCENT
-        tiles.append(("ghosts: normal / hunted / eyes", gh))
+        tiles.append((self.tr("viz_ghosts"), gh))
         safe = self.safety(grid)
         sf = self.maze_rgb(grid, 0.6)
         sf[safe > 0] = GREEN
         sf[grid[CH["pacman"]] > 0] = ACCENT
-        tiles.append(("cell safety (input)", sf))
+        tiles.append((self.tr("viz_safety"), sf))
         ex = self.safe_exits(grid)
         se = self.maze_rgb(grid, 0.6)
         se[ex > 0] = self.vir[(ex[ex > 0] * 255).astype(int)]
         se[(grid[CH["pacman"]] > 0) & (ex == 0)] = ACCENT
-        tiles.append(("safe exits (derived)", se))
+        tiles.append((self.tr("viz_exits"), se))
         for i, (name, img) in enumerate(tiles):
             tx, ty = x0 + 10 + (i % 2) * (tw + 10), y0 + 36 + (i // 2) * (th + 2)
             cs = min(tw / WIDTH, (th - 18) / HEIGHT)
@@ -252,12 +268,11 @@ class Viz:
             self.text(name, (tx, ty), 18, DIM)
             self.blit_array(img, (tx, ty + 17), (int(cs * WIDTH), int(cs * HEIGHT)))
 
-    def draw_acts(self, acts, rect):
+    def draw_acts(self, acts, layers, rect):
         x0, y0, w, h = rect
-        self.panel(rect, "2  ACTIVATIONS (top 16 maps per conv layer)")
-        rows = len(self.probe.layer_names)
-        rh = (h - 40) // rows
-        for r, name in enumerate(self.probe.layer_names):
+        self.panel(rect, self.tr("viz_acts"))
+        rh = (h - 40) // len(layers)
+        for r, name in enumerate(layers):
             a = acts[name]
             top = np.argsort(-a.mean((1, 2)))[:16]
             ty = y0 + 36 + r * rh
@@ -271,13 +286,15 @@ class Viz:
                                 (tw, th))
 
     def draw_saliency(self, grid, sal, action, rect):
-        self.panel(rect, f"3  SALIENCY  |dQ({DIR_NAMES[action]})/d input|")
+        self.panel(rect, self.tr("viz_saliency", a=DIR_NAMES[action]))
         s = sal / (np.percentile(sal, 99.5) + 1e-9)
         self.draw_maze(grid, (rect[0] + 10, rect[1] + 36, rect[2] - 20, rect[3] - 44), 0.7, s)
 
-    def draw_q(self, pr, played, rect):
+    def draw_q(self, pr, played, rect, human=None):
+        """human: the direction the person is going (the network only
+        watches): the bars then show what the network would play."""
         x0, y0, w, h = rect
-        self.panel(rect, "4  OUTPUT  Q per action")
+        self.panel(rect, self.tr("viz_output" if human is None else "viz_output_human"))
         q, A = pr["q"], pr["A"]
         greedy = int(np.argmax(q))
         lo, hi = min(q.min(), 0), max(q.max(), 0)
@@ -295,10 +312,12 @@ class Viz:
                       FG if i == played else DIM, "midbottom")
             self.arrow(i, (x + bw / 2, bot + 18), 24, FG if i == played else DIM)
             if i == greedy:
-                self.text("greedy", (x + bw / 2, bot + 32), 18, ACCENT, "midtop")
+                self.text(self.tr("viz_greedy"), (x + bw / 2, bot + 32), 18, ACCENT, "midtop")
+            if i == human:
+                self.text(self.tr("viz_you"), (x + bw / 2, bot + 50), 18, FG, "midtop")
         self.pg.draw.line(self.screen, DIM, (bx - 6, zero), (bx + 5 * (bw + gap) - gap + 6, zero), 1)
         vx = bx + 5 * (bw + gap) + 10
-        self.text("dueling heads", (vx, top - 20), 20, DIM)
+        self.text(self.tr("viz_dueling"), (vx, top - 20), 20, DIM)
         self.text(f"V = {pr['V']:.1f}", (vx, top + 4), 30, FG)
         for i in range(5):
             self.text(f"A {DIR_NAMES[i]}  {A[i]:+.2f}", (vx, top + 40 + i * 26), 22,
@@ -308,11 +327,11 @@ class Viz:
     def draw_planner(self, grid, tr, played, rect):
         x0, y0, w, h = rect
         if tr is None:
-            self.panel(rect, "5  PLANNER  (off: --agent dqn)")
+            self.panel(rect, self.tr("viz_planner_off"))
             self.draw_maze(grid, (x0 + 10, y0 + 36, w - 20, h - 44), 0.8)
             return
         K, Hh = tr["cells"].shape[1], tr["cells"].shape[2]
-        self.panel(rect, f"5  PLANNER  K={K} rollouts x H={Hh} steps per direction")
+        self.panel(rect, self.tr("viz_planner", k=K, h=Hh))
         lw = 210
         # the maze as large as the height allows, the legend right of it
         mh = h - 44
@@ -350,8 +369,8 @@ class Viz:
             pg.draw.circle(self.screen, BG, pt(start), cs * 0.5, 2)
         # legend: direction, death share, dropped
         lx, ly = mx + mw + 30, y0 + 50
-        self.text("death share", (lx, ly), 20, DIM)
-        self.text(f"drop if > {tr['threshold']:.2f}", (lx, ly + 19), 15, FAINT)
+        self.text(self.tr("viz_death_share"), (lx, ly), 20, DIM)
+        self.text(self.tr("viz_drop", t=f"{tr['threshold']:.2f}"), (lx, ly + 19), 15, FAINT)
         row = 72
         for r in range(4):
             a = int(tr["act"][r])
@@ -369,8 +388,8 @@ class Viz:
             if a == played:
                 pg.draw.rect(self.screen, GREEN, (lx, yy - 6, lw, row - 8), 3, border_radius=6)
             elif not tr["needed"][r]:
-                self.text("shown only", (lx + 10, yy + 45), 15, FAINT)
-        self.text("red: lost a life", (lx, ly + 44 + 4 * row), 18, RED)
+                self.text(self.tr("viz_shown_only"), (lx + 10, yy + 45), 15, FAINT)
+        self.text(self.tr("viz_red_lost"), (lx, ly + 44 + 4 * row), 18, RED)
 
     def _line(self, pts, col, cs, ox, oy):
         if len(pts) >= 2:
@@ -381,7 +400,7 @@ class Viz:
         """The game in rect: img (h, w, 3) the captured game window, shown 1:1
         if it fits (else scaled down), or None: the sim's maze."""
         x0, y0, w, h = rect
-        self.panel(rect, self.caption)
+        self.panel(rect, self.tr(self.caption) if self.caption.startswith("viz_") else self.caption)
         if img is None:
             self.draw_maze(grid, (x0 + 10, y0 + 40, w - 20, h - 50))
             return
@@ -392,9 +411,11 @@ class Viz:
             surf = self.pg.transform.smoothscale(surf, size)
         self.screen.blit(surf, (x0 + (w - size[0]) // 2, y0 + 40 + (h - 50 - size[1]) // 2))
 
-    def draw_status(self, s):
+    def draw_status(self, s, right=""):
         y = H - 40
         self.pg.draw.rect(self.screen, PANEL, (0, y, W, 40))
+        if right:
+            self.text(right, (W - 14, y + 20), 24, DIM, "midright")
         # the default font has no arrow glyphs: draw them
         x = 14
         for i, part in enumerate(s.split("\u2192")):
@@ -405,26 +426,45 @@ class Viz:
 
     # --- frame ------------------------------------------------------------------
 
+    # the layout: left column (panels 1, 2), the game, right column (3, 4),
+    # the bottom row (5) and the status line
+    LEFT_TOP = (GAP, GAP, SIDE, (TOP - GAP) // 2)
+    LEFT_BOTTOM = (GAP, 2 * GAP + (TOP - GAP) // 2, SIDE, TOP - (TOP - GAP) // 2 - GAP)
+    CENTRE = (2 * GAP + SIDE, GAP, W - 4 * GAP - 2 * SIDE, TOP)
+    RIGHT_TOP = (W - GAP - SIDE, GAP, SIDE, (TOP - GAP) // 2)
+    RIGHT_BOTTOM = (W - GAP - SIDE, 2 * GAP + (TOP - GAP) // 2, SIDE,
+                    TOP - (TOP - GAP) // 2 - GAP)
+    BOTTOM = (GAP, TOP + 2 * GAP, W - 2 * GAP, H - 40 - TOP - 3 * GAP)
+
+    def draw(self, obs, pr, played, trace=None, status="", game=None, human=None, bottom=None,
+             keys=""):
+        """Draw one tick without flipping: obs the decision's observation, pr
+        the NetProbe's result for it, played the action, trace the planner's
+        stats["trace"] for this game (or None), game the captured game window
+        (h, w, 3) or None (drawn from obs); human: see draw_q; bottom: a
+        function of a rect drawing the bottom row instead of the planner;
+        keys: the key help right in the status line."""
+        grid = obs["grid"]
+        self.screen.fill(BG)
+        self.draw_status(status, keys)
+        self.draw_inputs(grid, self.LEFT_TOP)
+        self.draw_acts(pr["acts"], pr["layers"], self.LEFT_BOTTOM)
+        self.draw_game(grid, game, self.CENTRE)
+        self.draw_saliency(grid, pr["saliency"], pr["action"], self.RIGHT_TOP)
+        self.draw_q(pr, played, self.RIGHT_BOTTOM, human)
+        if bottom is not None:
+            bottom(self.BOTTOM)
+        else:
+            self.draw_planner(grid, trace, played, self.BOTTOM)
+
     def update(self, obs, played, trace=None, status="", game=None):
-        """Draw one tick: obs the decision's observation, played the action,
-        trace the planner's stats["trace"] for this game (or None), game the
-        captured game window (h, w, 3) or None (drawn from obs)."""
+        """Draw one tick in the window of its own (play.py --viz) and flip."""
         pg = self.pg
         for e in pg.event.get():
             if e.type == pg.QUIT:
                 self.closed = True
-        grid, vec = obs["grid"], obs["vec"]
-        pr = self.probe(grid, vec, played)
-        self.screen.fill(BG)
-        self.draw_status(status)
-        g, half = GAP, (TOP - GAP) // 2
-        rx = W - g - SIDE
-        self.draw_inputs(grid, (g, g, SIDE, half))
-        self.draw_acts(pr["acts"], (g, g + half + g, SIDE, TOP - half - g))
-        self.draw_game(grid, game, (2 * g + SIDE, g, rx - 3 * g - SIDE, TOP))
-        self.draw_saliency(grid, pr["saliency"], played, (rx, g, SIDE, half))
-        self.draw_q(pr, played, (rx, g + half + g, SIDE, TOP - half - g))
-        self.draw_planner(grid, trace, played, (g, TOP + 2 * g, W - 2 * g, H - 40 - TOP - 3 * g))
+        pr = self.probe(obs["grid"], obs["vec"], played)
+        self.draw(obs, pr, played, trace, status, game)
         pg.display.flip()
         return pr
 
@@ -436,11 +476,15 @@ class Viz:
         self.pg.image.save(self.screen, path)
 
 
-def status_line(tick, level, maze, lives, deaths, score, t_decision, t_viz=None):
-    s = f"tick {tick}   level {level} \u2192 maze {maze}   lives {lives}   deaths {deaths}   " \
-        f"score {score}   {t_decision * 1000:.0f} ms / decision"
+def status_line(tick, level, maze, lives, deaths, score, t_decision=None, t_viz=None, lang="en"):
+    """The status line ("\u2192" is drawn as an arrow); t_decision None: no
+    decision times (a person plays)."""
+    s = _t(lang, "viz_status", tick=tick, level=level, maze=maze, lives=lives, deaths=deaths,
+           score=score)
+    if t_decision is not None:
+        s += "   " + _t(lang, "viz_ms_decision", ms=f"{t_decision * 1000:.0f}")
     if t_viz is not None:
-        s += f"    (+{t_viz * 1000:.0f} ms drawing)"
+        s += "    " + _t(lang, "viz_ms_drawing", ms=f"{t_viz * 1000:.0f}")
     return s
 
 

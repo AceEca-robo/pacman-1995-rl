@@ -36,11 +36,6 @@ STRINGS = {
         "ru": "Играть самому",
         "uk": "Грати самому",
     },
-    "play_hint": {
-        "en": "Arrow keys to move; hold Q to quit.",
-        "ru": "Стрелки — движение; чтобы выйти, зажмите Q.",
-        "uk": "Стрілки — рух; щоб вийти, затисніть Q.",
-    },
     "watch": {
         "en": "Watch the neural network",
         "ru": "Смотреть нейросеть",
@@ -84,11 +79,6 @@ STRINGS = {
         "ru": "Плавный режим, K = 8",
         "uk": "Плавний режим, K = 8",
     },
-    "smooth_hint": {
-        "en": "Fewer futures per move: quicker decisions, but it dies a bit more often.",
-        "ru": "Меньше вариантов на ход: решает быстрее, но гибнет чуть чаще.",
-        "uk": "Менше варіантів на хід: вирішує швидше, але гине трохи частіше.",
-    },
     "cpu_note": {
         "en": "No NVIDIA GPU found: the network thinks on the processor, so the game runs "
               "in slow motion. Smooth mode is about four times faster.",
@@ -96,16 +86,6 @@ STRINGS = {
               "в замедленной съёмке. В плавном режиме примерно вчетверо быстрее.",
         "uk": "Відеокарту NVIDIA не знайдено: мережа думає на процесорі, і гра йде як "
               "у сповільненій зйомці. У плавному режимі приблизно вчетверо швидше.",
-    },
-    "running": {
-        "en": "The game is running in its own window. Close it to come back here.",
-        "ru": "Игра идёт в отдельном окне. Закройте его, чтобы вернуться сюда.",
-        "uk": "Гра йде в окремому вікні. Закрийте його, щоб повернутися сюди.",
-    },
-    "stop": {
-        "en": "Stop",
-        "ru": "Остановить",
-        "uk": "Зупинити",
     },
     "last_game": {
         "en": "Last game: score {score}, level {level}.",
@@ -123,15 +103,322 @@ STRINGS = {
         "uk": "Ліцензія: GPL-2.0-or-later",
     },
 
-    # --- errors --------------------------------------------------------------
-    "err_no_x11": {
-        "en": "No X11 display: DISPLAY is not set or the X server does not answer. "
-              "The game only runs under X11 (or XWayland).",
-        "ru": "Нет дисплея X11: переменная DISPLAY не задана или X-сервер не отвечает. "
-              "Игра работает только под X11 (или XWayland).",
-        "uk": "Немає дисплея X11: змінну DISPLAY не задано або X-сервер не відповідає. "
-              "Гра працює лише під X11 (або XWayland).",
+    "play_hint": {
+        "en": "Arrow keys to move, P to pause, Esc back to the menu.",
+        "ru": "Стрелки — движение, P — пауза, Esc — назад в меню.",
+        "uk": "Стрілки — рух, P — пауза, Esc — назад до меню.",
     },
+    "human_net": {
+        "en": "Show what the network sees",
+        "ru": "Показывать, что видит сеть",
+        "uk": "Показувати, що бачить мережа",
+    },
+    "human_net_short": {
+        "en": "it thinks along, you steer",
+        "ru": "она думает, ведёте вы",
+        "uk": "вона думає, керуєте ви",
+    },
+    "smooth_short": {
+        "en": "quicker, dies a bit more often",
+        "ru": "быстрее, но гибнет чуть чаще",
+        "uk": "швидше, але гине трохи частіше",
+    },
+    "keys_title": {
+        "en": "Keys",
+        "ru": "Клавиши",
+        "uk": "Клавіші",
+    },
+    "keys_list": {
+        "en": "Esc — back to the menu; in the menu: quit|P — pause|F11 — full screen"
+              "|N — in your game: show or hide the network",
+        "ru": "Esc — назад в меню, а в меню — выход|P — пауза|F11 — во весь экран"
+              "|N — в вашей игре: показать или скрыть сеть",
+        "uk": "Esc — назад до меню, а в меню — вихід|P — пауза|F11 — на весь екран"
+              "|N — у вашій грі: показати або сховати мережу",
+    },
+    "starting": {
+        "en": "Starting the game…",
+        "ru": "Запускаю игру…",
+        "uk": "Запускаю гру…",
+    },
+    "status_keys": {
+        "en": "P — pause    Esc — menu    F11 — full screen",
+        "ru": "P — пауза    Esc — меню    F11 — во весь экран",
+        "uk": "P — пауза    Esc — меню    F11 — на весь екран",
+    },
+    "status_keys_human": {
+        "en": "N — network view    P — pause    Esc — menu",
+        "ru": "N — взгляд сети    P — пауза    Esc — меню",
+        "uk": "N — погляд мережі    P — пауза    Esc — меню",
+    },
+
+    # --- pause, game over -------------------------------------------------------
+    "paused": {
+        "en": "Paused",
+        "ru": "Пауза",
+        "uk": "Пауза",
+    },
+    "pause_continue": {
+        "en": "Continue",
+        "ru": "Продолжить",
+        "uk": "Продовжити",
+    },
+    "pause_menu": {
+        "en": "Back to the menu",
+        "ru": "В меню",
+        "uk": "До меню",
+    },
+    "pause_quit": {
+        "en": "Quit",
+        "ru": "Выйти",
+        "uk": "Вийти",
+    },
+    "game_over": {
+        "en": "Game over: score {score}, level {level}",
+        "ru": "Игра окончена: счёт {score}, уровень {level}",
+        "uk": "Гру закінчено: рахунок {score}, рівень {level}",
+    },
+    "game_over_keys": {
+        "en": "Enter — play again    Esc — menu",
+        "ru": "Enter — ещё раз    Esc — в меню",
+        "uk": "Enter — ще раз    Esc — до меню",
+    },
+
+    # --- your game: the panels instead of the network's ---------------------------
+    "how_title": {
+        "en": "HOW TO PLAY",
+        "ru": "КАК ИГРАТЬ",
+        "uk": "ЯК ГРАТИ",
+    },
+    "how_text": {
+        "en": "Eat every dot to clear the maze; each of the 16 levels has a maze of its own."
+              "|A ghost that touches you takes a life. The big dots turn the ghosts blue "
+              "for a while: then you can eat them."
+              "|Now and then a bonus appears: points or an extra life.",
+        "ru": "Съешьте все точки, чтобы пройти лабиринт; у каждого из 16 уровней он свой."
+              "|Призрак, коснувшись вас, отнимает жизнь. Большие точки ненадолго делают "
+              "призраков синими — тогда их можно съесть."
+              "|Иногда появляется бонус: очки или лишняя жизнь.",
+        "uk": "З'їжте всі точки, щоб пройти лабіринт; у кожного з 16 рівнів він свій."
+              "|Привид, торкнувшись вас, забирає життя. Великі точки ненадовго роблять "
+              "привидів синіми — тоді їх можна з'їсти."
+              "|Іноді з'являється бонус: очки або додаткове життя.",
+    },
+    "controls_title": {
+        "en": "CONTROLS",
+        "ru": "УПРАВЛЕНИЕ",
+        "uk": "КЕРУВАННЯ",
+    },
+    "ctl_arrows": {
+        "en": "hold an arrow: pacman turns where the maze lets it",
+        "ru": "держите стрелку: пакман повернёт, где позволит лабиринт",
+        "uk": "тримайте стрілку: пакман поверне, де дозволить лабіринт",
+    },
+    "ctl_n": {
+        "en": "show or hide what the network sees",
+        "ru": "показать или скрыть, что видит сеть",
+        "uk": "показати або сховати, що бачить мережа",
+    },
+    "ctl_p": {
+        "en": "pause",
+        "ru": "пауза",
+        "uk": "пауза",
+    },
+    "ctl_esc": {
+        "en": "back to the menu",
+        "ru": "назад в меню",
+        "uk": "назад до меню",
+    },
+    "ctl_f11": {
+        "en": "full screen",
+        "ru": "во весь экран",
+        "uk": "на весь екран",
+    },
+    "game_title": {
+        "en": "YOUR GAME",
+        "ru": "ВАША ИГРА",
+        "uk": "ВАША ГРА",
+    },
+    "lbl_score": {
+        "en": "score",
+        "ru": "счёт",
+        "uk": "рахунок",
+    },
+    "lbl_lives": {
+        "en": "lives",
+        "ru": "жизни",
+        "uk": "життя",
+    },
+    "lbl_level": {
+        "en": "level",
+        "ru": "уровень",
+        "uk": "рівень",
+    },
+    "lbl_maze": {
+        "en": "maze",
+        "ru": "лабиринт",
+        "uk": "лабіринт",
+    },
+    "rec_title": {
+        "en": "THIS SESSION",
+        "ru": "ЗА ЭТОТ ЗАПУСК",
+        "uk": "ЗА ЦЕЙ ЗАПУСК",
+    },
+    "rec_games": {
+        "en": "games played",
+        "ru": "сыграно игр",
+        "uk": "зіграно ігор",
+    },
+    "rec_best": {
+        "en": "best score",
+        "ru": "лучший счёт",
+        "uk": "найкращий рахунок",
+    },
+    "rec_level": {
+        "en": "furthest level",
+        "ru": "дальше всего — уровень",
+        "uk": "найдалі — рівень",
+    },
+    "net_hint": {
+        "en": "Press N to see your game through the network's eyes: what it notices "
+              "and which way it would go.",
+        "ru": "Нажмите N, чтобы увидеть свою игру глазами сети: что она замечает "
+              "и куда пошла бы сама.",
+        "uk": "Натисніть N, щоб побачити свою гру очима мережі: що вона помічає "
+              "і куди пішла б сама.",
+    },
+    "net_missing": {
+        "en": "The network's weights are not downloaded yet: the menu offers them.",
+        "ru": "Веса сети ещё не скачаны — меню предложит их скачать.",
+        "uk": "Ваги мережі ще не завантажено — меню запропонує їх завантажити.",
+    },
+
+    # --- the network view (scripts/netviz.py) -------------------------------------
+    "viz_caption_net": {
+        "en": "pacman 1.0 (1995) — played by the network",
+        "ru": "pacman 1.0 (1995) — играет нейросеть",
+        "uk": "pacman 1.0 (1995) — грає нейромережа",
+    },
+    "viz_caption_sim": {
+        "en": "pacman 1.0 (1995) — played by the network (sim)",
+        "ru": "pacman 1.0 (1995) — играет нейросеть (симулятор)",
+        "uk": "pacman 1.0 (1995) — грає нейромережа (симулятор)",
+    },
+    "viz_caption_human": {
+        "en": "pacman 1.0 (1995) — your game",
+        "ru": "pacman 1.0 (1995) — играете вы",
+        "uk": "pacman 1.0 (1995) — граєте ви",
+    },
+    "viz_input": {
+        "en": "1  INPUT",
+        "ru": "1  ВХОД",
+        "uk": "1  ВХІД",
+    },
+    "viz_walls": {
+        "en": "walls + food",
+        "ru": "стены и еда",
+        "uk": "стіни та їжа",
+    },
+    "viz_ghosts": {
+        "en": "ghosts: normal / hunted / eyes",
+        "ru": "призраки: обычные / синие / глаза",
+        "uk": "привиди: звичайні / сині / очі",
+    },
+    "viz_safety": {
+        "en": "cell safety (input)",
+        "ru": "безопасные клетки (вход)",
+        "uk": "безпечні клітинки (вхід)",
+    },
+    "viz_exits": {
+        "en": "safe exits (derived)",
+        "ru": "безопасные выходы (вычислено)",
+        "uk": "безпечні виходи (обчислено)",
+    },
+    "viz_acts": {
+        "en": "2  ACTIVATIONS (top 16 maps per conv layer)",
+        "ru": "2  АКТИВАЦИИ (16 самых сильных карт слоя)",
+        "uk": "2  АКТИВАЦІЇ (16 найсильніших карт шару)",
+    },
+    "viz_saliency": {
+        "en": "3  SALIENCY  |dQ({a})/d input|",
+        "ru": "3  ЗНАЧИМОСТЬ  |dQ({a})/d вход|",
+        "uk": "3  ЗНАЧУЩІСТЬ  |dQ({a})/d вхід|",
+    },
+    "viz_output": {
+        "en": "4  OUTPUT  Q per action",
+        "ru": "4  ВЫХОД  Q каждого хода",
+        "uk": "4  ВИХІД  Q кожного ходу",
+    },
+    "viz_output_human": {
+        "en": "4  WHERE THE NETWORK WOULD GO",
+        "ru": "4  КУДА ПОШЛА БЫ СЕТЬ",
+        "uk": "4  КУДИ ПІШЛА Б МЕРЕЖА",
+    },
+    "viz_greedy": {
+        "en": "greedy",
+        "ru": "лучший",
+        "uk": "найкращий",
+    },
+    "viz_you": {
+        "en": "you",
+        "ru": "вы",
+        "uk": "ви",
+    },
+    "viz_dueling": {
+        "en": "dueling heads",
+        "ru": "две головы (dueling)",
+        "uk": "дві голови (dueling)",
+    },
+    "viz_planner": {
+        "en": "5  PLANNER  K={k} rollouts x H={h} steps per direction",
+        "ru": "5  ПЛАНИРОВЩИК  K={k} прогонов по H={h} шагов на направление",
+        "uk": "5  ПЛАНУВАЛЬНИК  K={k} прогонів по H={h} кроків на напрямок",
+    },
+    "viz_planner_off": {
+        "en": "5  PLANNER  (off: the network plays alone)",
+        "ru": "5  ПЛАНИРОВЩИК  (выключен: сеть играет сама)",
+        "uk": "5  ПЛАНУВАЛЬНИК  (вимкнено: мережа грає сама)",
+    },
+    "viz_death_share": {
+        "en": "death share",
+        "ru": "доля гибелей",
+        "uk": "частка загибелей",
+    },
+    "viz_drop": {
+        "en": "drop if > {t}",
+        "ru": "отбросить при > {t}",
+        "uk": "відкинути при > {t}",
+    },
+    "viz_shown_only": {
+        "en": "shown only",
+        "ru": "только для показа",
+        "uk": "лише для показу",
+    },
+    "viz_red_lost": {
+        "en": "red: lost a life",
+        "ru": "красным: потеря жизни",
+        "uk": "червоним: втрата життя",
+    },
+    "viz_status": {
+        "en": "tick {tick}   level {level} → maze {maze}   lives {lives}   deaths {deaths}   "
+              "score {score}",
+        "ru": "ход {tick}   уровень {level} → лабиринт {maze}   жизни {lives}   "
+              "гибели {deaths}   счёт {score}",
+        "uk": "хід {tick}   рівень {level} → лабіринт {maze}   життя {lives}   "
+              "загибелі {deaths}   рахунок {score}",
+    },
+    "viz_ms_decision": {
+        "en": "{ms} ms / decision",
+        "ru": "{ms} мс на решение",
+        "uk": "{ms} мс на рішення",
+    },
+    "viz_ms_drawing": {
+        "en": "(+{ms} ms drawing)",
+        "ru": "(+{ms} мс отрисовка)",
+        "uk": "(+{ms} мс малювання)",
+    },
+
+    # --- errors --------------------------------------------------------------
     "err_no_game": {
         "en": "The game is not built yet. Run ./install.sh in the project folder.",
         "ru": "Игра ещё не собрана. Запустите ./install.sh в папке проекта.",
@@ -174,9 +461,14 @@ STRINGS = {
               "або увімкніть плавний режим.",
     },
     "err_crash": {
-        "en": "Something went wrong (exit code {code}). Details: {log}",
-        "ru": "Что-то пошло не так (код выхода {code}). Подробности: {log}",
-        "uk": "Щось пішло не так (код виходу {code}). Подробиці: {log}",
+        "en": "Something went wrong: {error}. Details: {log}",
+        "ru": "Что-то пошло не так: {error}. Подробности: {log}",
+        "uk": "Щось пішло не так: {error}. Подробиці: {log}",
+    },
+    "err_no_window": {
+        "en": "Could not open a window: no graphical session (neither X11 nor Wayland) is running.",
+        "ru": "Не удалось открыть окно: графический сеанс (X11 или Wayland) не запущен.",
+        "uk": "Не вдалося відкрити вікно: графічний сеанс (X11 або Wayland) не запущено.",
     },
     "err_launch": {
         "en": "Could not start it: {error}",

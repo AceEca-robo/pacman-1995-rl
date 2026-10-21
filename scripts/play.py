@@ -340,7 +340,7 @@ def play_viz(args, agent):
             box = window_box(xserver.name, find_window(xserver.name))
         os.environ["DISPLAY"] = args.display   # our window on the user's screen
         viz = Viz(net, device, agent.env_overrides.get("obs"),
-                  caption=GAME_CAPTION + (" (sim)" if args.sim_only else ""))
+                  caption="viz_caption_sim" if args.sim_only else GAME_CAPTION)
         signal.signal(signal.SIGINT, lambda *_: stop.append(True))   # after SDL's init
         t_prev, prev_img = time.perf_counter(), None
         t_obs = time.perf_counter()

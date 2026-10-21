@@ -198,7 +198,7 @@ return (1 & (key_vector[byteindex]>>bitindex));	//has it been hit?
 }
 
 direction UserInterface::stick(void) {
-if (Argument::rl_socket) return rl_recv_action();	// RL bridge: action from agent
+if (Argument::rl_socket && !Argument::rl_watch) return rl_recv_action();	// RL bridge: action from agent (--rl-watch: keyboard)
 if (in==Mouse) {						//mouse input
 Window root,child;int dumx,dumy; unsigned int keys_buttons;	//dummies
  last_x=x; last_y=y;					//present is past

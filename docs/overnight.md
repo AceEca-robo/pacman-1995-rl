@@ -2877,3 +2877,63 @@ with lookahead. No training tonight.
 Ideas for later: start the network view in smooth mode by default when
 there is no CUDA; a Flatpak or AppImage instead of install.sh; the
 launcher does not check free disk space before the download.
+
+## 2026-10-21 (later): one window for the menu and every mode (no training)
+
+- scripts/launcher.py is now the whole app: one 1920x1080 pygame window
+  (pygame.SCALED; F11 full screen; full screen from the start on a smaller
+  desktop) that starts with the menu (the 960x600 layout drawn 1.8x) and
+  shows the modes in place. No child processes any more: a game is a
+  launcher/session.py Session, a worker thread that runs the real game on
+  a private Xvfb (play.py's PrivateX), plays it (PlannerAgent, DQNAgent, or
+  nobody) and publishes the latest tick (observation, NetProbe result,
+  trace, grabbed window); the UI thread draws it with netviz's Viz on the
+  app's surface. The networks are loaded once per process and kept; a new
+  session waits for the previous worker to let go of them.
+- netviz.Viz: screen= (draw on a given surface), net=None (the probe runs
+  elsewhere), draw() without event pumping or flip (update() keeps doing
+  both for play.py --viz), the layout rects as class attributes, every
+  label through launcher/i18n.py (viz_* keys) with lang=, status_line(lang=).
+  play.py --viz and netviz.py work as before (checked: planner with the
+  real game and --record mp4, planner --sim-only, netviz --snapshot).
+- Your game: the game runs with the new --rl-watch (game/arg.cc,
+  usrinter.cc stick(); needs --rl and X11): it sends its state every tick
+  but takes pacman's moves from its own keyboard; PacmanEnv(watch=True)
+  plus observe() read them. The arrows go from our window to the game's
+  Xvfb with XTest (launcher/xkeys.py, ctypes libXtst, one display
+  connection, no process per key). Not `xdotool key --window`: that sends
+  events to the window (XSendEvent), and the game reads the server's key
+  state (XQueryKeymap) once per tick, which such events do not change;
+  `xdotool keydown` / `keyup` (XTEST) do. Key latency, measured from an
+  XTest press on the app's display to the key being down on the game's
+  Xvfb (what XQueryKeymap sees), 4 x 30 presses and releases with the
+  network's panels on: median 1.2-1.3 ms, p95 <= 4.5 ms, max 15 ms
+  (without the panels 40 + 60 presses: max 10 ms). The UI loop waits for
+  events at most 15 ms and redraws only when a tick arrived. Two misses
+  in the first runs were the measuring script's fault: it died with a key
+  held on the app's display (the game had ended and its Xvfb was gone),
+  so the next press of that key was a repeat for X and SDL dropped it.
+- Your game without N: your score / lives / level / maze, how to play,
+  the N hint, this session's record (games, best score, furthest level)
+  and the keys; with N (also in the menu, "Show what the network sees",
+  kept in settings) panels 1-3 of the network and panel 4 "where the
+  network would go" (greedy marked, your direction marked "you"), the
+  bottom row is the keys instead of the planner. The network only
+  watches: probe(obs) with the greedy action.
+- P: pause menu over the game (continue / back to the menu / quit, the
+  language switch); the agents wait before their next move, your game is
+  stopped with SIGSTOP (SIGCONT on continue and before closing). Esc: back
+  to the menu from any mode (the worker closes the game, the socket and
+  the Xvfb), Esc in the menu quits. Game over: a banner, Enter plays
+  again, Esc goes to the menu.
+- Checked on Xvfb 1920x1080 with xdotool: every mode, N, P, the language
+  switched in the pause menu (panel titles and the status line follow at
+  once), Esc in each mode (no game, no private Xvfb left), Esc in the
+  menu (exit code 0, empty stderr), WM_DELETE_WINDOW during the planner's
+  game and SIGINT during your game (both exit 0, nothing left). On the
+  GNOME desktop: the window is 1920x1080, WM_CLASS pacman-rl, the close
+  button ends it with exit code 0. Screenshots: docs/launcher.png,
+  docs/app_*.png. Not checked: Wayland, screens smaller than 1920x1080.
+- install.sh also checks xwininfo (x11-utils) and libXtst. SingleMainWindow
+  in the .desktop file was dropped again: desktop-file-validate here only
+  knows the spec up to 1.4 and install.sh stops on its error.

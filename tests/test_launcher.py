@@ -47,8 +47,10 @@ def test_plural():
 
 def test_settings_roundtrip(core):
     assert core.load_settings() == core.DEFAULTS
-    core.save_settings({"lang": "uk", "level": 7, "smooth": True})
-    assert core.load_settings() == {"lang": "uk", "level": 7, "smooth": True}
+    core.save_settings({"lang": "uk", "level": 7, "smooth": True, "human_net": True})
+    assert core.load_settings() == {"lang": "uk", "level": 7, "smooth": True, "human_net": True}
+    core.save_settings({"lang": "ru"})   # the rest: the defaults
+    assert core.load_settings() == {**core.DEFAULTS, "lang": "ru"}
     with open(core.SETTINGS, "w") as f:
         f.write('{"lang": "de", "level": 40}')
     assert core.load_settings() == core.DEFAULTS
@@ -57,15 +59,16 @@ def test_settings_roundtrip(core):
     assert core.load_settings() == core.DEFAULTS
 
 
-def test_commands(core, monkeypatch):
-    assert core.command("play", 5) == [core.GAME, "--level", "5"]
-    monkeypatch.setattr(core, "checkpoint", lambda: core.REPO_CHECKPOINT)
-    cmd = core.command("watch", 3, smooth=True, cuda=False, seed=7)
-    assert "--viz" in cmd and cmd[cmd.index("--plan-config") + 1].endswith("plan_honest_k8.yaml")
-    assert cmd[-2:] == ["--device", "cpu"]
-    assert cmd[cmd.index("--level") + 1] == "3" and cmd[cmd.index("--seed") + 1] == "7"
-    cmd = core.command("dqn", 1, seed=0)
-    assert cmd[cmd.index("--checkpoint") + 1] == core.REPO_CHECKPOINT
+def test_check(core, monkeypatch):
+    monkeypatch.setattr(core, "GAME", "/nonexistent/pacman")
+    assert core.check("play", "ru") == i18n.t("ru", "err_no_game")
+    monkeypatch.setattr(core, "GAME", sys.executable)
+    monkeypatch.setattr(core.shutil, "which", lambda p: None if p == "xwininfo" else "/usr/bin/" + p)
+    assert "sudo apt install x11-utils" in core.check("watch", "en")
+    monkeypatch.setattr(core.shutil, "which", lambda p: "/usr/bin/" + p)
+    monkeypatch.setattr(core, "checkpoint", lambda: None)
+    assert core.check("play", "en") is None   # your game without the network's panels
+    assert core.check("dqn", "uk") == i18n.t("uk", "err_no_checkpoint")
 
 
 def test_plan_config_points_at_the_download(core, monkeypatch):
@@ -82,15 +85,21 @@ def test_plan_config_points_at_the_download(core, monkeypatch):
 
 
 def test_explain(core):
-    assert core.explain("play", 1, "XIO:  fatal IO error 11", "en") == ("ok", None)
-    assert core.explain("play", 0, "", "en") == ("ok", None)
-    assert core.explain("play", 1, "Error: Can't open display", "en")[0] == "error"
-    assert core.explain("watch", 0, "412 steps, score 2310, level 4, lives 0", "ru") == \
-        ("ok", "Прошлая игра: счёт 2310, уровень 4.")
-    kind, msg = core.explain("watch", 1, "tick 9: the sim no longer matches the game", "uk")
-    assert kind == "error" and core.LOG in msg
-    kind, msg = core.explain("dqn", 1, "Traceback ...\nKeyError: 'x'", "en")
-    assert kind == "error" and "exit code 1" in msg and "Traceback" not in msg
+    msg = core.explain(("SystemExit: tick 9: the sim no longer matches the game", "Traceback x"), "uk")
+    assert msg == i18n.t("uk", "err_desync", log=core.LOG)
+    assert open(core.LOG).read() == "Traceback x"
+    msg = core.explain(("KeyError: 'x'\nmore", "Traceback y"), "en")
+    assert "KeyError: 'x'" in msg and "more" not in msg and "Traceback" not in msg
+    assert core.explain(("RuntimeError: game did not connect, exit code 1", ""), "ru") == \
+        i18n.t("ru", "err_game_start", log=core.LOG)
+
+
+def test_status_line_languages():
+    from scripts.netviz import status_line
+    assert status_line(3, 2, 2, 3, 0, 50, 0.0123) == \
+        "tick 3   level 2 \u2192 maze 2   lives 3   deaths 0   score 50   12 ms / decision"
+    assert status_line(3, 2, 2, 3, 0, 50, lang="ru").startswith("ход 3   уровень 2 \u2192 лабиринт 2")
+    assert "мс на рішення" in status_line(3, 2, 2, 3, 0, 50, 0.01, lang="uk")
 
 
 def test_download_rejects_a_bad_checksum(core, monkeypatch, tmp_path):

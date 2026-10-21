@@ -15,6 +15,7 @@ static int headless;	//RL bridge: --headless, no X11 at all (needs --rl)
 static int no_ghosts;	//RL bridge: --no-ghosts, ghosts stay in their house (diagnostics)
 static int has_seed;	//RL bridge: --seed <int> was given
 static int seed;	//RL bridge: value of --seed
+static int rl_watch;	//RL bridge: --rl-watch, send the states but take pacman's moves from the keyboard (needs --rl)
 static int start_level;	//RL bridge: --level <n>, the game starts on level n; 0 = level 1 as always
 
 Argument(int, char **);	//argument constructor

@@ -132,6 +132,12 @@ def test_level_must_be_positive():
     assert r.returncode == 1 and b"n >= 1" in r.stderr
 
 
+def test_rl_watch_needs_rl():
+    env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
+    r = subprocess.run([GAME, "--rl-watch"], env=env, capture_output=True, timeout=10)
+    assert r.returncode == 1 and b"--rl-watch needs --rl" in r.stderr
+
+
 def test_level_without_rl(display):
     """The launcher's "play yourself" starts the keyboard game on a level."""
     p = subprocess.Popen([GAME, "--level", "3"], env={**os.environ, "DISPLAY": display},

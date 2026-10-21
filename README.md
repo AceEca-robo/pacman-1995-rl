@@ -18,7 +18,7 @@ level 2, whose maze differs from level 1 in 23 cells.
 
 - `game/` holds the unmodified sources (first commit) plus minimal patches,
   each marked `// RL bridge`. Windows (`MSWIN`) branches are untouched.
-  Changes to the original files: 63 added and 4 removed lines in 10 files
+  Changes to the original files: 79 added and 5 removed lines in 9 files
   (most of them argument parsing in `arg.cc`), plus the new
   `game/rlbridge.cc/.h` (157 lines).
 - `--rl <socket>`: the game connects to a Unix socket, sends one JSON state
@@ -27,7 +27,9 @@ level 2, whose maze differs from level 1 in 23 cells.
 - `--fast`: no sleeping between ticks. `--headless` (with `--rl`): no X11 at
   all; a test checks that the state stream is byte-identical to the X11 mode.
   `--seed N`: deterministic games. `--no-ghosts`: ghosts stay in their house
-  (diagnostics only).
+  (diagnostics only). `--level N`: start on level N (also without `--rl`).
+  `--rl-watch` (with `--rl`): the states are sent, but pacman is steered from
+  the keyboard (the app's "play yourself" with the network watching).
 - Throughput: a single headless env runs at about 32k steps/s with random
   actions (`scripts/bench_env.py`, 2026-10-07, `docs/results.md`); DQN
   training with 4 envs ran at 1.8-3.5k env steps/s (median 2.6k, dqn0,
@@ -55,16 +57,32 @@ git clone https://github.com/AceEca-robo/pacman-1995-rl.git && cd pacman-1995-rl
 `install.sh` lists the missing system packages with the `sudo apt install`
 line for them, builds the game, creates `.venv` and puts
 "Pacman 1995 RL" into the applications menu (plus `~/.local/bin/pacman-rl`).
-The menu is in English, Russian or Ukrainian (the switch in the corner): play
-the game yourself, watch the network with the planner
-(`play.py --agent planner --viz`; smooth mode: K = 8 instead of 32), or the
-network alone (`play.py --agent dqn`), from any of the 16 levels. On its first
-start it offers to download the network's weights (`best_v04.pt`, 118 MB,
+It is one 1920x1080 window (F11: full screen) in English, Russian or
+Ukrainian (the switch in the corner of the menu and of the pause menu):
+
+- **Play yourself**: the original game in the centre, your arrow keys
+  forwarded to it (XTest, about 1-2 ms); N shows what the network sees in
+  your game and where it would go, without steering;
+- **Watch the neural network**: the planner with the network view
+  (`play.py --agent planner --viz`; smooth mode: K = 8 instead of 32);
+- **Network without the planner**: the network alone (`play.py --agent dqn --viz`).
+
+Any of the 16 levels; P pauses (continue / back to the menu / quit), Esc goes
+back to the menu, Esc in the menu quits. Each game runs on a private Xvfb
+and is grabbed into the window. On its first start it offers to download
+the network's weights (`best_v04.pt`, 118 MB,
 [v0.4 release](https://github.com/AceEca-robo/pacman-1995-rl/releases/tag/v0.4))
 into `~/.local/share/pacman-rl/` and checks their SHA-256. `./uninstall.sh`
 removes the menu entry (`--purge`: also the weights and the settings).
+`scripts/play.py` stays the terminal's tool.
 
-![the launcher](docs/launcher.png)
+![the menu](docs/launcher.png)
+
+| your game, with the network's view (N) | the planner playing |
+|---|---|
+| ![your game](docs/app_play_network.png) | ![the planner](docs/app_watch.png) |
+
+More: `docs/app_*.png` (every screen, also in Russian and Ukrainian).
 
 ## Install and run
 

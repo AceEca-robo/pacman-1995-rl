@@ -12,6 +12,7 @@ int Argument::headless=0;	// RL bridge
 int Argument::no_ghosts=0;	// RL bridge
 int Argument::has_seed=0;	// RL bridge
 int Argument::seed=0;		// RL bridge
+int Argument::rl_watch=0;	// RL bridge
 int Argument::start_level=0;	// RL bridge
 
 Argument::Argument(int c, char **s) {	//initializes;
@@ -24,6 +25,7 @@ for(i=0;i<c;i++) {		// RL bridge
  if (i>0 && !strcmp(s[i],"--rl") && i+1<c) rl_socket=s[++i];
  else if (i>0 && !strcmp(s[i],"--fast")) fast=1;
  else if (i>0 && !strcmp(s[i],"--headless")) headless=1;
+ else if (i>0 && !strcmp(s[i],"--rl-watch")) rl_watch=1;
  else if (i>0 && !strcmp(s[i],"--no-ghosts")) no_ghosts=1;
  else if (i>0 && !strcmp(s[i],"--level") && i+1<c) start_level=atoi(s[++i]);
  else if (i>0 && !strcmp(s[i],"--seed") && i+1<c) { has_seed=1; seed=atoi(s[++i]); }
@@ -34,6 +36,9 @@ argc=n;				// RL bridge
 args=rest;			// RL bridge
 if (headless && !rl_socket) {	// RL bridge: no keyboard without X
  fprintf(stderr,"--headless needs --rl\n"); exit(1);
+}
+if (rl_watch && (!rl_socket || headless)) {	// RL bridge: watching needs the agent and a keyboard
+ fprintf(stderr,"--rl-watch needs --rl and X11\n"); exit(1);
 }
 if (start_level<0) {	// RL bridge: --level <n>, also without --rl (launcher)
  fprintf(stderr,"--level needs n >= 1\n"); exit(1);

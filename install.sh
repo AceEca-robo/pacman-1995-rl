@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Install pacman-rl as a desktop app for the current user, from this checkout:
 # checks the system packages, builds the game (game/) and the sim (sim/),
-# creates .venv with the package, and puts the launcher into the
-# applications menu (~/.local/share/applications/pacman-rl.desktop, icon,
+# creates .venv with the package, and puts the app (scripts/launcher.py: one
+# window with the menu, your game and the network's) into the applications
+# menu (~/.local/share/applications/pacman-rl.desktop, icon,
 # ~/.local/bin/pacman-rl). Nothing needs root; missing packages are listed
 # with the apt command that installs them. Safe to run again.
 #
@@ -34,9 +35,11 @@ need_cmd xmkmf xutils-dev
 need_file /usr/include/X11/Xlib.h libx11-dev
 need_file /usr/include/X11/extensions/Xext.h libxext-dev
 need_file /usr/include/curses.h libncurses-dev
-need_cmd Xvfb xvfb
-need_cmd xdotool xdotool
-need_cmd xwd x11-apps
+need_cmd Xvfb xvfb          # the app runs every game on a private Xvfb
+need_cmd xdotool xdotool    # finds the game's window there
+need_cmd xwininfo x11-utils # and its position
+need_cmd xwd x11-apps       # play.py --record
+ldconfig -p 2>/dev/null | grep -q 'libXtst\.so\.6' || missing+=(libxtst6)   # your keys to the game (XTest)
 if ! command -v python3 >/dev/null 2>&1; then
     missing+=(python3 python3-venv)
 elif ! python3 -c 'import sys; assert sys.version_info >= (3, 10)' 2>/dev/null; then
