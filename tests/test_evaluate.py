@@ -6,7 +6,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
-from evaluate import HEADER, RESULTS_INTRO, RULE, update_results  # noqa: E402
+from evaluate import (HEADER, RESULTS_INTRO, RULE, deaths_per_1000_ticks,  # noqa: E402
+                      update_results)
 
 
 def res(label, value):
@@ -29,6 +30,14 @@ def test_update_results_keeps_rows_and_sections(tmp_path):
     assert not os.path.exists(path + ".tmp")
 
 
+def test_deaths_per_1000_ticks_pools_games():
+    # 3 deaths in 4000 ticks: 0.75, not the mean of the per-game rates (2/100, 1/3900)
+    games = [{"deaths": 2, "length": 100}, {"deaths": 1, "length": 3900}]
+    assert deaths_per_1000_ticks(games) == 0.75
+    assert deaths_per_1000_ticks([{"deaths": 0, "length": 500}]) == 0.0
+    assert deaths_per_1000_ticks([]) == 0.0
+
+
 def test_levels_suite_range_stop_at_clear(tmp_path):
     """--level-range limits the per-level games to those levels;
     --stop-at-clear ends them at the first level up (level-1 games play on)."""
@@ -44,6 +53,10 @@ def test_levels_suite_range_stop_at_clear(tmp_path):
     for g in res["games"]:
         if g["start_level"] != 1:
             assert g["levels_cleared"] <= 1
+    for lv in (2, 3):
+        gs = [g for g in res["games"] if g["start_level"] == lv]
+        assert res["per_level"][str(lv)]["deaths_per_1000_ticks"] == \
+            1000 * sum(g["deaths"] for g in gs) / sum(g["length"] for g in gs)
     assert sorted((g["start_level"], g["seed"]) for g in res["games"]) == \
         [(1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1)]
 

@@ -191,6 +191,14 @@ def _play_task(task):
     return e
 
 
+def deaths_per_1000_ticks(games):
+    """Deaths per 1000 ticks over the games pooled (all deaths / all ticks),
+    not the mean of the per-game rates: short games with a death would
+    weigh as much as long ones."""
+    ticks = sum(g["length"] for g in games)
+    return 1000 * sum(g["deaths"] for g in games) / ticks if ticks else 0.0
+
+
 def levels_suite(args, label):
     """Games from level 1 (args.episodes) and from each level of
     args.level_range (default 1..16; args.level_episodes each), seeds
@@ -226,6 +234,7 @@ def levels_suite(args, label):
             "mean_food": float(np.mean([g["food_eaten"] for g in gs])),
             "mean_length": float(np.mean([g["length"] for g in gs])),
             "truncated": float(np.mean([g["truncated"] for g in gs])),
+            "deaths_per_1000_ticks": deaths_per_1000_ticks(gs),
         }
     return {
         "agent": label,
