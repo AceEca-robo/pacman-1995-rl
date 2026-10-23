@@ -3117,3 +3117,11 @@ every stage continues with --resume.
   second run beside it (15% second rounds); rolling out all four
   directions costs ~2.7x the rollouts of the lazy planner, so 1M states may
   take 10-20 h; the real number comes from the first 10 minutes.
+- 14:13-14:23 Reference: best_v04 on the whole final protocol in the sim,
+  CPU (tmux distill-eval, 601 s, runs/distill_eval/best_v04.json):
+  **81.8% [79.9, 83.6] / min 65% (maze 15) / 1.50 levels (median 1, max
+  6)**; the real-game v0.4 run: 81.8% / 67% / 1.48. The same within float
+  rounding (2 games on maze 15, 1 on maze 9, ...). All dist models will be
+  scored the same way (sim, CPU), and this row is their baseline.
+- 14:25 Waiting for a reboot (GPU) before step 1. Where it stands: code
+  committed (66d87da), nothing collected; data/distill/ does not exist yet.
