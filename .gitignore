@@ -19,3 +19,6 @@ sim/_csim*.so*
 video/
 # the video script stays local (its materials and generators are in video/)
 docs/video_script.md
+
+# distillation data (scripts/distill_collect.py), GBs; not in git
+data/distill*/

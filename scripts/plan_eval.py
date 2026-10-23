@@ -185,7 +185,7 @@ class Planner:
             idx = idx[~died]
         return (dead, cells) if trace else dead
 
-    def choose(self, buf, info, q, noise_seeds, visits=None, trace=False):
+    def choose(self, buf, info, q, noise_seeds, visits=None, trace=False, full=False):
         """buf (G, SIZE) game states, info (G, 6), q (G, 5); noise_seeds: a
         seed sequence per game for this step; visits: per game None or a
         Counter of recently visited cells (loop breaker active: all four
@@ -195,7 +195,10 @@ class Planner:
         are rolled out (the choice is the same: the extra rollouts are only
         recorded) and stats["trace"] holds, by rank in Q order, the
         directions' actions, death shares, rollout cells (G, 4, K, H), deaths
-        (G, 4, K) and which ranks the choice itself needed."""
+        (G, 4, K) and which ranks the choice itself needed. full (for
+        scripts/distill_collect.py): all four directions are rolled out too,
+        without recording cells, and stats["frac_dir"] holds the death share
+        of each direction U/D/L/R (G, 4); the choice is the same."""
         G, K, H = len(buf), self.K, self.H
         pd = info[:, 5]
         qd = q[:, :4].copy()
@@ -234,7 +237,7 @@ class Planner:
             tr_dead = np.zeros((G, 4, K), bool)
             tr_cells[:, 0] = cells.reshape(G, K, H)
             tr_dead[:, 0] = dead.reshape(G, K)
-        more = np.arange(G) if trace else bad
+        more = np.arange(G) if trace or full else bad
         if len(more):
             gi = np.repeat(more, 3 * K)
             ri = np.tile(np.repeat(np.arange(1, 4), K), len(more))
@@ -266,6 +269,10 @@ class Planner:
         actions = act[np.arange(G), choice]
         st = {"second_round": np.isin(np.arange(G), bad) & ~breaker,
               "all_dropped": all_bad, "breaker": breaker, "frac_best": frac[:, 0]}
+        if full:
+            fd = np.empty((G, 4))
+            fd[np.arange(G)[:, None], order] = frac
+            st["frac_dir"] = fd
         if trace:
             needed = np.zeros((G, 4), bool)
             needed[:, 0] = True

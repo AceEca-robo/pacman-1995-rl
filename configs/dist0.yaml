@@ -1,0 +1,25 @@
+# scripts/train_distill.py, distill step 2: dist0 = best_v04 trained on the
+# planner's labels (data/distill, configs/distill_collect.yaml).
+init_checkpoint: runs/best_v04/best.pt
+data: [data/distill]
+run_dir: runs/dist0
+device: null             # cuda when available
+
+train:
+  lr: 1.0e-4
+  adam_eps: 1.0e-8
+  batch_size: 256
+  epochs: 20
+  val_frac: 0.05         # share of games (by seed hash) held out
+  max_val: null          # cap of val states (null: all)
+  grad_clip: 10.0
+  checkpoint_minutes: 10 # state.pt inside an epoch at least this often
+  log_every: 1000
+  seed: 0
+
+loss:
+  ce: 1.0                # cross-entropy on Q / temperature
+  temperature: 1.0
+  margin_weight: 1.0     # DQfD large margin
+  margin: 4.0            # best_v04's own margin (runs/dqfd2/config.yaml)
+  aux_death: 0.5         # BCE of the auxiliary death-share head (0: off)

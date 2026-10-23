@@ -1,0 +1,32 @@
+# scripts/distill_collect.py, distill step 1: the honest planner H40/K32
+# (configs/plan_honest_lb.yaml: threshold 0.5, loop breaker) plays games from
+# a random start level 1..16 in the sim and labels every state; all four
+# directions are rolled out so each state has the death share of U/D/L/R.
+checkpoint: runs/best_v04/best.pt
+
+plan:
+  horizon: 40
+  rollouts: 32
+  epsilon: 0.1
+  ghost_rng: reseed
+  death_threshold: 0.5
+  loop_breaker:
+    stall_steps: 400
+    active_steps: 40
+    penalty: 10.0
+
+collect:
+  out_dir: data/distill
+  driver: null           # null: the planner's move is played; a checkpoint: DAgger
+  target_states: 1000000
+  part_size: 50000       # states per part_NNN.npz
+  flush_minutes: 10      # each worker writes its buffer at least this often
+  log_seconds: 60        # progress.log line
+  start_levels: [1, 16]  # uniform at every game start
+  max_steps: 5000        # a game ends at game over or after this many steps
+  seed_base: 100000
+
+run:
+  workers: 6             # processes (one CUDA context each)
+  games_per_worker: 48   # games in lock-step per process
+  device: cuda

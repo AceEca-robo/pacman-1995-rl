@@ -3050,3 +3050,70 @@ launcher does not check free disk space before the download.
 - The video script (docs/video_script.md) and its generators stay local:
   the two local commits that had them were rebuilt without them before
   the push (generators moved to video/, both ignored).
+
+## 2026-10-23: distill — the planner into the network (part 2)
+
+Plan (the user's): (1) the honest planner H40/K32 labels 1M states from
+games started on a random level 1..16, parts of 50k in
+data/distill/part_NNN.npz; (2) dist0 = best_v04 trained on the labels
+(cross-entropy + DQfD margin + an optional death-share head), lr 1e-4,
+batch 256, 20 epochs, 5% validation; (3) dist0 alone on the final protocol
+against best_v04 (81.8% / 67% / 1.48) and the planner; (4) DAgger: dist_N
+plays 300k states, the planner labels them, retrain on the union, up to 3
+times while it improves; (5) the best -> runs/best_v05/best.pt only if it
+beats best_v04 on the per-maze mean and on levels in a row. Safe stop: long
+stages in tmux, data and checkpoints written at least every 10 minutes,
+every stage continues with --resume.
+
+- 13:29 **The GPU is unavailable**: `nvidia-smi` says "Driver/library
+  version mismatch", torch.cuda.is_available() is False. dpkg.log: the
+  userspace driver was upgraded 580.178.04 -> 580.196.07 at 10:40 today
+  (unattended upgrade); the loaded kernel module is still 580.178.04. Needs
+  a reboot (or a module reload with sudo). Code written and tested on the
+  CPU meanwhile.
+- New code:
+  - plan_eval.Planner.choose(full=True): all four directions rolled out on
+    every decision (as trace=True, without the cells), stats["frac_dir"] =
+    death share of U/D/L/R; the choice is unchanged (test on 4 games x 30
+    decisions, lazy == full).
+  - scripts/distill_collect.py + configs/distill_collect.yaml: the planner
+    (configs/plan_honest_lb.yaml settings: H40/K32, thr 0.5, loop breaker)
+    plays games from a uniform start level 1..16 to game over or 5000
+    steps (the cap keeps the start levels mixed; decision mine), 6 workers
+    x 48 games in lock-step. Per state: packed obs (pack_grids, 36 x 95
+    bytes) + vec, planner action, played action, death share of U/D/L/R,
+    Q of best_v04 (5), seed, step, level, start level, pacman's direction,
+    all-dropped / breaker flags. Workers write chunks atomically every 10
+    minutes; the main process merges them into 50k parts (manifest.json
+    records consumed chunks, so a stop never duplicates or loses merged
+    states); --resume continues with a new session (new game seeds);
+    collect.driver: <ckpt> = DAgger (the driver's greedy move is played,
+    the planner labels). Ctrl-C / SIGTERM: workers flush at once, full parts
+    written, the rest stays in chunks/.
+  - scripts/train_distill.py + configs/dist0.yaml: best_v04's QNetwork +
+    an auxiliary linear head (death-share logits of U/D/L/R, BCE, weight
+    0.5). Loss CE(Q, a) + DQfD margin (margin 4.0 as in dqfd2, weight 1).
+    Validation 5% by a hash of the game seed (whole games; states of a game
+    are correlated), metrics: accuracy, move accuracy (N = pacman's
+    direction), best_v04's own agreement with the labels on the same
+    states (epoch 0 = the init), aux MAE. epoch_NN.pt / best.pt in the DQN
+    checkpoint format (evaluate.py, train_eval.py, plan_eval.py, play.py
+    load them), state.pt every epoch and every 10 minutes inside an epoch
+    (--resume continues at that step; Ctrl-C writes it at once).
+  - scripts/sim_final_eval.py: the final protocol (100 games per maze,
+    seeds 2000.. in blocks, 100 from level 1, caps 10k / 30k as in
+    runs/dqfd2/config.yaml) played in the sim, every game appended to a
+    JSONL, --resume skips finished games; output in train_eval.py
+    --games-out format (final_table.py reads it). Check: best_v04 on mazes
+    9 and 15 (200 games, CPU) — **195 of 200 games identical** (length and
+    clear) to the real-game run runs/v04_final/dqfd2@198M.json; the other 5
+    differ by float rounding (the v0.4 run was on the GPU), M9 73% vs 72%,
+    M15 65% vs 67%. For a fair table best_v04 is rerun in the sim on the
+    same device as the dist models. Speed on the CPU: 200 maze games in
+    110 s (20 threads), so the whole protocol is ~15-20 min without a GPU.
+- Speed of the collection on the CPU (18 workers x 8 games, 1 thread each):
+  1.5 states/s, 1M = ~8 days. Not an option; it waits for the GPU. On the
+  GPU the 2026-10-17 grid ran H40/K32 lazily at 26.7 decisions/s with a
+  second run beside it (15% second rounds); rolling out all four
+  directions costs ~2.7x the rollouts of the lazy planner, so 1M states may
+  take 10-20 h; the real number comes from the first 10 minutes.
