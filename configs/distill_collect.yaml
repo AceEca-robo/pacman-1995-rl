@@ -25,6 +25,8 @@ collect:
   start_levels: [1, 16]  # uniform at every game start
   max_steps: 5000        # a game ends at game over or after this many steps
   seed_base: 100000
+  lazy: true            # true: only the directions the choice needs are rolled out
+                         # (frac NaN for the others; train_distill masks them)
 
 run:
   workers: 6             # processes (one CUDA context each)

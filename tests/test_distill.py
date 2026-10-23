@@ -39,10 +39,14 @@ def test_full_rollouts_keep_the_choice():
         info = batch_info(rows)
         q = net(*batch_obs(net, rows))
         seeds = [[i, 0, step] for i in range(len(rows))]
-        a_lazy, st_lazy = planner.choose(rows, info, q, seeds)
+        a_lazy, st_lazy = planner.choose(rows, info, q, seeds, frac_dir=True)
         a_full, st_full = planner.choose(rows, info, q, seeds, full=True)
         assert (a_lazy == a_full).all()
         fd = st_full["frac_dir"]
+        # lazy: the rolled-out directions agree with full, the others are NaN
+        fl = st_lazy["frac_dir"]
+        known = np.isfinite(fl)
+        assert known.sum(1).min() >= 1 and np.allclose(fl[known], fd[known])
         assert np.isfinite(fd).all() and ((0 <= fd) & (fd <= 1)).all()
         # the first candidate's share is the same in both
         qd = q[:, :4].copy()

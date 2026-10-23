@@ -185,7 +185,8 @@ class Planner:
             idx = idx[~died]
         return (dead, cells) if trace else dead
 
-    def choose(self, buf, info, q, noise_seeds, visits=None, trace=False, full=False):
+    def choose(self, buf, info, q, noise_seeds, visits=None, trace=False, full=False,
+               frac_dir=False):
         """buf (G, SIZE) game states, info (G, 6), q (G, 5); noise_seeds: a
         seed sequence per game for this step; visits: per game None or a
         Counter of recently visited cells (loop breaker active: all four
@@ -198,7 +199,9 @@ class Planner:
         (G, 4, K) and which ranks the choice itself needed. full (for
         scripts/distill_collect.py): all four directions are rolled out too,
         without recording cells, and stats["frac_dir"] holds the death share
-        of each direction U/D/L/R (G, 4); the choice is the same."""
+        of each direction U/D/L/R (G, 4); the choice is the same. frac_dir
+        (lazy collection): stats["frac_dir"] without the extra rollouts, NaN
+        for the directions the choice did not roll out."""
         G, K, H = len(buf), self.K, self.H
         pd = info[:, 5]
         qd = q[:, :4].copy()
@@ -269,7 +272,7 @@ class Planner:
         actions = act[np.arange(G), choice]
         st = {"second_round": np.isin(np.arange(G), bad) & ~breaker,
               "all_dropped": all_bad, "breaker": breaker, "frac_best": frac[:, 0]}
-        if full:
+        if full or frac_dir:
             fd = np.empty((G, 4))
             fd[np.arange(G)[:, None], order] = frac
             st["frac_dir"] = fd

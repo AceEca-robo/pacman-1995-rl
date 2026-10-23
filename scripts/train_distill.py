@@ -154,7 +154,9 @@ class Trainer:
         out = {"ce": ce, "margin": margin}
         if float(lc.get("aux_death", 0)):
             f = torch.as_tensor(data["frac"][idx], device=self.device)
-            out["aux"] = F.binary_cross_entropy_with_logits(aux, f)
+            known = ~torch.isnan(f)   # lazy collection: directions not rolled out
+            bce = F.binary_cross_entropy_with_logits(aux, torch.nan_to_num(f), reduction="none")
+            out["aux"] = (bce * known).sum() / known.sum().clamp(min=1)
             total = total + float(lc["aux_death"]) * out["aux"]
         out["loss"] = total
         return out
@@ -168,7 +170,7 @@ class Trainer:
             q, aux = self.net(*self.batch(data, j))
             pred.append(q.argmax(1).cpu().numpy())
             f = torch.as_tensor(data["frac"][j], device=self.device)
-            mae.append((torch.sigmoid(aux) - f).abs().mean(1).cpu().numpy())
+            mae.append((torch.sigmoid(aux) - f).abs().flatten().cpu().numpy())
         self.net.train()
         pred = np.concatenate(pred)
         act, pdir = data["act"][idx].astype(np.int64), data["pdir"][idx].astype(np.int64)
@@ -176,7 +178,7 @@ class Trainer:
         return {"acc": float(np.mean(pred == act)),
                 "move_acc": float(np.mean(move(pred, pdir) == move(act, pdir))),
                 "ref_move_acc": float(np.mean(move(ref, pdir) == move(act, pdir))),
-                "aux_mae": float(np.concatenate(mae).mean())}
+                "aux_mae": float(np.nanmean(np.concatenate(mae)))}
 
 
 def main():

@@ -101,6 +101,7 @@ def collect_worker(cfg, out_dir, session, worker, counter, device):
         driver = QNet(os.path.join(ROOT, c["driver"]), device)
         assert driver.cell_safety == net.cell_safety
     planner = Planner(net, cfg)
+    full = not c.get("lazy", False)
     buf, n_chunk, last_flush = Buffer(), 0, time.time()
     games, rows, j = [], np.zeros((0, SIZE), np.uint8), 0
 
@@ -129,7 +130,7 @@ def collect_worker(cfg, out_dir, session, worker, counter, device):
         q = net(grid, vec)
         seeds = [[g["seed"], g["start_level"], g["length"]] for g in games]
         act, st = planner.choose(rows, info, q, seeds, [g["stall"].visits() for g in games],
-                                 full=True)
+                                 full=full, frac_dir=True)
         played = act if driver is None else driver(grid, vec).argmax(1).astype(np.int32)
         buf.add(obs=pack_grids(grid, extras), vec=vec, act=act.astype(np.int8),
                 played=played.astype(np.int8), frac=st["frac_dir"].astype(np.float32),
@@ -254,7 +255,10 @@ class Merger:
 
 def log(path, msg):
     line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
-    print(line, flush=True)
+    try:
+        print(line, flush=True)
+    except OSError:   # a closed stdout (e.g. a killed tee) must not stop the merger
+        pass
     with open(path, "a") as f:
         f.write(line + "\n")
 

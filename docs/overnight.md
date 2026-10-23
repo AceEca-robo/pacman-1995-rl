@@ -3125,3 +3125,27 @@ every stage continues with --resume.
   scored the same way (sim, CPU), and this row is their baseline.
 - 14:25 Waiting for a reboot (GPU) before step 1. Where it stands: code
   committed (66d87da), nothing collected; data/distill/ does not exist yet.
+- 14:40 Rebooted, the GPU works (RTX 4060 Laptop, 8 GB). Step 1 started
+  in tmux `distill-collect` (configs/distill_collect.yaml, 6 workers x 48
+  games, all four directions rolled out). **Time estimate after 10 min:
+  11.3 states/s, 1M = 24.4 h** (GPU at 100%). Over the 20 h limit, so the
+  collection switched to the lazy mode (the user's rule).
+- 14:52 Lazy mode (`collect.lazy: true`): the planner rolls out only what
+  its choice needs (the best-Q direction, the other three when it is over
+  the threshold or the loop breaker is on), as in plan_eval; the shares
+  of the directions not rolled out are stored as NaN, and train_distill
+  masks them in the aux BCE (and in aux MAE). The choice is the same as
+  full (test_full_rollouts_keep_the_choice also checks lazy shares ==
+  full shares where known). The 8016 full-mode states from session 0 stay
+  (all four shares known); session 1 continues with --resume.
+- 14:52 Stop incident: Ctrl-C in the tmux pane also killed the `tee` of
+  the first launch; the main process's next log print raised BrokenPipe,
+  the Pool exit hung in waitpid. The workers had already flushed (8016
+  states, all chunks verified), nothing was merged yet, so the main
+  process was killed. Fixes: log() ignores a closed stdout, and the
+  collection runs without tee (`>> runs/distill_collect.out`). Ctrl-C
+  rechecked on a CPU smoke run (2 workers, part 100): "stopped: 4600
+  states in 46 parts, 12 in chunks/".
+- 15:07 **Lazy estimate after 10 min: 39.3 states/s, 1M = ~7.0 h** (ETA
+  ~22:00). In the lazy states 30% of the direction shares are known, all
+  four in 6.8% (the planner's second round); the loop breaker 0% so far.
