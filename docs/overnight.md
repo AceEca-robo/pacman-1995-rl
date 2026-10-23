@@ -3149,3 +3149,27 @@ every stage continues with --resume.
 - 15:07 **Lazy estimate after 10 min: 39.3 states/s, 1M = ~7.0 h** (ETA
   ~22:00). In the lazy states 30% of the direction shares are known, all
   four in 6.8% (the planner's second round); the loop breaker 0% so far.
+- 19:42 **Stop (the user's "стоп").** The collection had been hung since
+  18:58: the log's last line is 18:57:46 (610704 states, 41.7 states/s,
+  ETA 2.6 h then). Cause: Merger.chunk_paths() globbed chunks/*.npz, which
+  also matches the `*.tmp.npz` a worker writes before its rename; at the
+  18:58:26 flush the merger read a half-written chunk and raised, the Pool
+  exit called terminate(), and the workers (SIGTERM only sets their stop
+  flag) waited forever on the result queue, so the main process hung in
+  waitpid. My completion watch only checked for the tmux session ending,
+  so it did not see the hang. Fix: chunk_paths() skips `*.tmp.npz` (test:
+  test_merger_parts_and_rest with a half-written tmp chunk, fails on the
+  old merger). Ctrl-C did not end the hung process, so it was killed
+  (SIGKILL; the workers had been idle since 18:58, so nothing in their
+  buffers was lost beyond the seconds after that flush).
+- 19:45 Integrity check of data/distill: 26 files (part_000..010, 50000
+  each as in manifest.json, + 15 chunks incl. r010_rest), **612624
+  states**, every file loads, all fields the same length, every state has
+  at least one known share, actions in 0..4, (seed, step) all unique; no
+  tmp files left, manifest "consumed" empty.
+- **Where it stands**: step 1 at 612624 / 1000000 states (61%), ~2.6 h
+  left at the lazy rate. Continue with
+  `tmux new-session -d -s distill-collect ".venv/bin/python scripts/distill_collect.py --config configs/distill_collect.yaml --resume >> runs/distill_collect.out 2>&1"`
+  (session 2, new game seeds). Next: step 2, dist0 (configs/dist0.yaml).
+  Lesson: a long-run watch must also check that the progress log keeps
+  growing, not only that the process lives.

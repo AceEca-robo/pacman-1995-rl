@@ -71,8 +71,12 @@ def test_merger_parts_and_rest(tmp_path):
     for i, (n, s) in enumerate(((30, 0), (50, 30), (45, 80))):
         save_npz(str(tmp_path / "chunks" / f"s00_w00_{i:05d}.npz"), _chunk(n, s))
     m = Merger(str(tmp_path), 40)
+    # a chunk a worker is still writing (2026-10-23: the merger read one and hung)
+    with open(tmp_path / "chunks" / "s00_w01_00000.npz.tmp.npz", "wb") as f:
+        f.write(b"PK\x03\x04 half a file")
     m.merge()
     assert m.m["parts"] == {"part_000.npz": 40, "part_001.npz": 40, "part_002.npz": 40}
+    os.remove(tmp_path / "chunks" / "s00_w01_00000.npz.tmp.npz")
     assert m.counts() == (120, 5)
     m.merge(final=True)
     assert m.m["parts"]["part_003.npz"] == 5

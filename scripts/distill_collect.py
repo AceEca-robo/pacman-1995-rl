@@ -204,7 +204,9 @@ class Merger:
         os.replace(tmp, self.manifest_path)
 
     def chunk_paths(self):
-        return sorted(glob.glob(os.path.join(self.dir, "chunks", "*.npz")))
+        # not the *.tmp.npz a worker is still writing (save_npz renames it when done)
+        return sorted(p for p in glob.glob(os.path.join(self.dir, "chunks", "*.npz"))
+                      if not p.endswith(".tmp.npz"))
 
     def counts(self):
         """(states in parts, states in chunks not merged yet)."""
