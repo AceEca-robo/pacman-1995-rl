@@ -14,6 +14,9 @@ heuristic it learned from: 78.2%); the planner without the network
 clears none. A desktop app shows the network thinking, or lets you play
 while it watches.
 
+Video: https://www.youtube.com/watch?v=HLA8gh7O3FA (English) ·
+https://www.youtube.com/watch?v=TFIl4hocbQ0 (Russian)
+
 ![the planner playing, with the network view](docs/app_watch.png)
 
 > v0.5 (2026-10-21): the app in one window; the planner H40/K32 as its
