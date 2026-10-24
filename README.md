@@ -143,6 +143,37 @@ A loop breaker steers pacman away from cells it keeps revisiting without
 eating. The default, `configs/plan_honest_lb.yaml`: H = 40, K = 32, 20
 decisions/s on one GPU (p95 53 ms; a tick is 0.25 s).
 
+## Distillation (part 2): negative result
+
+The planner's choices were distilled into the network: 1M states labelled
+by H40/K32 (the planner playing), then a DAgger round of 300k states
+played by dist0 and labelled by the planner; cross-entropy on the
+planner's move + the DQfD margin + a death-share head, from best_v04
+(`scripts/distill_collect.py`, `scripts/train_distill.py`,
+`configs/dist0.yaml`, `configs/dist1.yaml`). Scored without the planner
+on the final protocol, played in the sim (`scripts/sim_final_eval.py`;
+best_v04 rerun the same way):
+
+| agent | mazes cleared (mean of 16) | worst maze | levels in a row from level 1: mean / max |
+|---|---|---|---|
+| best_v04 | 81.8% | 65% | 1.52 / 8 (200 games) |
+| dist0: best_v04 trained on the planner's 1M labels | 81.9% | 70% | 1.74 / 10 (200 games) |
+| dist1: dist0 + a DAgger round | 80.1% | 57% | 1.23 / 6 (100 games) |
+| best_v04 + planner H40/K32 | 100% (20 games per maze) | 100% | not measured; H40/K8: 7.7 / 14 (20 games) |
+
+dist0's gain is within the noise (paired with best_v04: +0.2 points per
+maze [-2.4, +2.9], +0.22 levels [-0.07, +0.51]), so best_v04 stays the
+network.
+
+The planner departs from the network's greedy move in only 2.9%
+of its decisions. Those departures depend on the rollouts (32 sampled
+ghost futures near the 0.5 death threshold), not on anything the network
+can read from the observation. So they do not transfer into the weights:
+fitting them cost the network some of its own correct moves, and the
+DAgger round, with more of them (9.2%), made it worse.
+
+Tables: `docs/results.md`, "Distillation of the planner".
+
 ## How the game became an environment
 
 - `game/` holds the unmodified sources (first commit) plus minimal patches,
@@ -252,8 +283,9 @@ Put them in `runs/<name>/best.pt` or pass the path with `--checkpoint`.
 
 ## Future work
 
-- Teach the network what the planner finds (distill the planner's choices
-  into it) so that it plays as well without the search.
+- Distilling the planner did not work as plain imitation (above); what is
+  left to try: train only on its confident labels, or use the death-share
+  head as a one-step safety filter at play time.
 - Score escape demonstrations by how many rollouts survive, or find escapes
   by search, instead of the luckiest of 40 noisy rollouts.
 - A cheaper rollout trace for the network view, so that K = 32 keeps the

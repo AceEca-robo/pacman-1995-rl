@@ -3274,3 +3274,8 @@ every stage continues with --resume.
   checked against the planner's own shares; (3) lower lr (1e-5) or keep
   best_v04 frozen except the head, so the agreed moves are not lost;
   (4) measure the planner's levels in a row for H40/K32 (never done).
+- Line closed: README "Distillation (part 2): negative result" (table
+  best_v04 / dist0 / dist1 / planner, the three-sentence reading). The
+  planner's levels in a row there are H40/K8's 7.7 (max 14, 20 games);
+  H40/K32 from level 1 is still not measured, and was not run: the
+  project is in maintenance mode from here (nothing launched).
