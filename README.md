@@ -22,6 +22,9 @@ https://www.youtube.com/watch?v=TFIl4hocbQ0 (Russian)
 > v0.5 (2026-10-21): the app in one window; the planner H40/K32 as its
 > default. Numbers are taken from `docs/results.md` and the session logs
 > `docs/overnight.md`.
+>
+> After publication (2026-10-24): with K = 32 the planner clears 17 levels
+> in a row on average, max 38 (20 games from level 1; see Results).
 
 ## Install
 
