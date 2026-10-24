@@ -1528,3 +1528,48 @@ per maze, "Rollout planner in sim/"), best_v04 + this planner 100% (320
 games, "Planner grid, H = 40"); random actions without a planner last 129
 ticks (Baseline results). The planner keeps a random walker alive about 4x
 longer, but without the network nothing leads it to the food.
+
+## Distillation of the planner (2026-10-23/24)
+
+The honest planner H40/K32 (configs/plan_honest_lb.yaml settings, lazy:
+only the directions its choice needs are rolled out) labels states;
+dist_N = QNetwork (from best_v04) trained on its moves with CE + DQfD
+margin 4.0 + an auxiliary death-share head (lr 1e-4, batch 256, 20
+epochs). Data: data/distill (1,000,272 states, 878 planner games from a
+uniform start level 1..16), data/distill_dagger1 (300,240 states, 388
+games played by dist0 epoch 20, labelled by the planner). All rows: the
+final protocol played in the sim on the CPU (scripts/sim_final_eval.py,
+100 games per maze, seeds 2000.. in blocks, + 100 games from level 1),
+runs/distill_eval/*.json; best_v04 rerun the same way.
+
+| agent | train data | val label acc | per-maze mean [95% CI] | worst maze | levels in a row: mean [CI] / median / max |
+|---|---|---|---|---|---|
+| best_v04 (sim, CPU) | — | 97.4% (on data/distill val) | 81.8% [79.9, 83.6] | 65% (15) | 1.50 [1.28, 1.72] / 1 / 6 |
+| dist0 epoch 1 | data/distill | 96.0% | 82.1% [80.4, 83.9] | 65% (15) | 1.78 [1.52, 2.05] / 2 / 6 |
+| dist0 epoch 20 | data/distill | 94.5% | 81.9% [80.1, 83.8] | 70% (13) | 1.90 [1.56, 2.28] / 1.5 / 10 |
+| dist1 epoch 20 (DAgger 1) | + data/distill_dagger1, from dist0 e20 | 93.0% (other val set) | 80.1% [78.2, 82.0] | 57% (15) | 1.23 [0.99, 1.47] / 1 / 6 |
+| planner H40/K32 + best_v04 (2026-10-17) | — | — | 100% (20 games per maze) | 100% | not measured (H40/K8: 7.65, 20 games) |
+
+Paired with best_v04 (the same games; bootstrap 95% CI, per maze over
+games, levels over the 100 level-1 games):
+
+| agent | per-maze mean diff | levels in a row diff | same maze outcome |
+|---|---|---|---|
+| dist0 epoch 1 | +0.38 pp [-1.88, +2.69] | +0.28 [-0.02, +0.58] | 78% |
+| dist0 epoch 20 | +0.19 pp [-2.38, +2.94] | +0.40 [-0.05, +0.86] | 72% |
+| dist1 epoch 20 | -1.69 pp [-4.19, +0.88] | -0.27 [-0.60, +0.03] | 74% |
+
+By maze:
+
+| agent | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| best_v04 (sim, CPU) | 81% | 92% | 81% | 92% | 90% | 90% | 81% | 92% | 73% | 84% | 74% | 76% | 77% | 75% | 65% | 85% |
+| dist0 epoch 1 | 86% | 92% | 81% | 92% | 85% | 93% | 83% | 92% | 76% | 91% | 74% | 69% | 79% | 81% | 65% | 75% |
+| dist0 epoch 20 | 80% | 85% | 72% | 89% | 89% | 94% | 89% | 94% | 77% | 86% | 77% | 74% | 70% | 83% | 77% | 75% |
+| dist1 epoch 20 | 73% | 88% | 80% | 89% | 90% | 94% | 92% | 94% | 79% | 83% | 72% | 76% | 71% | 75% | 57% | 68% |
+
+The planner's moves differ from best_v04's on 2.9% of its own states and
+on 9.2% of the states dist0 reaches; the network learns few of these
+departures (val), and the play stays at best_v04's level: no distilled
+network is better beyond the noise. DAgger round 1 made it worse, so the
+rounds stopped there.

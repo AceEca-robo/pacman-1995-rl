@@ -3234,3 +3234,22 @@ every stage continues with --resume.
   dist0 (20 epochs); the last epoch is scored (decision mine: the val
   accuracy does not pick the better player, and one 30-min CPU eval per
   round keeps it short).
+- 07:35 DAgger round 1 collected: 300240 states, 388 games, verified.
+  The planner's label differs from dist0's played move on 9.2% of these
+  states (vs 2.9% from best_v04 on the planner's own states); all
+  directions over the threshold 18.7% (vs 11.9%): dist0 gets into more
+  danger, so more correcting labels.
+- 07:38-08:18 dist1 (configs/dist1.yaml, 1.3M states, ~2 min per epoch):
+  val acc 93.5% (init = dist0 e20) -> 93.0% (epoch 20), best_v04 on the
+  same val 96.0%.
+- 08:47 **dist1 epoch 20: 80.1% [78.2, 82.0] / worst 57% (M15) / levels
+  1.23 / 1 / 6, worse than dist0 on all three.** "Repeat while it grows":
+  it did not, DAgger stops after round 1.
+- Paired with best_v04 (same games, bootstrap): dist0 e20 +0.19 pp
+  [-2.38, +2.94] per maze, +0.40 [-0.05, +0.86] levels; dist0 e1 +0.38 pp
+  / +0.28 [-0.02, +0.58]; dist1 -1.69 pp / -0.27. None beyond the noise.
+  Table in docs/results.md ("Distillation of the planner").
+- Step 5 rule: best_v05 only if better than best_v04 by the mean and by
+  the levels in a row. dist0 e20 is higher on both point estimates
+  (+0.19 pp, +0.40 levels) but neither CI excludes 0; the decision is
+  left to the user (asked in the chat), runs/best_v05 not created yet.
