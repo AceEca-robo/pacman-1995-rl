@@ -1573,3 +1573,16 @@ on 9.2% of the states dist0 reaches; the network learns few of these
 departures (val), and the play stays at best_v04's level: no distilled
 network is better beyond the noise. DAgger round 1 made it worse, so the
 rounds stopped there.
+
+Second sample of 100 games from level 1 (seeds 6000..6099, `--levels 0
+--seed 6000`, runs/distill_eval/*_lv1_s6000.json), levels in a row:
+
+| agent | seeds 6000..6099: mean [CI] / median / max | all 200: mean [CI] / max |
+|---|---|---|
+| best_v04 | 1.54 [1.25, 1.86] / 1 / 8 | 1.52 [1.33, 1.71] / 8 |
+| dist0 epoch 20 | 1.58 [1.35, 1.84] / 1 / 6 | 1.74 [1.52, 1.97] / 10 |
+| paired diff | +0.04 [-0.31, +0.39] | +0.22 [-0.07, +0.51] |
+
+The first sample's +0.40 does not repeat on new seeds; over 200 games the
+gain is +0.22 with a CI over 0. No best_v05: the distilled network does
+not beat best_v04 beyond the noise on the mean or the levels in a row.

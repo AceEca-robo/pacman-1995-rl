@@ -3253,3 +3253,24 @@ every stage continues with --resume.
   the levels in a row. dist0 e20 is higher on both point estimates
   (+0.19 pp, +0.40 levels) but neither CI excludes 0; the decision is
   left to the user (asked in the chat), runs/best_v05 not created yet.
+- The user chose "measure more": 100 more games from level 1 (seeds
+  6000..6099) for best_v04 and dist0 e20 (tmux `distill-eval`, CPU, sim).
+  **New seeds: 1.54 vs 1.58 levels, diff +0.04 [-0.31, +0.39]; all 200:
+  1.52 vs 1.74, +0.22 [-0.07, +0.51].** The first sample's +0.40 did not
+  repeat. Step 5 decision: **no best_v05**, runs/best_v05 not created;
+  best_v04 stays the network (and best_v04 + planner the agent).
+- Summary of part 2: distilling H40/K32 into the network does not move
+  the play. The planner departs from best_v04 on 2.9% of its own states;
+  the network cannot predict most of these departures from the
+  observation (the planner's choice there comes from 32 noisy rollouts
+  near the 0.5 threshold), and fitting them costs some of its own correct
+  moves. DAgger round 1 (9.2% departures on dist0's states) made it worse
+  (80.1% / 57% / 1.23).
+- Ideas for later: (1) train only on the confident labels: the chosen
+  direction's death share far from the threshold and another's far above
+  it (needs full shares, i.e. the 24 h collection or a cheaper full
+  re-labelling of the departure states only); (2) distil the death-share
+  head and use it as a one-step safety filter at play time (no rollouts),
+  checked against the planner's own shares; (3) lower lr (1e-5) or keep
+  best_v04 frozen except the head, so the agreed moves are not lost;
+  (4) measure the planner's levels in a row for H40/K32 (never done).
