@@ -3173,3 +3173,35 @@ every stage continues with --resume.
   (session 2, new game seeds). Next: step 2, dist0 (configs/dist0.yaml).
   Lesson: a long-run watch must also check that the progress log keeps
   growing, not only that the process lives.
+
+## 2026-10-24: distill, steps 1-2
+
+- 23:53 (10-23) Collection resumed (session 2). Another project
+  (ksquares-rl, tmux `az5`) trains on the same GPU, so 25-35 states/s
+  instead of 41. Watch: finish, tmux gone, Traceback, or progress.log
+  older than 5 min.
+- 02:59 **Step 1 done: 1000272 states in 21 parts** (session 0 full
+  8016, sessions 1-2 lazy), 878 games (a game runs to game over or 5000
+  steps: ~1140 states per game). Check: every part matches manifest.json,
+  (seed, step) unique, no chunks left. Actions U/D/L/R/N 25.7 / 24.2 /
+  25.0 / 24.8 / 0.35%; shares known 36% (all four 14.6%); all directions
+  over the threshold (all_dropped, the label is the least deadly) 11.9%;
+  loop breaker 0.6%. Levels 1..19 (the planner passes level 16 from a
+  late start), start levels uniform.
+- 03:00 Step 2: dist0 (configs/dist0.yaml as written: lr 1e-4, batch
+  256, 20 epochs, CE + margin 4.0 + aux 0.5) in tmux `dist0`, 41 it/s,
+  ~90 s per epoch. Split by game seed: 955142 train / 45130 val (38 games).
+- **Epoch 0 (init): best_v04 already agrees with the planner on 97.4% of
+  the val states; after epochs 1-4 val acc 96.0 / 96.0 / 95.9 / 95.9%.**
+  Diagnosis (60k train + all val states; script in the session
+  scratchpad): even on train, epoch 4 is at 97.03% vs the init's 97.14%.
+  On the states where best_v04 agreed with the planner it drops 99.99 ->
+  99.4% (train) / 98.4% (val); of the states where it disagreed it learns
+  15.7% on train but 5.9% on val. all_dropped states 91% -> 93% train,
+  90% val. Reading: the planner's departures from best_v04 (2.9% of the
+  states) are mostly not predictable from the observation (K = 32 noisy
+  rollouts near the 0.5 threshold, the ghosts' futures redrawn), the CE +
+  margin loss on them pulls the network off its own correct moves. The
+  label accuracy is not the target, the play is: dist0 runs to 20 epochs
+  as planned and is scored by step 3 (best.pt = best val move acc, and
+  the last epoch).
