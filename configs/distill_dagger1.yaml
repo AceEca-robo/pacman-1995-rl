@@ -1,0 +1,33 @@
+# scripts/distill_collect.py, distill step 4 (DAgger round 1): dist0 (epoch
+# 20) plays from a random start level 1..16, the honest planner H40/K32
+# (lazy) labels every state it reaches. Otherwise as distill_collect.yaml.
+checkpoint: runs/best_v04/best.pt
+
+plan:
+  horizon: 40
+  rollouts: 32
+  epsilon: 0.1
+  ghost_rng: reseed
+  death_threshold: 0.5
+  loop_breaker:
+    stall_steps: 400
+    active_steps: 40
+    penalty: 10.0
+
+collect:
+  out_dir: data/distill_dagger1
+  driver: runs/dist0/epoch_20.pt   # DAgger: its greedy move is played, the planner labels
+  target_states: 300000
+  part_size: 50000       # states per part_NNN.npz
+  flush_minutes: 10      # each worker writes its buffer at least this often
+  log_seconds: 60        # progress.log line
+  start_levels: [1, 16]  # uniform at every game start
+  max_steps: 5000        # a game ends at game over or after this many steps
+  seed_base: 200000      # other games than data/distill
+  lazy: true            # true: only the directions the choice needs are rolled out
+                         # (frac NaN for the others; train_distill masks them)
+
+run:
+  workers: 6             # processes (one CUDA context each)
+  games_per_worker: 48   # games in lock-step per process
+  device: cuda

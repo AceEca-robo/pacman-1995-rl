@@ -3205,3 +3205,32 @@ every stage continues with --resume.
   label accuracy is not the target, the play is: dist0 runs to 20 epochs
   as planned and is scored by step 3 (best.pt = best val move acc, and
   the last epoch).
+- 03:32 dist0 done (20 epochs, ~95 s each): val acc fell every epoch,
+  96.0% (epoch 1, best.pt by val move acc) -> 94.5% (epoch 20); aux MAE
+  0.085. Both ends scored.
+- 04:59 **Step 3: dist0 without the planner, final protocol in the sim
+  on the CPU** (runs/distill_eval/, scripts/final_table.py):
+
+  | agent | per-maze mean [95% CI] | worst maze | levels in a row mean [CI] / median / max |
+  |---|---|---|---|
+  | best_v04 (sim, CPU) | 81.8% [79.9, 83.6] | 65% (15) | 1.50 [1.28, 1.72] / 1 / 6 |
+  | dist0 epoch 1 | 82.1% [80.4, 83.9] | 65% (15) | 1.78 [1.52, 2.05] / 2 / 6 |
+  | dist0 epoch 20 | 81.9% [80.1, 83.8] | 70% (13) | 1.90 [1.56, 2.28] / 1.5 / 10 |
+  | planner H40/K32 (2026-10-17) | 100% (20 per maze) | 100% | H40/K8: 7.65 (20 games) |
+
+  The per-maze mean does not move (the same within the CI); the levels in
+  a row go up 1.50 -> 1.90 (CIs overlap a little) and the worst maze
+  65 -> 70%. By maze epoch 20 swaps gains and losses (M15 65 -> 77%, M7
+  81 -> 89%; M3 81 -> 72%, M16 85 -> 75%). So the lower label accuracy
+  does not mean worse play; the val accuracy is not the score to pick
+  checkpoints by. Planner levels-in-a-row for H40/K32 were never measured
+  (only H40/K8: 7.65 over 20 games).
+- 04:59 Step 4, DAgger round 1: dist0 epoch 20 drives (better levels and
+  worst maze at the same mean), the planner labels; configs/
+  distill_dagger1.yaml (300k states, seed_base 200000, lazy),
+  data/distill_dagger1, tmux `distill-collect`, ~27 states/s at the start
+  (az5 still on the GPU) -> ~3 h. Then dist1 (configs/dist1.yaml): dist0
+  epoch 20 fine-tuned on data/distill + data/distill_dagger1, the rest as
+  dist0 (20 epochs); the last epoch is scored (decision mine: the val
+  accuracy does not pick the better player, and one 30-min CPU eval per
+  round keeps it short).
