@@ -1586,3 +1586,22 @@ Second sample of 100 games from level 1 (seeds 6000..6099, `--levels 0
 The first sample's +0.40 does not repeat on new seeds; over 200 games the
 gain is +0.22 with a CI over 0. No best_v05: the distilled network does
 not beat best_v04 beyond the noise on the mean or the levels in a row.
+
+## Planner H40/K32 from level 1 (2026-10-24)
+
+configs/plan_honest_lb.yaml (H = 40, K = 32, threshold 0.5, loop breaker)
+with best_v04, 20 games from level 1 (seeds 0..19), cap 30,000 steps, in
+the sim (`plan_eval.py --levels 1`, 5 workers x 4 games, 7354 s beside
+another project on the GPU); runs/plan_from1_k32/from1_h40k32.*. Paired
+with H40/K8 on the same seeds (runs/plan_eval/h_lb.json):
+
+| config | levels in a row: mean [95% CI] / median / max | deaths per 1000 steps (95% CI) | longest game | capped |
+|---|---|---|---|---|
+| H40/K8 (h_lb) | 7.65 [5.90, 9.45] / 8 / 14 | 0.55 (0.46-0.68) | 9,676 | 0 |
+| **H40/K32** | **17.2 [13.1, 21.6] / 13 / 38** | **0.26 (0.20-0.34)** | 27,331 | 0 |
+
+Paired difference K32 - K8: +9.55 levels [+5.05, +14.4]; K32 is ahead on
+15 of the 20 seeds. Every game ends at game over (3.05 deaths per game:
+the three lives), none at the cap. Per seed (K32 / K8): 38/8, 13/8,
+13/11, 5/6, 13/12, 11/13, 9/3, 29/2, 23/2, 25/3, 13/2, 7/12, 18/11, 9/10,
+9/3, 12/14, 12/4, 32/12, 17/9, 36/8.

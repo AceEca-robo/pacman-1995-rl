@@ -89,7 +89,8 @@ first four rows on the final protocol (100 games per maze, seeds
 planner rows in the sim on seeds 0..19 / 0..9 (`scripts/plan_eval.py`;
 replayed games match the real game). best_v04's deaths per game: 50 games
 per maze, seeds 5000.. (`scripts/death_report.py`). Levels in a row from
-level 1: best_v04 1.48 (max 6), with the planner (H40/K8) 7.7 (max 14).
+level 1: best_v04 1.48 (max 6), with the planner H40/K32 17.2 (median 13,
+max 38; 20 games, cap 30,000 steps, none reached it; H40/K8: 7.7).
 
 ## The path
 
@@ -159,7 +160,7 @@ best_v04 rerun the same way):
 | best_v04 | 81.8% | 65% | 1.52 / 8 (200 games) |
 | dist0: best_v04 trained on the planner's 1M labels | 81.9% | 70% | 1.74 / 10 (200 games) |
 | dist1: dist0 + a DAgger round | 80.1% | 57% | 1.23 / 6 (100 games) |
-| best_v04 + planner H40/K32 | 100% (20 games per maze) | 100% | not measured; H40/K8: 7.7 / 14 (20 games) |
+| best_v04 + planner H40/K32 | 100% (20 games per maze) | 100% | 17.2 / 38 (20 games) |
 
 dist0's gain is within the noise (paired with best_v04: +0.2 points per
 maze [-2.4, +2.9], +0.22 levels [-0.07, +0.51]), so best_v04 stays the
@@ -276,8 +277,8 @@ Put them in `runs/<name>/best.pt` or pass the path with `--checkpoint`.
 - The planner at K = 32 needs a GPU to keep the game's tick; with the
   network view it takes ~160 ms per decision, so the 0.125 s ticks while
   pacman is super stretch to ~195 ms (the smooth mode, K = 8, keeps time).
-- Planner numbers come from 20 games per maze, the network's from 100; a
-  from-level-1 run of the K = 32 planner was not measured.
+- Planner numbers come from 20 games per maze and 20 games from level 1,
+  the network's from 100.
 - The app was tested on X11 (GNOME) and Xvfb at 1920x1080; not on Wayland
   without XWayland, not on smaller screens (the window scales).
 

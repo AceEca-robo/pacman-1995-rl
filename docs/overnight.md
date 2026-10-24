@@ -3279,3 +3279,11 @@ every stage continues with --resume.
   planner's levels in a row there are H40/K8's 7.7 (max 14, 20 games);
   H40/K32 from level 1 is still not measured, and was not run: the
   project is in maintenance mode from here (nothing launched).
+- 2026-10-24 13:17-15:19 At the user's request (the one run after the
+  line was closed): the planner H40/K32 from level 1, 20 games (seeds
+  0..19), cap 30,000 (tmux `plan-from1`, runs/plan_from1_k32/). **17.2
+  levels in a row [13.1, 21.6], median 13, max 38**; H40/K8 on the same
+  seeds 7.65 / 8 / 14; paired +9.55 [+5.05, +14.4]. 0.26 deaths per 1000
+  steps (K8: 0.55); longest game 27,331 steps, none capped. README
+  (distillation table, Results note, Known limitations) and
+  docs/results.md updated. Back to maintenance mode, nothing running.
